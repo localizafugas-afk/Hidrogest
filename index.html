@@ -400,7 +400,7 @@ body.cfg-open .main{overflow:hidden !important;}
 
 /* MAIN */
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);min-width:0;min-height:0;}
-.topbar{height:56px;padding:0 28px;background:linear-gradient(90deg,#0f172a,#1e293b);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:var(--shadow-sm);}
+.topbar{height:56px;padding:0 28px;background:var(--s1);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;box-shadow:var(--shadow-sm);}
 .tb-title{font-weight:700;font-size:18px;letter-spacing:-.4px;color:var(--text);}
 .tb-right{display:flex;align-items:center;gap:12px;}
 .content{flex:1;overflow-y:scroll;overflow-x:auto;padding:24px 28px;-webkit-overflow-scrolling:touch;min-height:0;min-width:0;}
@@ -603,9 +603,9 @@ tr:hover td{background:rgba(37,99,235,.03);}
 .cm-val{font-size:17px;font-weight:800;}
 
 /* LOGIN */
-.login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#0a0f1e 0%,#0f172a 30%,#1a2a4a 60%,#0f172a 100%);display:none;align-items:center;justify-content:center;z-index:9999;overflow:hidden;}
+.login-wrap{position:fixed;inset:0;background:linear-gradient(135deg,#e0f2fe 0%,#f0f9ff 40%,#e0f2fe 100%);display:none;align-items:center;justify-content:center;z-index:9999;overflow:hidden;}
 .login-wrap::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(56,189,248,.08) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(14,165,233,.06) 0%,transparent 50%);pointer-events:none;}
-.login-box{background:rgba(30,41,59,.85);backdrop-filter:blur(20px);border:1px solid rgba(56,189,248,.2);border-radius:16px;padding:32px 36px;width:460px;max-width:96vw;text-align:center;}
+.login-box{background:#ffffff;border:1px solid var(--border);border-radius:16px;padding:32px 36px;width:460px;max-width:96vw;text-align:center;box-shadow:var(--shadow-md);}
 .login-logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 20px;}
 .login-title{font-size:22px;font-weight:800;margin-bottom:4px;}
 .login-sub{font-size:12px;color:var(--text3);margin-bottom:28px;}
@@ -5835,9 +5835,12 @@ function osCliSearchInput(q){
 }
 
 function osCliCriarNovo(nomePrefill){
-  document.getElementById('os-cli-sr-list')?.style && (document.getElementById('os-cli-sr-list').style.display='none');
-  if(typeof ncAbrirForm==='function') ncAbrirForm();
-  else { navigate('clientes-os'); setTimeout(()=>{ if(typeof osAbrirNovoCliente==='function') osAbrirNovoCliente(); },300); }
+  // Hide search list
+  const srList = document.getElementById('os-cli-sr-list');
+  if(srList) srList.style.display='none';
+  // Show inline form directly
+  const form = document.getElementById('os-novo-cli-form');
+  if(form){ form.style.display='block'; }
   if(nomePrefill){
     setTimeout(()=>{
       const el=document.getElementById('nc-nome')||document.getElementById('cli-nome');
@@ -10409,10 +10412,16 @@ function ncSearch(q){
   const tipoCor  = {particular:'#2563eb', empresa:'#7c3aed', condominio:'#ea580c'};
 
   if(!matches.length){
-    list.innerHTML = `<div style="padding:14px 16px;color:#94a3b8;font-size:13px;text-align:center;">
-      Nenhum cliente encontrado para "<strong>${q}</strong>"<br>
-      <span style="font-size:11px;">Use o botão "+ Criar novo cliente" para adicionar</span>
-    </div>`;
+    list.innerHTML = '';
+    const _noRes = document.createElement('div');
+    _noRes.style.cssText = 'padding:12px 14px;text-align:center;';
+    _noRes.innerHTML = '<div style="color:var(--text2);font-size:13px;margin-bottom:10px;">Nenhum cliente para <strong>' + q + '</strong></div>';
+    const _criarBtn = document.createElement('button');
+    _criarBtn.style.cssText = 'background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;width:100%;';
+    _criarBtn.textContent = '+ Criar cliente: ' + q;
+    _criarBtn.addEventListener('click', function(){ list.style.display='none'; osCliCriarNovo(q); });
+    _noRes.appendChild(_criarBtn);
+    list.appendChild(_noRes);
     list.style.display = 'block';
     return;
   }

@@ -1554,13 +1554,6 @@ async function capturarFatura(e) {
       } catch(err) { console.warn('meta fetch:', err); }
     }
 
-    if (!apiKey) {
-      document.getElementById('d-ai-status').innerHTML =
-        '<div class="ai-result baixa" style="font-size:12px;">ℹ️ OCR não configurado. Preenche manualmente.</div>';
-      toast('📷 Foto guardada');
-      return;
-    }
-
     try {
       // Comprimir imagem se grande
       let imgData = base64Data;
@@ -1573,23 +1566,11 @@ async function capturarFatura(e) {
         } catch(ce) {}
       }
 
-      // Chamar API Anthropic directamente com header CORS especial
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      // Usar proxy Netlify (API key guardada em variável de ambiente no servidor)
+      const resp = await fetch('/.netlify/functions/ocr', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-ipc': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 512,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: imgType, data: imgData } },
-            { type: 'text', text: 'Extrai dados desta fatura. Responde APENAS JSON sem markdown: {"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"} Regras: total=numero decimal com IVA, iva=23/13/6/0, data=YYYY-MM-DD, confianca=alta/media/baixa. Vazio se nao visivel.' }
-          ]}]
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: imgData, mediaType: imgType })
       });
 
       if (!resp.ok) {

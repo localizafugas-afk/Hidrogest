@@ -29,7 +29,7 @@ exports.handler = async (event) => {
         max_tokens: 600,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageData } },
-          { type: 'text', text: 'Analisa esta imagem de fatura ou recibo. Responde APENAS com JSON puro sem markdown ou texto extra:\n{"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"}\nREGRAS: total=valor TOTAL a pagar com IVA incluido em formato numerico decimal (ex: 45.50), iva=taxa em percentagem apenas 23 ou 13 ou 6 ou 0, data=formato YYYY-MM-DD, fornecedor=nome empresa emitente, nif=numero fiscal do fornecedor (9 digitos), descricao=resumo breve do que foi comprado, confianca=alta se leste bem/media se alguma duvida/baixa se nao conseguiste ler. Campo vazio se nao visivel.' }
+          { type: 'text', text: 'Analisa esta fatura ou recibo portugues. Responde APENAS JSON puro sem markdown:\n{"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"}\nREGRAS IMPORTANTES:\n- fornecedor: nome da empresa que emitiu a fatura\n- nif: numero de identificacao fiscal portugues com EXATAMENTE 9 digitos numericos (ex: 123456789). Procura por "NIF", "NIPC", "Contribuinte", "NIF/NIPC". Se encontrares um numero com 9 digitos que comece por 1,2,3,5,6,7,8,9 e o NIF. Nao incluas espacos nem pontos.\n- total: valor TOTAL a pagar com IVA incluido, apenas numeros e ponto decimal (ex: 45.50)\n- iva: taxa de IVA em percentagem: 23 ou 13 ou 6 ou 0\n- data: data da fatura em formato YYYY-MM-DD\n- descricao: breve descricao do que foi comprado\n- confianca: alta/media/baixa\nDeixa campo vazio string se nao conseguires ler.' }
         ]}]
       })
     });
@@ -46,15 +46,4 @@ exports.handler = async (event) => {
     const data = await response.json();
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(data)
-    };
-
-  } catch (err) {
-    return {
-      statusCode: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ error: err.message })
-    };
-  }
-};
+      headers: { 'Content-Type': 'application/json', 'Access-Con

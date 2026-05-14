@@ -5,12 +5,16 @@ exports.handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const apiKey = body.apiKey;
     const imageData = body.imageData;
     const mediaType = body.mediaType || 'image/jpeg';
 
-    if (!apiKey || !imageData) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'apiKey e imageData sao obrigatorios' }) };
+    if (!imageData) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'imageData obrigatorio' }) };
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'API key nao configurada' }) };
     }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -30,15 +34,18 @@ exports.handler = async (event) => {
       })
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return { statusCode: response.status, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: errText }) };
-    }
-
     const data = await response.json();
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(data) };
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(data)
+    };
 
   } catch (err) {
-    return { statusCode: 500, headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: err.message }) };
+    return {
+      statusCode: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: err.message })
+    };
   }
 };

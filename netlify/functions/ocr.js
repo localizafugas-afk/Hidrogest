@@ -17,6 +17,8 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: 'API key nao configurada' }) };
     }
 
+    const prompt = 'Analisa esta fatura ou recibo. Responde APENAS JSON puro sem markdown: {"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"} REGRAS: fornecedor=nome empresa emitente, nif=9 digitos numericos sem espacos (procura NIF/NIPC/Contribuinte), total=valor total com IVA em decimal (ex: 45.50), iva=percentagem 23 ou 13 ou 6 ou 0, data=YYYY-MM-DD, descricao=resumo do que foi comprado, confianca=alta/media/baixa. Campo vazio se nao visivel.';
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -29,7 +31,7 @@ exports.handler = async (event) => {
         max_tokens: 600,
         messages: [{ role: 'user', content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageData } },
-          { type: 'text', text: 'Analisa esta fatura ou recibo portugues. Responde APENAS JSON puro sem markdown:\n{"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"}\nREGRAS IMPORTANTES:\n- fornecedor: nome da empresa que emitiu a fatura\n- nif: numero de identificacao fiscal portugues com EXATAMENTE 9 digitos numericos (ex: 123456789). Procura por "NIF", "NIPC", "Contribuinte", "NIF/NIPC". Se encontrares um numero com 9 digitos que comece por 1,2,3,5,6,7,8,9 e o NIF. Nao incluas espacos nem pontos.\n- total: valor TOTAL a pagar com IVA incluido, apenas numeros e ponto decimal (ex: 45.50)\n- iva: taxa de IVA em percentagem: 23 ou 13 ou 6 ou 0\n- data: data da fatura em formato YYYY-MM-DD\n- descricao: breve descricao do que foi comprado\n- confianca: alta/media/baixa\nDeixa campo vazio string se nao conseguires ler.' }
+          { type: 'text', text: prompt }
         ]}]
       })
     });
@@ -46,4 +48,15 @@ exports.handler = async (event) => {
     const data = await response.json();
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Con
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify(data)
+    };
+
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: err.message })
+    };
+  }
+};

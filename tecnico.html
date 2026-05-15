@@ -550,7 +550,7 @@ select.fi { appearance: none; -webkit-appearance: none; }
     <div class="mo-header"><div class="mo-title">📷 Nova Despesa</div><button class="mo-close" onclick="fecharModal('mo-despesa')">×</button></div>
     <div class="mo-body">
       <div class="cam-area" onclick="document.getElementById('d-photo-inp').click()">
-        <input type="file" id="d-photo-inp" accept="image/*" capture="environment" id="d-photo-inp-trigger" style="display:none">
+       <input type="file" id="d-photo-inp" accept="image/*" capture="environment" onchange="capturarFatura(event)" style="display:none">
         <div class="cam-icon">📷</div><div class="cam-label">Fotografar Fatura</div><div class="cam-sub">Preenchimento automático com IA</div>
       </div>
       <div id="d-photo-preview"><img id="d-photo-img" alt="Fatura"><div style="font-size:11px;color:var(--green);margin-top:6px;text-align:center;">✅ Fatura capturada <button onclick="limparFoto()" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;font-family:inherit;">✕ Remover</button></div></div>

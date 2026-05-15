@@ -1,6 +1,9 @@
 [build]
   publish = "."
 
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyBZIZpjrD62jPMTDPQKS5uBJ4Wj0W1tZmA"
+
 [[redirects]]
   from = "/*"
   to = "/tecnico.html"

@@ -2178,6 +2178,13 @@ function logoutConfirm(){
   if(_gpsWatchId!==null)navigator.geolocation.clearWatch(_gpsWatchId);
   if(_currentUser)fsSetMerge('localizacoes',_currentUser.id,{online:false}).catch(function(){});
   location.reload();
+}function iniciarDespesasListener(){
+  if(!_db||!_currentUser) return;
+  var uid=_currentUser.id;
+  _db.listen('despesas',function(s){
+    DB.despesas=s.docs.map(function(d){return d.data();}).filter(function(d){return d.tecnicoId===uid&&!d._eliminado&&d.status!=='eliminado';});
+    renderDespesas();atualizarBadges();
+  });
 }
 
 </script>

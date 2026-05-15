@@ -651,7 +651,7 @@ const ENSAIOS_POR_ZONA = [
   'Inspeção Visual','Teste de Estanqueidade','Termografia','Geofone / Acústica',
   'Vídeo CCTV','Gás Traçador','Corante UV','Higroscopia',
 ];
-let _divisoes = new Set();let _tempoMin = 0; let _tempoAcumulado = 0; let _osActual = null; let _sigPad = {}; let _voiceRec = null; let _voiceTarget = null; let _vozAtiva = false; let _vozParar = false;
+let _divisoes = new Set();
 const METODOS_PAG = [
   {id:'numerario', icon:'💵', nome:'Numerário', sub:'Pagamento em dinheiro · emitir fatura-recibo'},
   {id:'mbway',     icon:'📱', nome:'MBWay',     sub:'Transferência via MBWay · emitir fatura-recibo'},
@@ -684,11 +684,11 @@ function abrirRelatorio(osId){
   const rel = (DB.relatorios_pesquisa||[]).find(r=>r.id===osId)||{campos:{}};
   const c = rel.campos||{};
 
-  // Restaurar tempo acumulado de sessões anteriores
-  if(!_tempoMin && os.tempoAcumuladoMin > 0){
-    _tempoAcumulado = os.tempoAcumuladoMin;
-  } else if(!_tempoMin && os.tempoMin > 0){
-    _tempoAcumulado = os.tempoMin;
+// Restaurar tempo acumulado de sessões anteriores
+  if(os.tempoAcumuladoMin > 0){
+    _tempoMin = os.tempoAcumuladoMin;
+  } else if(os.tempoMin > 0){
+    _tempoMin = os.tempoMin;
   }
 
   document.getElementById('rel-title').textContent = osId;

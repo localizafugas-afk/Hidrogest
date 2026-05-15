@@ -1,23 +1,41 @@
-exports.handler = async (event) => {
+exports.handler = async function(event) {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
   try {
     const body = JSON.parse(event.body);
-    const imageData = body.imageData;
+    let imageData = body.imageData;
     const mediaType = body.mediaType || 'image/jpeg';
 
     if (!imageData) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'imageData obrigatorio' }) };
+      return {
+        statusCode: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'imageData obrigatorio' })
+      };
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return { statusCode: 500, body: JSON.stringify({ error: 'API key nao configurada' }) };
+      return {
+        statusCode: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify({ error: 'API key nao configurada no Netlify' })
+      };
     }
-
-    const prompt = 'Analisa esta fatura ou recibo. Responde APENAS JSON puro sem markdown: {"fornecedor":"","nif":"","total":"","iva":"23","data":"","descricao":"","confianca":"alta"} REGRAS: fornecedor=nome empresa emitente, nif=9 digitos numericos sem espacos (procura NIF/NIPC/Contribuinte), total=valor total com IVA em decimal (ex: 45.50), iva=percentagem 23 ou 13 ou 6 ou 0, data=YYYY-MM-DD, descricao=resumo do que foi comprado, confianca=alta/media/baixa. Campo vazio se nao visivel.';
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -27,35 +45,52 @@ exports.handler = async (event) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: model: 'claude-haiku-4-5',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageData } },
-          { type: 'text', text: prompt }
-        ]}]
+        model: 'claude-haiku-4-5',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/jpeg',
+                data: imageData,
+              }
+            },
+            {
+              type: 'text',
+              text: 'Analisa esta fatura portuguesa. Responde APENAS com JSON puro sem markdown: {"fornecedor":"...","nif":"...","total":0.00,"iva":23,"data":"YYYY-MM-DD","descricao":"...","confianca":"alta"}. Regras: fornecedor=nome empresa, nif=9 digitos, total=valor com IVA, iva=23/13/6/0, data=formato YYYY-MM-DD. Campos ilegiveis = null.'
+            }
+          ]
+        }]
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
       return {
-        statusCode: response.status,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: errText })
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'API error ' + response.status + ': ' + errText.slice(0,300) })
       };
     }
 
     const data = await response.json();
+
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       body: JSON.stringify(data)
     };
 
   } catch (err) {
     return {
-      statusCode: 500,
-      headers: { 'Access-Control-Allow-Origin': '*' },
+      statusCode: 200,
+      headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: err.message })
     };
   }

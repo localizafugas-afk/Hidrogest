@@ -723,16 +723,12 @@ function abrirRelatorio(osId){
   _fotos = (c.fotos||[]).map(f=>({dataUrl:f.dataUrl||'',legenda:f.legenda||''}));
   renderFotos();
 
-  // Restaurar timer a partir do Firebase (persiste entre sessões e recargas)
-  if(!_timerStart){
-    if(os.timerInicioMs){
-      // Usar o timestamp exacto guardado no Firebase
-      _timerStart = os.timerInicioMs;
-    } else if(os.iniciadoEm){
-      _timerStart = new Date(os.iniciadoEm).getTime();
-    } else {
-      _timerStart = Date.now();
-    }
+  // Timer não usado nesta versão
+  var _timerStart = null;
+  if(os.timerInicioMs){
+    _timerStart = os.timerInicioMs;
+  } else if(os.iniciadoEm){
+    _timerStart = new Date(os.iniciadoEm).getTime();
   }
   // Restaurar tempoMin acumulado de sessões anteriores (ex: OS fechada e reaberta)
   if(!_tempoMin && os.tempoAcumuladoMin){

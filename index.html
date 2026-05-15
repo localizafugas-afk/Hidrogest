@@ -652,6 +652,17 @@ const ENSAIOS_POR_ZONA = [
   'Vídeo CCTV','Gás Traçador','Corante UV','Higroscopia',
 ];
 let _divisoes = new Set();
+let _mets = new Set();
+let _equips = new Set();
+let _fotos = [];
+let _tempoMin = 0;
+let _tempoAcumulado = 0;
+let _timerStart = null;
+let _timerInterval = null;
+let _relStep = 1;
+let _osActual = null;
+let _sigPad = {};
+let _metodoPag = null;
 const METODOS_PAG = [
   {id:'numerario', icon:'💵', nome:'Numerário', sub:'Pagamento em dinheiro · emitir fatura-recibo'},
   {id:'mbway',     icon:'📱', nome:'MBWay',     sub:'Transferência via MBWay · emitir fatura-recibo'},
@@ -723,8 +734,8 @@ function abrirRelatorio(osId){
   _fotos = (c.fotos||[]).map(f=>({dataUrl:f.dataUrl||'',legenda:f.legenda||''}));
   renderFotos();
 
-  // Timer não usado nesta versão
-  var _timerStart = null;
+  // Timer
+  _timerStart = null;
   if(os.timerInicioMs){
     _timerStart = os.timerInicioMs;
   } else if(os.iniciadoEm){

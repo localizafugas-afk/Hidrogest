@@ -17,23 +17,13 @@ exports.handler = async function(event) {
 
   try {
     const body = JSON.parse(event.body);
-    let imageData = body.imageData;
-    const mediaType = body.mediaType || 'image/jpeg';
-
-    if (!imageData) {
-      return {
-        statusCode: 400,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'imageData obrigatorio' })
-      };
-    }
-
     const apiKey = process.env.ANTHROPIC_API_KEY;
+
     if (!apiKey) {
       return {
-        statusCode: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'API key nao configurada no Netlify' })
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'API key nao configurada' })
       };
     }
 
@@ -45,38 +35,16 @@ exports.handler = async function(event) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5',
-        max_tokens: 400,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: imageData,
-              }
-            },
-            {
-              type: 'text',
-              text: 'Analisa esta fatura portuguesa. Responde APENAS com JSON puro sem markdown: {"fornecedor":"...","nif":"...","total":0.00,"iva":23,"data":"YYYY-MM-DD","descricao":"...","confianca":"alta"}. Regras: fornecedor=nome empresa, nif=9 digitos, total=valor com IVA, iva=23/13/6/0, data=formato YYYY-MM-DD. Campos ilegiveis = null.'
-            }
-          ]
-        }]
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: body.max_tokens || 1000,
+        system: body.system || '',
+        messages: body.messages || []
       })
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return {
-        statusCode: 200,
-        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'API error ' + response.status + ': ' + errText.slice(0,300) })
-      };
-    }
-
     const data = await response.json();
+    console.log('API response status:', response.status);
+    console.log('API response:', JSON.stringify(data).slice(0, 500));
 
     return {
       statusCode: 200,
@@ -88,6 +56,7 @@ exports.handler = async function(event) {
     };
 
   } catch (err) {
+    console.log('Error:', err.message);
     return {
       statusCode: 200,
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },

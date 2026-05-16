@@ -720,9 +720,8 @@ function abrirRelatorio(osId){
   renderChecks('check-divisoes', DIVISOES, _divisoes, 'divisao');
   renderEnsaiosPorZona(_ensaiosPorZona);
 
-  // Metodologias
+  // Metodologias removidas
   _mets = new Set(c.metodologias||[]);
-  renderChecks('check-metodologias', METODOLOGIAS, _mets);
 
   // Equipamentos
   _equips = new Set(c.equipamentos||[]);

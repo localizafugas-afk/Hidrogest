@@ -1173,10 +1173,10 @@ function corrigirTexto(el){
 // ── Correção de texto com IA (Anthropic API) ──────────────────
 async function corrigirTextoIA(fieldId){
   const el = document.getElementById(fieldId);
-  if(!el || !el.value.trim()){ toast('Campo vazio','⚠️'); return; }
+  if(!el || !el.value.trim()){ toast('Campo vazio'); return; }
   const btnId = 'corr-' + fieldId.replace('rel-','');
   const btn = document.getElementById(btnId);
-  const textoOriginal = btn?.textContent;
+  const textoOriginal = btn ? btn.textContent : '✨ Corrigir texto';
   if(btn){ btn.textContent='⏳...'; btn.disabled=true; }
 
   try{
@@ -1184,26 +1184,31 @@ async function corrigirTextoIA(fieldId){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5',
         max_tokens: 1000,
-        system: 'És um assistente especializado em relatórios técnicos de detecção de fugas e inspeção de tubagens em Portugal. Corrige o texto fornecido: ortografia, gramática, pontuação e clareza, mantendo o significado técnico original e o estilo profissional. Responde APENAS com o texto corrigido, sem explicações, sem aspas, sem prefixos.',
-        messages:[{role:'user', content: `Corrige este texto de relatório técnico:
-
-${el.value}`}]
+        system: 'És um especialista em relatórios técnicos de detecção de fugas e inspeção de tubagens em Portugal. Transforma o texto fornecido pelo técnico num texto profissional e técnico, usando terminologia de hidráulica e construção civil portuguesa. Mantém os factos mas melhora a linguagem, ortografia, gramática e estrutura. Responde APENAS com o texto transformado, sem explicações, sem aspas, sem prefixos.',
+        messages:[{role:'user', content:'Transforma este texto em linguagem técnica profissional:\n\n'+el.value}]
       })
     });
+    if(!response.ok){
+      const errText = await response.text();
+      toast('Erro ' + response.status);
+      if(btn){ btn.textContent=textoOriginal; btn.disabled=false; }
+      return;
+    }
     const data = await response.json();
-    const corrigido = data.content?.[0]?.text?.trim();
+    let corrigido = '';
+    if(data.content && data.content.length > 0){
+      corrigido = data.content[0].text ? data.content[0].text.trim() : '';
+    }
     if(corrigido){
-      // Mostrar diff antes de aplicar
       mostrarConfirmacaoCorrecao(el, corrigido, btn, textoOriginal);
     } else {
-      toast('Não foi possível corrigir','⚠️');
+      toast('Não foi possível corrigir');
       if(btn){ btn.textContent=textoOriginal; btn.disabled=false; }
     }
   }catch(e){
-    console.error('Erro correção IA:', e);
-    toast('Erro na correção','❌');
+    toast('Erro na correção: ' + e.message);
     if(btn){ btn.textContent=textoOriginal; btn.disabled=false; }
   }
 }

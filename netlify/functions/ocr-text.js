@@ -21,9 +21,9 @@ exports.handler = async function(event) {
 
     if (!apiKey) {
       return {
-        statusCode: 500,
-        headers: { 'Access-Control-Allow-Origin': '*' },
-        body: JSON.stringify({ error: 'API key não configurada' })
+        statusCode: 200,
+        headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'API key nao configurada' })
       };
     }
 
@@ -35,7 +35,7 @@ exports.handler = async function(event) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: body.model || 'claude-haiku-4-5',
+        model: 'claude-haiku-4-5',
         max_tokens: body.max_tokens || 1000,
         system: body.system || '',
         messages: body.messages || []
@@ -43,6 +43,8 @@ exports.handler = async function(event) {
     });
 
     const data = await response.json();
+    console.log('API response status:', response.status);
+    console.log('API response:', JSON.stringify(data).slice(0, 500));
 
     return {
       statusCode: 200,
@@ -54,6 +56,7 @@ exports.handler = async function(event) {
     };
 
   } catch (err) {
+    console.log('Error:', err.message);
     return {
       statusCode: 200,
       headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' },

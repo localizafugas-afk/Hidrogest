@@ -1625,7 +1625,7 @@ async function concluirOS(){
       id:os.id, osId:os.id, estado:'preenchido', campos,
       tecnicoId:_currentUser.id, tecnicoNome:_currentUser.name,
       criadoEm: relExistente?.criadoEm || agora,
-      editadoEm: foiEdicaoAutorizada ? agora : undefined,
+      editadoEm: foiEdicaoAutorizada ? agora : null,
       edicaoMobileAutorizada: false,  // revogar automaticamente após submissão
       edicaoMobileAutorizadaPor: null,
     });

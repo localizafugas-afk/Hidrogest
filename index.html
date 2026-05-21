@@ -1732,7 +1732,7 @@ async function iniciarFirebase(){
         var sess=JSON.parse(saved);
         if(Date.now()-sess.ts<12*3600*1000){
           var snap=await _db.getDoc('users',sess.id);
-          if(snap.exists()){_currentUser=snap.data();iniciarApp();return;}
+          if(snap.exists){_currentUser=snap.data();iniciarApp();return;}
         }
       }catch(e){}
       sessionStorage.removeItem('hg_tec_session');
@@ -1792,7 +1792,7 @@ async function entrar(){
   try{
     var snap=await _db.getDoc('users',_tecSel.id);
     spinner.classList.remove('show');
-    if(snap.exists()){
+    if(snap.exists){
       var data=snap.data();
       if(data.password===senha){
         if(data.mustChangePassword){_mudarSenhaUser=data;document.getElementById('screen-login').style.display='none';document.getElementById('screen-mudar-senha').style.display='flex';return;}

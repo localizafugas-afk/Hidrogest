@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -1708,10 +1707,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function iniciarFirebase(){
   try{
+    if(typeof firebase === 'undefined') throw new Error('Firebase SDK não carregou');
     firebase.initializeApp(FIREBASE_CONFIG);
     _fs=firebase.firestore();
     _db={
-      getDoc:(c,id)=>_fs.collection(c).doc(id).get(),
+      getDoc:(c,id)=>{ if(!_fs) throw new Error('Firestore não inicializado'); return _fs.collection(c).doc(id).get(); },
       set:(c,id,data,merge)=>_fs.collection(c).doc(id).set(data,merge?{merge:true}:{}),
       listen:(c,cb)=>_fs.collection(c).onSnapshot(cb),
       get:(c)=>_fs.collection(c).get(),

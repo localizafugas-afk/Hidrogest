@@ -222,9 +222,13 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .check-item { padding:10px 12px; background:#fff; border:1.5px solid var(--border); border-radius:10px; font-size:13px; font-weight:600; color:var(--text); cursor:pointer; transition:all .15s; text-align:center; }
 .check-item.checked { background:#e0f2fe; border-color:var(--accent); color:var(--accent2); }
 .photos-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
-.photo-thumb { aspect-ratio:1; border-radius:10px; background:var(--s2); border:1.5px solid var(--border); overflow:hidden; position:relative; cursor:pointer; }
-.photo-thumb img { width:100%; height:100%; object-fit:cover; }
-.photo-thumb .ph-del { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); border:none; color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.photo-slot { aspect-ratio:1; border-radius:10px; background:var(--s2); border:1.5px solid var(--border); overflow:hidden; position:relative; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.photo-slot img { width:100%; height:100%; object-fit:cover; }
+.photo-slot .ph-del { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); border:none; color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; }
+.photo-slot.add-btn { background:#eff6ff; border:2px dashed #bfdbfe; }
+.photo-slot .ph-plus { font-size:28px; line-height:1; }
+.photo-slot .ph-num { font-size:11px; font-weight:600; color:var(--accent); margin-top:4px; }
+/* legacy aliases kept for compatibility */
 .photo-add { aspect-ratio:1; border-radius:10px; background:#eff6ff; border:2px dashed #bfdbfe; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-size:11px; font-weight:600; color:var(--accent); }
 .photo-add .pa-ico { font-size:24px; }
 
@@ -253,6 +257,9 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .spinner { width:24px; height:24px; border-radius:50%; border:3px solid rgba(2,132,199,.2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 </style>
+<!-- Firebase SDK via scripts clássicos (sem ES modules) — máxima compatibilidade Android -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <!-- LOADING -->
@@ -1083,7 +1090,7 @@ function renderFotos(){
   `).join('');
 
   if(_fotos.length<MAX){
-    html += `<div class="photo-slot" onclick="escolherFonteImagem()">
+    html += `<div class="photo-slot add-btn" onclick="escolherFonteImagem()">
       <div class="ph-plus">📷</div>
       <div class="ph-num">${_fotos.length}/10</div>
     </div>`;
@@ -1108,6 +1115,10 @@ function adicionarFoto(input){
   const filesToProcess = files.slice(0, disponiveis);
   if(files.length > disponiveis) toast(`Só foram adicionadas ${disponiveis} fotos (limite de 10)`,'⚠️');
 
+  // Reset imediato do input (antes do async) — fix iOS/Safari onde o reset
+  // dentro do onload não dispara novo 'change' na mesma câmara
+  setTimeout(() => { try { input.value=''; } catch(e){} }, 100);
+
   let processadas = 0;
   filesToProcess.forEach(file => {
     // Comprimir para max 800px e qualidade 70% — evita exceder limite Firebase (1MB/doc)
@@ -1129,9 +1140,8 @@ function adicionarFoto(input){
         processadas++;
         if(processadas === filesToProcess.length){
           renderFotos();
-          input.value='';
           if(_fotos.length>=4) toast('✓ Mínimo de 4 fotos atingido','📷');
-          else toast(`${processadas} foto(s) adicionada(s)`,'📷');
+          else toast(`${processadas} foto(s) adicionada(s). Adiciona mais ${4-_fotos.length} para continuar.`,'📷');
         }
       };
       img.src = e.target.result;
@@ -1698,15 +1708,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function iniciarFirebase(){
   try{
-    const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const {getFirestore,doc,getDoc,getDocs,collection,setDoc,onSnapshot}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-    const app=initializeApp(FIREBASE_CONFIG);
-    _fs=getFirestore(app);
+    // Usar Firebase compat SDK carregado via <script> clássico no <head>
+    // window.firebase fica disponível sincronamente — sem módulos ES, sem dynamic import
+    if(!window.firebase){
+      console.error('Firebase compat SDK não carregou');
+      mostrarLogin(); return;
+    }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    _fs = firebase.firestore();
     _db={
-      getDoc:(c,id)=>getDoc(doc(_fs,c,id)),
-      set:(c,id,data,merge)=>setDoc(doc(_fs,c,id),data,merge?{merge:true}:{}),
-      listen:(c,cb)=>onSnapshot(collection(_fs,c),cb),
-      get:(c)=>getDocs(collection(_fs,c)),
+      getDoc:function(c,id){ return _fs.collection(c).doc(id).get(); },
+      set:function(c,id,data,merge){ return _fs.collection(c).doc(id).set(data, merge?{merge:true}:{}); },
+      listen:function(c,cb){ return _fs.collection(c).onSnapshot(cb); },
+      get:function(c){ return _fs.collection(c).get(); },
     };
     _db.get('users').then(function(s){
       var tecs=s.docs.map(function(d){return d.data();}).filter(function(u){return u.role==='tecnico'&&u.active!==false;});

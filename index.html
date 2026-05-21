@@ -1115,10 +1115,6 @@ function adicionarFoto(input){
   const filesToProcess = files.slice(0, disponiveis);
   if(files.length > disponiveis) toast(`Só foram adicionadas ${disponiveis} fotos (limite de 10)`,'⚠️');
 
-  // Reset imediato do input (antes do async) — fix iOS/Safari onde o reset
-  // dentro do onload não dispara novo 'change' na mesma câmara
-  setTimeout(() => { try { input.value=''; } catch(e){} }, 100);
-
   let processadas = 0;
   filesToProcess.forEach(file => {
     // Comprimir para max 800px e qualidade 70% — evita exceder limite Firebase (1MB/doc)
@@ -1140,8 +1136,9 @@ function adicionarFoto(input){
         processadas++;
         if(processadas === filesToProcess.length){
           renderFotos();
+          input.value = '';
           if(_fotos.length>=4) toast('✓ Mínimo de 4 fotos atingido','📷');
-          else toast(`${processadas} foto(s) adicionada(s). Adiciona mais ${4-_fotos.length} para continuar.`,'📷');
+          else toast(`${processadas} foto(s) adicionada(s). Faltam ${4-_fotos.length} para continuar.`,'📷');
         }
       };
       img.src = e.target.result;

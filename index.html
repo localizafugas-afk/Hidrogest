@@ -259,12 +259,15 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .spinner { width:24px; height:24px; border-radius:50%; border:3px solid rgba(2,132,199,.2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 </style>
+<script src="./firebase-app-compat.min.js"></script>
+<script src="./firebase-firestore-compat.min.js"></script>
 </head>
 <body>
 <!-- LOADING -->
 <div id="screen-loading">
   <div class="load-logo">💧</div>
   <div class="load-title">HidroGest</div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:-8px;font-family:monospace;">v2025-C</div>
   <div class="load-sub">A ligar ao servidor...</div>
   <div class="load-dots"><span></span><span></span><span></span></div>
 </div>
@@ -1704,15 +1707,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function iniciarFirebase(){
   try{
-    const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const {getFirestore,doc,getDoc,getDocs,collection,setDoc,onSnapshot}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-    const app=initializeApp(FIREBASE_CONFIG);
-    _fs=getFirestore(app);
+    firebase.initializeApp(FIREBASE_CONFIG);
+    _fs=firebase.firestore();
     _db={
-      getDoc:(c,id)=>getDoc(doc(_fs,c,id)),
-      set:(c,id,data,merge)=>setDoc(doc(_fs,c,id),data,merge?{merge:true}:{}),
-      listen:(c,cb)=>onSnapshot(collection(_fs,c),cb),
-      get:(c)=>getDocs(collection(_fs,c)),
+      getDoc:(c,id)=>_fs.collection(c).doc(id).get(),
+      set:(c,id,data,merge)=>_fs.collection(c).doc(id).set(data,merge?{merge:true}:{}),
+      listen:(c,cb)=>_fs.collection(c).onSnapshot(cb),
+      get:(c)=>_fs.collection(c).get(),
     };
     _db.get('users').then(function(s){
       var tecs=s.docs.map(function(d){return d.data();}).filter(function(u){return u.role==='tecnico'&&u.active!==false;});

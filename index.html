@@ -1801,7 +1801,7 @@ async function entrar(){
       if(senha==='1234'){_currentUser=Object.assign({},_tecSel,{role:'tecnico',active:true});sessionStorage.setItem('hg_tec_session',JSON.stringify({id:_tecSel.id,ts:Date.now()}));iniciarApp();}
       else{erroEl.textContent='❌ Utilizador não encontrado.';erroEl.style.display='block';}
     }
-  }catch(e){spinner.classList.remove('show');erroEl.textContent='❌ Erro de ligação.';erroEl.style.display='block';}
+  }catch(e){spinner.classList.remove('show');console.error('ERRO LOGIN:',e);erroEl.textContent='❌ Erro: '+( e?.code||e?.message||String(e));erroEl.style.display='block';}
 }
 
 function validarNS(){

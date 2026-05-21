@@ -222,15 +222,17 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .check-item { padding:10px 12px; background:#fff; border:1.5px solid var(--border); border-radius:10px; font-size:13px; font-weight:600; color:var(--text); cursor:pointer; transition:all .15s; text-align:center; }
 .check-item.checked { background:#e0f2fe; border-color:var(--accent); color:var(--accent2); }
 .photos-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px; }
+.photo-thumb { aspect-ratio:1; border-radius:10px; background:var(--s2); border:1.5px solid var(--border); overflow:hidden; position:relative; cursor:pointer; }
+.photo-thumb img { width:100%; height:100%; object-fit:cover; }
+.photo-thumb .ph-del { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); border:none; color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.photo-add { aspect-ratio:1; border-radius:10px; background:#eff6ff; border:2px dashed #bfdbfe; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-size:11px; font-weight:600; color:var(--accent); }
+.photo-add .pa-ico { font-size:24px; }
 .photo-slot { aspect-ratio:1; border-radius:10px; background:var(--s2); border:1.5px solid var(--border); overflow:hidden; position:relative; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; }
 .photo-slot img { width:100%; height:100%; object-fit:cover; }
 .photo-slot .ph-del { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.6); border:none; color:#fff; width:22px; height:22px; border-radius:50%; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:2; }
 .photo-slot.add-btn { background:#eff6ff; border:2px dashed #bfdbfe; }
 .photo-slot .ph-plus { font-size:28px; line-height:1; }
 .photo-slot .ph-num { font-size:11px; font-weight:600; color:var(--accent); margin-top:4px; }
-/* legacy aliases kept for compatibility */
-.photo-add { aspect-ratio:1; border-radius:10px; background:#eff6ff; border:2px dashed #bfdbfe; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; cursor:pointer; font-size:11px; font-weight:600; color:var(--accent); }
-.photo-add .pa-ico { font-size:24px; }
 
 /* ASSINATURA */
 #screen-assinatura { display:none; position:fixed; inset:0; z-index:300; background:var(--bg); flex-direction:column; overflow-y:auto; }
@@ -257,9 +259,6 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .spinner { width:24px; height:24px; border-radius:50%; border:3px solid rgba(2,132,199,.2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 </style>
-<!-- Firebase SDK via scripts clássicos (sem ES modules) — máxima compatibilidade Android -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <!-- LOADING -->
@@ -1136,9 +1135,9 @@ function adicionarFoto(input){
         processadas++;
         if(processadas === filesToProcess.length){
           renderFotos();
-          input.value = '';
+          input.value='';
           if(_fotos.length>=4) toast('✓ Mínimo de 4 fotos atingido','📷');
-          else toast(`${processadas} foto(s) adicionada(s). Faltam ${4-_fotos.length} para continuar.`,'📷');
+          else toast(`${processadas} foto(s) adicionada(s)`,'📷');
         }
       };
       img.src = e.target.result;
@@ -1619,9 +1618,9 @@ async function concluirOS(){
       assinaturaCliente:sigCli,
       metodoPagamento:_metodoPag,
       tempoMin:_tempoMin,
-      valorBase:v?.base,
-      valorIva:v?.iva,
-      valorTotal:v?.total,
+      valorBase:v?.base ?? null,
+      valorIva:v?.iva ?? null,
+      valorTotal:v?.total ?? null,
       concluidoEm:agora,
     };
     // Verificar se havia autorização de edição mobile — revogar após submissão
@@ -1643,7 +1642,7 @@ async function concluirOS(){
       horaFimReal,
       concluidoEm:agora,
       metodoPagamento:_metodoPag,
-      valorTotal:v?.total,
+      valorTotal:v?.total ?? null,
     });
 
     // Mensagem interna para admin emitir fatura
@@ -1655,7 +1654,7 @@ async function concluirOS(){
       tecnicoNome:_currentUser.name,
       metodoPagamento:_metodoPag,
       tipoDocumento,
-      valorTotal:v?.total,
+      valorTotal:v?.total ?? null,
       criadoEm:agora,
       lida:false,
     });
@@ -1705,19 +1704,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function iniciarFirebase(){
   try{
-    // Usar Firebase compat SDK carregado via <script> clássico no <head>
-    // window.firebase fica disponível sincronamente — sem módulos ES, sem dynamic import
-    if(!window.firebase){
-      console.error('Firebase compat SDK não carregou');
-      mostrarLogin(); return;
-    }
-    firebase.initializeApp(FIREBASE_CONFIG);
-    _fs = firebase.firestore();
+    const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    const {getFirestore,doc,getDoc,getDocs,collection,setDoc,onSnapshot}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const app=initializeApp(FIREBASE_CONFIG);
+    _fs=getFirestore(app);
     _db={
-      getDoc:function(c,id){ return _fs.collection(c).doc(id).get(); },
-      set:function(c,id,data,merge){ return _fs.collection(c).doc(id).set(data, merge?{merge:true}:{}); },
-      listen:function(c,cb){ return _fs.collection(c).onSnapshot(cb); },
-      get:function(c){ return _fs.collection(c).get(); },
+      getDoc:(c,id)=>getDoc(doc(_fs,c,id)),
+      set:(c,id,data,merge)=>setDoc(doc(_fs,c,id),data,merge?{merge:true}:{}),
+      listen:(c,cb)=>onSnapshot(collection(_fs,c),cb),
+      get:(c)=>getDocs(collection(_fs,c)),
     };
     _db.get('users').then(function(s){
       var tecs=s.docs.map(function(d){return d.data();}).filter(function(u){return u.role==='tecnico'&&u.active!==false;});

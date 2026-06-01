@@ -259,8 +259,9 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .spinner { width:24px; height:24px; border-radius:50%; border:3px solid rgba(2,132,199,.2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 </style>
-<script src="./firebase-app-compat.min.js"></script>
-<script src="./firebase-firestore-compat.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 </head>
 <body>
 <!-- LOADING -->
@@ -737,7 +738,7 @@ function abrirRelatorio(osId){
   renderChecks('check-equipamentos', EQUIPAMENTOS, _equips);
 
   // Fotos
-  _fotos = (c.fotos||[]).map(f=>({dataUrl:f.dataUrl||'',legenda:f.legenda||''}));
+  _fotos = (c.fotos||[]).map(f=>({url:f.url||'', dataUrl:f.dataUrl||'', legenda:f.legenda||''}));
   renderFotos();
 
   // Timer
@@ -923,9 +924,47 @@ function escolherFonteDespesa(){
   picker.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-sy>60)picker.remove();},{passive:true});
 }
 
+// ── Upload de fotos para o Firebase Storage ──────────────────
+// Sobe cada foto nova para o Storage e devolve [{url, legenda}].
+// Fotos que já têm 'url' (de uma gravação anterior) não voltam a subir.
+// Se o Storage não estiver disponível, devolve null (a app usa o método antigo).
+async function _uploadFotos(osId){
+  if(!_storage) return null;
+  const out = [];
+  for(let i=0; i<_fotos.length; i++){
+    const f = _fotos[i];
+    if(f.url){ out.push({url:f.url, legenda:f.legenda||''}); continue; }
+    if(!f.dataUrl){ continue; }
+    try{
+      const caminho = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
+      const ref = _storage.ref(caminho);
+      await ref.putString(f.dataUrl, 'data_url');
+      const url = await ref.getDownloadURL();
+      out.push({url, legenda:f.legenda||''});
+    }catch(e){
+      console.error('Erro ao subir foto', i, e);
+      out.push({dataUrl:f.dataUrl, legenda:f.legenda||''});
+    }
+  }
+  return out;
+}
+
 async function guardarRascunho(){
   if(!_osActual) return;
   const tempoActual = Math.ceil(getElapsedMs() / 60000) || _tempoMin || 0;
+
+  // Fotos: por defeito ficam locais (rápido). Se forem pesadas, subimos
+  // para o Storage para o rascunho não exceder o limite do Firestore.
+  let _fotosRascunho = _fotos.map(f=> f.url ? {url:f.url, legenda:f.legenda||''} : {dataUrl:f.dataUrl, legenda:f.legenda||''});
+  const _peso = new Blob([JSON.stringify(_fotosRascunho)]).size;
+  if(_storage && _peso > 700*1024){
+    const _subidas = await _uploadFotos(_osActual.id);
+    if(_subidas){
+      _fotosRascunho = _subidas;
+      _fotos = _subidas.map(f=>({url:f.url, dataUrl:f.dataUrl||'', legenda:f.legenda||''}));
+    }
+  }
+
   const campos={
     reclamacao: document.getElementById('rel-rec').value,
     trabalho:   document.getElementById('rel-trab').value,
@@ -937,7 +976,7 @@ async function guardarRascunho(){
     ensaiosPorZona: _ensaiosPorZona,
     metodologias: [..._mets],
     equipamentos: [..._equips],
-    fotos: _fotos.map(f=>({dataUrl:f.dataUrl,legenda:f.legenda})),
+    fotos: _fotosRascunho,
     // Guardar tempo no rascunho para recuperar depois
     tempoMin: tempoActual || undefined,
     horaIniReal: _osActual.horaIniReal || new Date().toTimeString().slice(0,5),
@@ -1086,7 +1125,7 @@ function renderFotos(){
   // Slots: fotos existentes + botão adicionar (se < MAX)
   let html = _fotos.map((f,i)=>`
     <div class="photo-slot">
-      <img src="${f.dataUrl}" alt="Foto ${i+1}">
+      <img src="${f.url||f.dataUrl}" alt="Foto ${i+1}">
       <button class="ph-del" onclick="removerFoto(${i})">×</button>
     </div>
   `).join('');
@@ -1608,6 +1647,16 @@ async function concluirOS(){
     const agora=new Date().toISOString();
     const horaFimReal=new Date().toTimeString().slice(0,5);
 
+    // Subir fotos para o Storage (resolve o limite de 1MB do documento).
+    // Se o Storage responder, guardamos {url}; senão, {dataUrl} como antes.
+    let _fotosGuardar;
+    const _fotosStorage = await _uploadFotos(os.id);
+    if(_fotosStorage){
+      _fotosGuardar = _fotosStorage;
+    } else {
+      _fotosGuardar = _fotos.map(f=>({dataUrl:f.dataUrl, legenda:f.legenda}));
+    }
+
     // Guardar relatório completo
     const campos={
       reclamacao: document.getElementById('rel-rec').value,
@@ -1616,7 +1665,7 @@ async function concluirOS(){
       sugestao:   document.getElementById('rel-rec2').value,
       metodologias:[..._mets],
       equipamentos:[..._equips],
-      fotos:_fotos.map(f=>({dataUrl:f.dataUrl,legenda:f.legenda})),
+      fotos:_fotosGuardar,
       assinaturaTecnico:sigTec,
       assinaturaCliente:sigCli,
       metodoPagamento:_metodoPag,
@@ -1626,6 +1675,18 @@ async function concluirOS(){
       valorTotal:v?.total ?? null,
       concluidoEm:agora,
     };
+
+    // Rede de segurança: se o Storage não respondeu e as fotos vão como dataUrl,
+    // confirmar que o documento não excede o limite do Firestore (~1MB).
+    if(!_fotosStorage){
+      const _tam = new Blob([JSON.stringify(campos)]).size;
+      if(_tam > 950*1024){
+        const _mb=(_tam/1024/1024).toFixed(2);
+        toast(`As fotos estão demasiado pesadas (${_mb}MB) e o armazenamento não respondeu. Tente novamente daqui a pouco.`,'📷');
+        btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório';
+        return;
+      }
+    }
     // Verificar se havia autorização de edição mobile — revogar após submissão
     const relExistente = (DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
     const foiEdicaoAutorizada = relExistente?.edicaoMobileAutorizada;
@@ -1682,7 +1743,7 @@ async function concluirOS(){
 
 
 // ── Estado base ───────────────────────────────────────────────
-let _db=null, _fs=null, _tecSel=null, _tecnicosFirebase=[], _currentUser=null;
+let _db=null, _fs=null, _storage=null, _tecSel=null, _tecnicosFirebase=[], _currentUser=null;
 let _editingDespId=null, _filtroOS='', _gpsWatchId=null, _mudarSenhaUser=null;
 
 const DB = {
@@ -1707,9 +1768,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function iniciarFirebase(){
   try{
-    if(typeof firebase === 'undefined') throw new Error('Firebase SDK não carregou');
+    // Esperar que o SDK do Firebase termine de carregar (até ~8 segundos).
+    // Os scripts vêm da internet; em redes lentas podem demorar um pouco.
+    let _t = 0;
+    while(typeof firebase === 'undefined' && _t < 80){
+      await new Promise(r=>setTimeout(r, 100));
+      _t++;
+    }
+    if(typeof firebase === 'undefined') throw new Error('Sem ligação para carregar o sistema. Verifique a internet e recarregue a página.');
     firebase.initializeApp(FIREBASE_CONFIG);
     _fs=firebase.firestore();
+    // Firebase Storage — guarda as fotos fora do documento (resolve o limite de 1MB).
+    // Defensivo: se não estiver disponível, a app continua a funcionar com o método antigo.
+    try{
+      if(firebase.storage){ _storage = firebase.storage(); }
+    }catch(e){ console.warn('Storage indisponível, será usado o método antigo:', e); _storage = null; }
     _db={
       getDoc:(c,id)=>{ if(!_fs) throw new Error('Firestore não inicializado'); return _fs.collection(c).doc(id).get(); },
       set:(c,id,data,merge)=>_fs.collection(c).doc(id).set(data,merge?{merge:true}:{}),

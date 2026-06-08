@@ -1350,7 +1350,7 @@ function renderOS(){
   if(todasHoje.length&&resumoEl){
     var emC=todasHoje.filter(o=>o.estado==='em_curso').length;
     var conc=todasHoje.filter(o=>o.estado==='concluida'||o.estado==='os_fechada').length;
-    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
+    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card" onclick="setFiltroById(\'hoje\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card" onclick="setFiltroById(\'em_curso\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
   }else if(resumoEl) resumoEl.innerHTML='';
 
   // ── LISTA FILTRADA ──

@@ -10,6 +10,11 @@
     Content-Security-Policy = "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:;"
 
 [[redirects]]
+  from = "https://tecnico.hidrogest.net/*"
+  to = "/index_tecnico_v2025-D.html"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -336,10 +336,23 @@ select.fi { appearance: none; -webkit-appearance: none; }
         <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text3);">HidroGest · v3.2 · Jun 2026 · Localizafugas</div>
       </div>
     </div>
+    <!-- COMISSÕES -->
+    <div class="page" id="page-comissoes">
+      <div style="padding:16px 4px 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <button onclick="commMudarMes(-1)" style="background:#fff;border:1px solid var(--border);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;">‹</button>
+          <div style="text-align:center;"><div style="font-size:18px;font-weight:900;" id="comm-mes-label">—</div><div style="font-size:11px;color:var(--text3);">Comissões do mês</div></div>
+          <button onclick="commMudarMes(1)" style="background:#fff;border:1px solid var(--border);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;">›</button>
+        </div>
+        <div id="comm-content"></div>
+        <div style="height:80px;"></div>
+      </div>
+    </div>
   </div>
   <nav class="bottom-nav">
     <button class="bn-item active" id="bn-os" onclick="navTo('os')"><div class="bn-ico">🔧<span class="bn-badge" id="bn-os-badge" style="display:none;"></span></div><span class="bn-label">Minhas OS</span></button>
     <button class="bn-item" id="bn-despesas" onclick="navTo('despesas')"><div class="bn-ico">🧾<span class="bn-badge" id="bn-desp-badge" style="display:none;"></span></div><span class="bn-label">Despesas</span></button>
+    <button class="bn-item" id="bn-comissoes" onclick="navTo('comissoes')"><div class="bn-ico">💰</div><span class="bn-label">Comissões</span></button>
     <button class="bn-item" id="bn-perfil" onclick="navTo('perfil')"><div class="bn-ico">👤</div><span class="bn-label">Perfil</span></button>
   </nav>
 </div>
@@ -1149,7 +1162,7 @@ let _editingDespId=null,
     _filtroOS='hoje',  /* PADRÃO: Hoje (só trabalho por fazer) */
     _gpsWatchId=null, _mudarSenhaUser=null;
 
-const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], emailConfig:null, meta_nextDesp:1 };
+const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], funcionarios:[], emailConfig:null, meta_nextDesp:1 };
 
 // ── Firebase ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
@@ -1312,6 +1325,7 @@ function carregarDados(){
   _db.listen('servicos',function(s){ DB.servicos=s.docs.map(d=>d.data()); });
   _db.listen('despesas',function(s){ DB.despesas=s.docs.map(d=>d.data()).filter(d=>d.tecnicoId===uid&&!d._eliminado&&d.status!=='eliminado'); renderDespesas(); atualizarBadges(); });
   _db.listen('relatorios_pesquisa',function(s){ DB.relatorios_pesquisa=s.docs.map(d=>d.data()); renderOS(); });
+  _db.listen('funcionarios',function(s){ try{ DB.funcionarios=s.docs.map(d=>d.data()); }catch(e){ DB.funcionarios=[]; } if(document.getElementById('page-comissoes')?.classList.contains('active')) renderComissoesTec(); });
   _db.listen('meta',function(s){ s.docs.forEach(d=>{ if(d.id==='emailConfig')DB.emailConfig=d.data().value||d.data()||{}; if(d.id==='nextDesp')DB.meta_nextDesp=d.data().value||1; }); });
 }
 
@@ -1324,6 +1338,97 @@ function navTo(page){
   document.getElementById('fab-desp').classList.toggle('show', page==='despesas');
   // Ao voltar para OS, garantir filtro "Hoje"
   if(page==='os'){ setFiltroById('hoje'); }
+  if(page==='comissoes'){ renderComissoesTec(); }
+}
+
+// ── COMISSÕES (visão do técnico) ──────────────────────────────
+let _commMesTec = new Date().toISOString().slice(0,7);
+function commMudarMes(delta){
+  const [y,m]=_commMesTec.split('-').map(Number);
+  const d=new Date(y,(m-1)+delta,1);
+  _commMesTec=d.toISOString().slice(0,7);
+  renderComissoesTec();
+}
+function _commIsCippT(n){ return String(n||'').toLowerCase().includes('cipp'); }
+function _commIsImpT(n){ return String(n||'').toLowerCase().includes('impermeab'); }
+function _commIsGarantiaT(n){ return String(n||'').toLowerCase().includes('garantia'); }
+function _commMesNome(ym){ const [y,m]=ym.split('-').map(Number); const M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; return M[m-1]+' '+y; }
+function _commAddDiasUteisT(dateStr,n){ const d=new Date(String(dateStr).slice(0,10)+'T00:00:00'); let a=0; while(a<n){ d.setDate(d.getDate()+1); const wd=d.getDay(); if(wd!==0&&wd!==6)a++; } return d; }
+function _commEuro(v){ return '€'+(Math.round((v||0)*100)/100).toFixed(2); }
+
+function renderComissoesTec(){
+  const el=document.getElementById('comm-content'); if(!el) return;
+  const lbl=document.getElementById('comm-mes-label'); if(lbl) lbl.textContent=_commMesNome(_commMesTec);
+  const periodo=_commMesTec, uid=_currentUser?.id;
+  const func=(DB.funcionarios||[]).find(f=> f.id===uid || (f.name&&_currentUser?.name&&f.name.toLowerCase()===_currentUser.name.toLowerCase()) );
+  const salario=func?(parseFloat(func.salary)||0):0, limiar=salario*8;
+  const srvNome=o=>{ const s=(DB.servicos||[]).find(x=>x.id===o.servicoId); return s?.nome||o.servicoNome||o.tipoServico||''; };
+  const netOf=o=>{ const rel=(DB.relatorios_pesquisa||[]).find(r=>r.id===o.id); const vb=rel?.campos?.valorBase; if(vb!=null&&vb!=='') return parseFloat(vb)||0; if(o.net!=null) return parseFloat(o.net)||0; const tot=parseFloat(o.valorTotal||0)||0; return tot/1.23; };
+  const minhas=(DB.ordens||[]);
+  const pagas=minhas.filter(o=> o.pago===true && String(o.pagoEm||o.concluidoEm||o.data||'').slice(0,7)===periodo);
+  let netOut=0,netCipp=0,netImp=0;
+  pagas.forEach(o=>{ const n=netOf(o), nome=srvNome(o); if(_commIsCippT(nome))netCipp+=n; else if(_commIsImpT(nome))netImp+=n; else netOut+=n; });
+  const comNormal=Math.max(0,(netOut-limiar))*0.05, comCipp=netCipp*0.05, comImp=netImp*0.03;
+  const totalBruto=comNormal+comCipp+comImp;
+  // Regras
+  const motivos=[];
+  const concluidasMes=minhas.filter(o=>(o.estado==='concluida'||o.estado==='os_fechada') && String(o.concluidoEm||o.data||'').slice(0,7)===periodo);
+  let nAtrasRel=0;
+  concluidasMes.forEach(o=>{ const nome=(srvNome(o)||'').toLowerCase(); if(nome.includes('garantia')||nome.includes('orçament')||nome.includes('orcament'))return; const rel=(DB.relatorios_pesquisa||[]).find(r=>r.id===o.id); const entregue=rel&&(rel.estado==='enviado'||rel.estado==='preenchido'||rel.estado==='concluido'); if(entregue)return; const base=o.concluidoEm||o.data; if(base && new Date()>_commAddDiasUteisT(base,5)) nAtrasRel++; });
+  if(nAtrasRel>0) motivos.push({t:'Relatórios entregues fora do prazo',d:nAtrasRel+' relatório(s) com mais de 5 dias úteis'});
+  const porDia={};
+  minhas.filter(o=>String(o.data||'').slice(0,7)===periodo && o.horaIni && o.horaIniReal).forEach(o=>{ const d=o.data; if(!porDia[d]||o.horaIni<porDia[d].horaIni) porDia[d]=o; });
+  let nAtrasos=0;
+  Object.values(porDia).forEach(o=>{ const [ph,pm]=o.horaIni.split(':').map(Number),[rh,rm]=o.horaIniReal.split(':').map(Number); if(((rh*60+rm)-(ph*60+pm))>15) nAtrasos++; });
+  if(nAtrasos>0) motivos.push({t:'Atraso na chegada ao 1º trabalho',d:nAtrasos+' dia(s) com mais de 15 min'});
+  const garantias=minhas.filter(o=>String(o.data||o.concluidoEm||'').slice(0,7)===periodo && _commIsGarantiaT(srvNome(o)));
+  if(garantias.length>0) motivos.push({t:'Retorno por garantia',d:garantias.length+' retorno(s) no mês'});
+  const perdeu=motivos.length>0, totalFinal=perdeu?0:totalBruto;
+  const mesSeg=(()=>{ const [y,m]=periodo.split('-').map(Number); const d=new Date(y,m,1); return _commMesNome(d.toISOString().slice(0,7)); })();
+
+  const linhaPot=(label,valor,base)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+     <div style="flex:1;padding-right:10px;"><div style="font-weight:700;font-size:13px;">${label}</div><div style="font-size:11px;color:var(--text3);">${base}</div></div>
+     <div style="font-weight:900;font-size:15px;color:${valor>0?'#16a34a':'var(--text3)'};white-space:nowrap;">${_commEuro(valor)}</div></div>`;
+
+  const destaque=perdeu
+    ? `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:14px;padding:18px;margin-bottom:16px;">
+         <div style="font-size:15px;font-weight:900;color:#dc2626;margin-bottom:8px;">❌ Sem direito a comissão este mês</div>
+         <div style="font-size:13px;color:#7f1d1d;line-height:1.5;">Você perdeu o direito a comissão de <strong>${_commEuro(totalBruto)}</strong> a ser paga em <strong>${mesSeg}</strong> por não ter cumprido as condições estabelecidas:</div>
+         <ul style="margin:10px 0 0;padding-left:18px;color:#7f1d1d;font-size:12px;">${motivos.map(m=>`<li style="margin-bottom:4px;"><strong>${m.t}</strong> — ${m.d}</li>`).join('')}</ul>
+       </div>`
+    : `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:18px;margin-bottom:16px;text-align:center;">
+         <div style="font-size:12px;color:#15803d;font-weight:700;margin-bottom:4px;">✅ Comissão estimada (a pagar em ${mesSeg})</div>
+         <div style="font-size:34px;font-weight:900;color:#16a34a;">${_commEuro(totalFinal)}</div>
+       </div>`;
+
+  const regras=[
+    {ok:nAtrasRel===0,t:'Relatórios em dia',d:nAtrasRel===0?'Sem relatórios atrasados':nAtrasRel+' fora do prazo'},
+    {ok:nAtrasos===0,t:'Pontualidade no 1º trabalho',d:nAtrasos===0?'Sem atrasos > 15 min':nAtrasos+' dia(s) com atraso'},
+    {ok:garantias.length===0,t:'Sem retornos por garantia',d:garantias.length===0?'Nenhum retorno no mês':garantias.length+' retorno(s)'},
+  ];
+
+  el.innerHTML=destaque+`
+    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Cálculo da comissão</div>
+      ${linhaPot('Serviços normais',comNormal,'Receita '+_commEuro(netOut)+' − salário×8 '+_commEuro(limiar)+' × 5%')}
+      ${linhaPot('CIPP',comCipp,'Receita '+_commEuro(netCipp)+' × 5%')}
+      ${linhaPot('Impermeabilização',comImp,'Receita '+_commEuro(netImp)+' × 3%')}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;">
+        <div style="font-weight:900;font-size:14px;">Total bruto</div>
+        <div style="font-weight:900;font-size:18px;color:${perdeu?'#dc2626':'#16a34a'};${perdeu?'text-decoration:line-through;':''}">${_commEuro(totalBruto)}</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Condições</div>
+      ${regras.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+         <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:${r.ok?'#dcfce7':'#fee2e2'};">${r.ok?'✅':'❌'}</div>
+         <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${r.t}</div><div style="font-size:11px;color:var(--text3);">${r.d}</div></div>
+       </div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--text3);text-align:center;line-height:1.5;padding:0 12px;">
+      ${salario>0?'':'⚠️ Salário não disponível neste dispositivo — o cálculo dos serviços normais pode ficar incompleto. Confirma com o escritório.<br>'}
+      Valores estimados com base nas tuas OS pagas. O valor oficial é o do escritório. CIPP e impermeabilização não entram na receita dos serviços normais.
+    </div>`;
 }
 
 function setFiltro(el, filtro){

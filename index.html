@@ -812,13 +812,19 @@ async function guardarRascunho(){
     const _subidas = await _uploadFotos(_osActual.id);
     if(_subidas){ _fotosRascunho = _subidas; _fotos = _subidas.map(f=>({url:f.url, dataUrl:f.dataUrl||'', legenda:f.legenda||''})); }
   }
+  const _relAnt=(DB.relatorios_pesquisa||[]).find(r=>r.id===_osActual.id);
+  const _tipoAnom=document.getElementById('rel-tipo-anomalia')?.value||'';
+  const _tipol=document.getElementById('rel-tipologia')?.value||'';
   const campos={
+    ...(_relAnt?.campos||{}),
     reclamacao: document.getElementById('rel-rec').value,
     trabalho:   document.getElementById('rel-trab').value,
     conclusao:  document.getElementById('rel-conc').value,
     sugestao:   document.getElementById('rel-rec2').value,
-    tipoAnomalia: document.getElementById('rel-tipo-anomalia')?.value||'',
-    tipologia:    document.getElementById('rel-tipologia')?.value||'',
+    tipoAnomalia: _tipoAnom,
+    tipoProblema: _tipoAnom,
+    tipologia:    _tipol,
+    localProblema: _tipol,
     divisoes:     [..._divisoes],
     ensaiosPorZona: _ensaiosPorZona,
     metodologias: [..._mets],
@@ -1116,7 +1122,14 @@ async function concluirOS(){
     const _fotosStorage = await _uploadFotos(os.id);
     if(_fotosStorage){ _fotosGuardar=_fotosStorage; }
     else { _fotosGuardar=_fotos.map(f=>({dataUrl:f.dataUrl,legenda:f.legenda})); }
+    const relExistente=(DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
+    const _ant=relExistente?.campos||{};
+    const _tipoAnom=document.getElementById('rel-tipo-anomalia')?.value || _ant.tipoAnomalia || '';
+    const _tipol=document.getElementById('rel-tipologia')?.value || _ant.tipologia || '';
+    const _divs=[..._divisoes].length?[..._divisoes]:(_ant.divisoes||[]);
+    const _ensaios=Object.keys(_ensaiosPorZona||{}).length?_ensaiosPorZona:(_ant.ensaiosPorZona||{});
     const campos={
+      ..._ant,
       reclamacao:document.getElementById('rel-rec').value, trabalho:document.getElementById('rel-trab').value,
       conclusao:document.getElementById('rel-conc').value, sugestao:document.getElementById('rel-rec2').value,
       metodologias:[..._mets], equipamentos:[..._equips], fotos:_fotosGuardar,
@@ -1124,12 +1137,14 @@ async function concluirOS(){
       metodoPagamento:_metodoPag, tempoMin:_tempoMin,
       valorBase:v?.base??null, valorIva:v?.iva??null, valorTotal:v?.total??null,
       concluidoEm:agora,
+      tipoAnomalia:_tipoAnom, tipoProblema:_tipoAnom,
+      tipologia:_tipol, localProblema:_tipol,
+      divisoes:_divs, ensaiosPorZona:_ensaios,
     };
     if(!_fotosStorage){
       const _tam=new Blob([JSON.stringify(campos)]).size;
       if(_tam>950*1024){ const _mb=(_tam/1024/1024).toFixed(2); toast(`As fotos estão demasiado pesadas (${_mb}MB). Tente novamente.`,'📷'); btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório'; return; }
     }
-    const relExistente=(DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
     await fsSet('relatorios_pesquisa', os.id, {
       id:os.id, osId:os.id, estado:'preenchido', campos,
       tecnicoId:_currentUser.id, tecnicoNome:_currentUser.name,

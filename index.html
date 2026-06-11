@@ -1048,7 +1048,11 @@ function calcValor(os, srv, duracaoMin){
   if(!srv?.h1) return null;
   const mins = duracaoMin || (_tempoMin>0?_tempoMin:calcDuracaoMin(os)) || 60;
   let cobrarMin = 60;
-  if(mins > 60){ const extra=mins-60; const fracoes=Math.ceil(extra/15); cobrarMin=60+fracoes*15; }
+  if(mins > 60){
+    const extra = mins - 60;
+    const blocos30 = Math.round(extra / 30); // frações de 30 min, arredonda a partir dos 15
+    cobrarMin = 60 + blocos30 * 30;
+  }
   const horas=cobrarMin/60, h1=parseFloat(srv.h1)||0, hadd=parseFloat(srv.hadd)||0, iva=parseFloat(srv.iva)||23;
   const base=horas<=1?h1:h1+(horas-1)*hadd, ivaVal=base*(iva/100), total=base+ivaVal;
   const hStr=cobrarMin>=60?`${Math.floor(cobrarMin/60)}h${cobrarMin%60?cobrarMin%60+'min':''}`:cobrarMin+'min';
@@ -1619,10 +1623,14 @@ async function capturarFatura(e){
     document.getElementById('d-ai-status').innerHTML='<div class="ai-loading"><div class="ai-spinner"></div>🤖 A analisar fatura com IA...</div>';
     try{ base64Full=await comprimirImagem(base64Full,0.7); }catch(err){}
     var base64Data=base64Full.split(',')[1];
+    function _msgErro(x){ if(x==null)return 'Erro desconhecido'; if(typeof x==='string')return x; if(x.message)return x.message; if(x.error)return (typeof x.error==='string')?x.error:(x.error.message||JSON.stringify(x.error)); try{return JSON.stringify(x);}catch(_){return String(x);} }
     try{
       var resp=await fetch('/.netlify/functions/ocr',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({imageData:base64Data,mediaType:'image/jpeg'}) });
-      var data=await resp.json();
-      if(data.error){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+data.error+'</div>'; return; }
+      var raw=await resp.text();
+      var data=null; try{ data=JSON.parse(raw); }catch(_){}
+      if(!resp.ok){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ Erro '+resp.status+': '+(data?_msgErro(data):(raw||('HTTP '+resp.status)))+'</div>'; return; }
+      if(!data){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ Resposta inválida do servidor: '+String(raw||'vazia').slice(0,200)+'</div>'; return; }
+      if(data.error){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+_msgErro(data.error)+'</div>'; return; }
       var txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
       txt=txt.replace(/```json/g,'').replace(/```/g,'').trim();
       var parsed=null;
@@ -1640,7 +1648,7 @@ async function capturarFatura(e){
       }else{
         document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">⚠️ Não foi possível ler. Preenche manualmente.</div>';
       }
-    }catch(err){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+err.message+'</div>'; }
+    }catch(err){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+_msgErro(err)+'</div>'; }
   };
   reader.readAsDataURL(file);
 }

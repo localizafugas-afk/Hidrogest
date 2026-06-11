@@ -38,7 +38,7 @@ Se algum campo não existir, usa string vazia.`;
 
   // 4) Montar o pedido — a lista 'messages' TEM de ter pelo menos uma mensagem
   const payload = {
-    model: 'claude-sonnet-4-20250514',
+    model:'claude-sonnet-4-6' ,
     max_tokens: 1024,
     messages: [
       {

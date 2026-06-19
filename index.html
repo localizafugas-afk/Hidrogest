@@ -336,23 +336,10 @@ select.fi { appearance: none; -webkit-appearance: none; }
         <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text3);">HidroGest · v3.2 · Jun 2026 · Localizafugas</div>
       </div>
     </div>
-    <!-- COMISSÕES -->
-    <div class="page" id="page-comissoes">
-      <div style="padding:16px 4px 4px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <button onclick="commMudarMes(-1)" style="background:#fff;border:1px solid var(--border);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;">‹</button>
-          <div style="text-align:center;"><div style="font-size:18px;font-weight:900;" id="comm-mes-label">—</div><div style="font-size:11px;color:var(--text3);">Comissões do mês</div></div>
-          <button onclick="commMudarMes(1)" style="background:#fff;border:1px solid var(--border);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;">›</button>
-        </div>
-        <div id="comm-content"></div>
-        <div style="height:80px;"></div>
-      </div>
-    </div>
   </div>
   <nav class="bottom-nav">
     <button class="bn-item active" id="bn-os" onclick="navTo('os')"><div class="bn-ico">🔧<span class="bn-badge" id="bn-os-badge" style="display:none;"></span></div><span class="bn-label">Minhas OS</span></button>
     <button class="bn-item" id="bn-despesas" onclick="navTo('despesas')"><div class="bn-ico">🧾<span class="bn-badge" id="bn-desp-badge" style="display:none;"></span></div><span class="bn-label">Despesas</span></button>
-    <button class="bn-item" id="bn-comissoes" onclick="navTo('comissoes')"><div class="bn-ico">💰</div><span class="bn-label">Comissões</span></button>
     <button class="bn-item" id="bn-perfil" onclick="navTo('perfil')"><div class="bn-ico">👤</div><span class="bn-label">Perfil</span></button>
   </nav>
 </div>
@@ -812,19 +799,13 @@ async function guardarRascunho(){
     const _subidas = await _uploadFotos(_osActual.id);
     if(_subidas){ _fotosRascunho = _subidas; _fotos = _subidas.map(f=>({url:f.url, dataUrl:f.dataUrl||'', legenda:f.legenda||''})); }
   }
-  const _relAnt=(DB.relatorios_pesquisa||[]).find(r=>r.id===_osActual.id);
-  const _tipoAnom=document.getElementById('rel-tipo-anomalia')?.value||'';
-  const _tipol=document.getElementById('rel-tipologia')?.value||'';
   const campos={
-    ...(_relAnt?.campos||{}),
     reclamacao: document.getElementById('rel-rec').value,
     trabalho:   document.getElementById('rel-trab').value,
     conclusao:  document.getElementById('rel-conc').value,
     sugestao:   document.getElementById('rel-rec2').value,
-    tipoAnomalia: _tipoAnom,
-    tipoProblema: _tipoAnom,
-    tipologia:    _tipol,
-    localProblema: _tipol,
+    tipoAnomalia: document.getElementById('rel-tipo-anomalia')?.value||'',
+    tipologia:    document.getElementById('rel-tipologia')?.value||'',
     divisoes:     [..._divisoes],
     ensaiosPorZona: _ensaiosPorZona,
     metodologias: [..._mets],
@@ -1067,11 +1048,7 @@ function calcValor(os, srv, duracaoMin){
   if(!srv?.h1) return null;
   const mins = duracaoMin || (_tempoMin>0?_tempoMin:calcDuracaoMin(os)) || 60;
   let cobrarMin = 60;
-  if(mins > 60){
-    const extra = mins - 60;
-    const blocos30 = Math.round(extra / 30); // frações de 30 min, arredonda a partir dos 15
-    cobrarMin = 60 + blocos30 * 30;
-  }
+  if(mins > 60){ const extra=mins-60; const fracoes=Math.ceil(extra/15); cobrarMin=60+fracoes*15; }
   const horas=cobrarMin/60, h1=parseFloat(srv.h1)||0, hadd=parseFloat(srv.hadd)||0, iva=parseFloat(srv.iva)||23;
   const base=horas<=1?h1:h1+(horas-1)*hadd, ivaVal=base*(iva/100), total=base+ivaVal;
   const hStr=cobrarMin>=60?`${Math.floor(cobrarMin/60)}h${cobrarMin%60?cobrarMin%60+'min':''}`:cobrarMin+'min';
@@ -1122,14 +1099,7 @@ async function concluirOS(){
     const _fotosStorage = await _uploadFotos(os.id);
     if(_fotosStorage){ _fotosGuardar=_fotosStorage; }
     else { _fotosGuardar=_fotos.map(f=>({dataUrl:f.dataUrl,legenda:f.legenda})); }
-    const relExistente=(DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
-    const _ant=relExistente?.campos||{};
-    const _tipoAnom=document.getElementById('rel-tipo-anomalia')?.value || _ant.tipoAnomalia || '';
-    const _tipol=document.getElementById('rel-tipologia')?.value || _ant.tipologia || '';
-    const _divs=[..._divisoes].length?[..._divisoes]:(_ant.divisoes||[]);
-    const _ensaios=Object.keys(_ensaiosPorZona||{}).length?_ensaiosPorZona:(_ant.ensaiosPorZona||{});
     const campos={
-      ..._ant,
       reclamacao:document.getElementById('rel-rec').value, trabalho:document.getElementById('rel-trab').value,
       conclusao:document.getElementById('rel-conc').value, sugestao:document.getElementById('rel-rec2').value,
       metodologias:[..._mets], equipamentos:[..._equips], fotos:_fotosGuardar,
@@ -1137,14 +1107,12 @@ async function concluirOS(){
       metodoPagamento:_metodoPag, tempoMin:_tempoMin,
       valorBase:v?.base??null, valorIva:v?.iva??null, valorTotal:v?.total??null,
       concluidoEm:agora,
-      tipoAnomalia:_tipoAnom, tipoProblema:_tipoAnom,
-      tipologia:_tipol, localProblema:_tipol,
-      divisoes:_divs, ensaiosPorZona:_ensaios,
     };
     if(!_fotosStorage){
       const _tam=new Blob([JSON.stringify(campos)]).size;
       if(_tam>950*1024){ const _mb=(_tam/1024/1024).toFixed(2); toast(`As fotos estão demasiado pesadas (${_mb}MB). Tente novamente.`,'📷'); btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório'; return; }
     }
+    const relExistente=(DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
     await fsSet('relatorios_pesquisa', os.id, {
       id:os.id, osId:os.id, estado:'preenchido', campos,
       tecnicoId:_currentUser.id, tecnicoNome:_currentUser.name,
@@ -1177,7 +1145,7 @@ let _editingDespId=null,
     _filtroOS='hoje',  /* PADRÃO: Hoje (só trabalho por fazer) */
     _gpsWatchId=null, _mudarSenhaUser=null;
 
-const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], funcionarios:[], emailConfig:null, meta_nextDesp:1 };
+const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], emailConfig:null, meta_nextDesp:1 };
 
 // ── Firebase ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
@@ -1340,7 +1308,6 @@ function carregarDados(){
   _db.listen('servicos',function(s){ DB.servicos=s.docs.map(d=>d.data()); });
   _db.listen('despesas',function(s){ DB.despesas=s.docs.map(d=>d.data()).filter(d=>d.tecnicoId===uid&&!d._eliminado&&d.status!=='eliminado'); renderDespesas(); atualizarBadges(); });
   _db.listen('relatorios_pesquisa',function(s){ DB.relatorios_pesquisa=s.docs.map(d=>d.data()); renderOS(); });
-  _db.listen('funcionarios',function(s){ try{ DB.funcionarios=s.docs.map(d=>d.data()); }catch(e){ DB.funcionarios=[]; } if(document.getElementById('page-comissoes')?.classList.contains('active')) renderComissoesTec(); });
   _db.listen('meta',function(s){ s.docs.forEach(d=>{ if(d.id==='emailConfig')DB.emailConfig=d.data().value||d.data()||{}; if(d.id==='nextDesp')DB.meta_nextDesp=d.data().value||1; }); });
 }
 
@@ -1353,97 +1320,6 @@ function navTo(page){
   document.getElementById('fab-desp').classList.toggle('show', page==='despesas');
   // Ao voltar para OS, garantir filtro "Hoje"
   if(page==='os'){ setFiltroById('hoje'); }
-  if(page==='comissoes'){ renderComissoesTec(); }
-}
-
-// ── COMISSÕES (visão do técnico) ──────────────────────────────
-let _commMesTec = new Date().toISOString().slice(0,7);
-function commMudarMes(delta){
-  const [y,m]=_commMesTec.split('-').map(Number);
-  const d=new Date(y,(m-1)+delta,1);
-  _commMesTec=d.toISOString().slice(0,7);
-  renderComissoesTec();
-}
-function _commIsCippT(n){ return String(n||'').toLowerCase().includes('cipp'); }
-function _commIsImpT(n){ return String(n||'').toLowerCase().includes('impermeab'); }
-function _commIsGarantiaT(n){ return String(n||'').toLowerCase().includes('garantia'); }
-function _commMesNome(ym){ const [y,m]=ym.split('-').map(Number); const M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']; return M[m-1]+' '+y; }
-function _commAddDiasUteisT(dateStr,n){ const d=new Date(String(dateStr).slice(0,10)+'T00:00:00'); let a=0; while(a<n){ d.setDate(d.getDate()+1); const wd=d.getDay(); if(wd!==0&&wd!==6)a++; } return d; }
-function _commEuro(v){ return '€'+(Math.round((v||0)*100)/100).toFixed(2); }
-
-function renderComissoesTec(){
-  const el=document.getElementById('comm-content'); if(!el) return;
-  const lbl=document.getElementById('comm-mes-label'); if(lbl) lbl.textContent=_commMesNome(_commMesTec);
-  const periodo=_commMesTec, uid=_currentUser?.id;
-  const func=(DB.funcionarios||[]).find(f=> f.id===uid || (f.name&&_currentUser?.name&&f.name.toLowerCase()===_currentUser.name.toLowerCase()) );
-  const salario=func?(parseFloat(func.salary)||0):0, limiar=salario*8;
-  const srvNome=o=>{ const s=(DB.servicos||[]).find(x=>x.id===o.servicoId); return s?.nome||o.servicoNome||o.tipoServico||''; };
-  const netOf=o=>{ const rel=(DB.relatorios_pesquisa||[]).find(r=>r.id===o.id); const vb=rel?.campos?.valorBase; if(vb!=null&&vb!=='') return parseFloat(vb)||0; if(o.net!=null) return parseFloat(o.net)||0; const tot=parseFloat(o.valorTotal||0)||0; return tot/1.23; };
-  const minhas=(DB.ordens||[]);
-  const pagas=minhas.filter(o=> o.pago===true && String(o.pagoEm||o.concluidoEm||o.data||'').slice(0,7)===periodo);
-  let netOut=0,netCipp=0,netImp=0;
-  pagas.forEach(o=>{ const n=netOf(o), nome=srvNome(o); if(_commIsCippT(nome))netCipp+=n; else if(_commIsImpT(nome))netImp+=n; else netOut+=n; });
-  const comNormal=Math.max(0,(netOut-limiar))*0.05, comCipp=netCipp*0.05, comImp=netImp*0.03;
-  const totalBruto=comNormal+comCipp+comImp;
-  // Regras
-  const motivos=[];
-  const concluidasMes=minhas.filter(o=>(o.estado==='concluida'||o.estado==='os_fechada') && String(o.concluidoEm||o.data||'').slice(0,7)===periodo);
-  let nAtrasRel=0;
-  concluidasMes.forEach(o=>{ const nome=(srvNome(o)||'').toLowerCase(); if(nome.includes('garantia')||nome.includes('orçament')||nome.includes('orcament'))return; const rel=(DB.relatorios_pesquisa||[]).find(r=>r.id===o.id); const entregue=rel&&(rel.estado==='enviado'||rel.estado==='preenchido'||rel.estado==='concluido'); if(entregue)return; const base=o.concluidoEm||o.data; if(base && new Date()>_commAddDiasUteisT(base,5)) nAtrasRel++; });
-  if(nAtrasRel>0) motivos.push({t:'Relatórios entregues fora do prazo',d:nAtrasRel+' relatório(s) com mais de 5 dias úteis'});
-  const porDia={};
-  minhas.filter(o=>String(o.data||'').slice(0,7)===periodo && o.horaIni && o.horaIniReal).forEach(o=>{ const d=o.data; if(!porDia[d]||o.horaIni<porDia[d].horaIni) porDia[d]=o; });
-  let nAtrasos=0;
-  Object.values(porDia).forEach(o=>{ const [ph,pm]=o.horaIni.split(':').map(Number),[rh,rm]=o.horaIniReal.split(':').map(Number); if(((rh*60+rm)-(ph*60+pm))>15) nAtrasos++; });
-  if(nAtrasos>0) motivos.push({t:'Atraso na chegada ao 1º trabalho',d:nAtrasos+' dia(s) com mais de 15 min'});
-  const garantias=minhas.filter(o=>String(o.data||o.concluidoEm||'').slice(0,7)===periodo && _commIsGarantiaT(srvNome(o)));
-  if(garantias.length>0) motivos.push({t:'Retorno por garantia',d:garantias.length+' retorno(s) no mês'});
-  const perdeu=motivos.length>0, totalFinal=perdeu?0:totalBruto;
-  const mesSeg=(()=>{ const [y,m]=periodo.split('-').map(Number); const d=new Date(y,m,1); return _commMesNome(d.toISOString().slice(0,7)); })();
-
-  const linhaPot=(label,valor,base)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-     <div style="flex:1;padding-right:10px;"><div style="font-weight:700;font-size:13px;">${label}</div><div style="font-size:11px;color:var(--text3);">${base}</div></div>
-     <div style="font-weight:900;font-size:15px;color:${valor>0?'#16a34a':'var(--text3)'};white-space:nowrap;">${_commEuro(valor)}</div></div>`;
-
-  const destaque=perdeu
-    ? `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:14px;padding:18px;margin-bottom:16px;">
-         <div style="font-size:15px;font-weight:900;color:#dc2626;margin-bottom:8px;">❌ Sem direito a comissão este mês</div>
-         <div style="font-size:13px;color:#7f1d1d;line-height:1.5;">Você perdeu o direito a comissão de <strong>${_commEuro(totalBruto)}</strong> a ser paga em <strong>${mesSeg}</strong> por não ter cumprido as condições estabelecidas:</div>
-         <ul style="margin:10px 0 0;padding-left:18px;color:#7f1d1d;font-size:12px;">${motivos.map(m=>`<li style="margin-bottom:4px;"><strong>${m.t}</strong> — ${m.d}</li>`).join('')}</ul>
-       </div>`
-    : `<div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:18px;margin-bottom:16px;text-align:center;">
-         <div style="font-size:12px;color:#15803d;font-weight:700;margin-bottom:4px;">✅ Comissão estimada (a pagar em ${mesSeg})</div>
-         <div style="font-size:34px;font-weight:900;color:#16a34a;">${_commEuro(totalFinal)}</div>
-       </div>`;
-
-  const regras=[
-    {ok:nAtrasRel===0,t:'Relatórios em dia',d:nAtrasRel===0?'Sem relatórios atrasados':nAtrasRel+' fora do prazo'},
-    {ok:nAtrasos===0,t:'Pontualidade no 1º trabalho',d:nAtrasos===0?'Sem atrasos > 15 min':nAtrasos+' dia(s) com atraso'},
-    {ok:garantias.length===0,t:'Sem retornos por garantia',d:garantias.length===0?'Nenhum retorno no mês':garantias.length+' retorno(s)'},
-  ];
-
-  el.innerHTML=destaque+`
-    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Cálculo da comissão</div>
-      ${linhaPot('Serviços normais',comNormal,'Receita '+_commEuro(netOut)+' − salário×8 '+_commEuro(limiar)+' × 5%')}
-      ${linhaPot('CIPP',comCipp,'Receita '+_commEuro(netCipp)+' × 5%')}
-      ${linhaPot('Impermeabilização',comImp,'Receita '+_commEuro(netImp)+' × 3%')}
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;">
-        <div style="font-weight:900;font-size:14px;">Total bruto</div>
-        <div style="font-weight:900;font-size:18px;color:${perdeu?'#dc2626':'#16a34a'};${perdeu?'text-decoration:line-through;':''}">${_commEuro(totalBruto)}</div>
-      </div>
-    </div>
-    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">Condições</div>
-      ${regras.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
-         <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:${r.ok?'#dcfce7':'#fee2e2'};">${r.ok?'✅':'❌'}</div>
-         <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${r.t}</div><div style="font-size:11px;color:var(--text3);">${r.d}</div></div>
-       </div>`).join('')}
-    </div>
-    <div style="font-size:11px;color:var(--text3);text-align:center;line-height:1.5;padding:0 12px;">
-      ${salario>0?'':'⚠️ Salário não disponível neste dispositivo — o cálculo dos serviços normais pode ficar incompleto. Confirma com o escritório.<br>'}
-      Valores estimados com base nas tuas OS pagas. O valor oficial é o do escritório. CIPP e impermeabilização não entram na receita dos serviços normais.
-    </div>`;
 }
 
 function setFiltro(el, filtro){
@@ -1474,7 +1350,7 @@ function renderOS(){
   if(todasHoje.length&&resumoEl){
     var emC=todasHoje.filter(o=>o.estado==='em_curso').length;
     var conc=todasHoje.filter(o=>o.estado==='concluida'||o.estado==='os_fechada').length;
-    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card" onclick="setFiltroById(\'hoje\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card" onclick="setFiltroById(\'em_curso\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
+    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
   }else if(resumoEl) resumoEl.innerHTML='';
 
   // ── LISTA FILTRADA ──
@@ -1551,12 +1427,12 @@ function renderOS(){
       var actionBtn=document.createElement('button');
       if(!concluida){
         if(!o.horaIniReal){ actionBtn.className='action-btn start'; actionBtn.textContent='▶ Iniciar trabalho agora'; actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); iniciarOS(id); }; })(o.id)); }
-        else if(!o.horaFimReal){ actionBtn.className='action-btn stop'; actionBtn.textContent='⏹ Parar trabalho'; actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); pararOS(id); }; })(o.id)); }
-        else{ actionBtn.className='action-btn conclude'; actionBtn.textContent='⏱ Registar horas manualmente'; actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); abrirRegistarHoras(id); }; })(o.id)); }
+        else if(!o.horaFimReal){ actionBtn.className='action-btn stop'; actionBtn.textContent='⏹ Parar e registar hora de fim'; actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); pararOS(id); }; })(o.id)); }
+        else{ actionBtn.className='action-btn conclude'; actionBtn.textContent='✅ Concluir e confirmar horas'; actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); abrirRegistarHoras(id); }; })(o.id)); }
       }else{
         actionBtn.className='action-btn report';
-        actionBtn.textContent=_relEst==='preenchido'?'✅ Relatório enviado':_relEst==='rascunho'?'📝 Continuar relatório':'📄 Criar relatório';
-        if(_relEst!=='preenchido') actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); abrirRelatorio(id); }; })(o.id));
+        actionBtn.textContent=_relEst==='preenchido'?'✏️ Editar relatório':_relEst==='rascunho'?'📝 Continuar relatório':'📄 Criar relatório';
+        actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); abrirRelatorio(id); }; })(o.id));
       }
       card.appendChild(actionBtn); groupEl.appendChild(card);
     });
@@ -1574,71 +1450,10 @@ function iniciarOS(id){
 }
 function pararOS(id){
   var fim=new Date().toTimeString().slice(0,5);
-  // Perguntar se vai fazer o relatório agora com o cliente
-  var picker=document.createElement('div');
-  picker.id='picker-parar';
-  picker.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;';
-  picker.innerHTML='<div style="background:#fff;border-radius:20px 20px 0 0;width:100%;padding:24px 20px 36px;">'
-    +'<div style="width:40px;height:4px;background:#e2e8f0;border-radius:2px;margin:0 auto 20px;"></div>'
-    +'<div style="font-size:17px;font-weight:800;color:#0f172a;text-align:center;margin-bottom:6px;">⏹ Trabalho parado às '+fim+'</div>'
-    +'<div style="font-size:14px;color:#64748b;text-align:center;margin-bottom:24px;">Vais fazer o relatório agora com o cliente?</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
-    +'<button id="btn-parar-sim" style="padding:16px 12px;background:#f0fdf4;border:2px solid #86efac;border-radius:14px;font-size:14px;font-weight:700;color:#15803d;cursor:pointer;font-family:inherit;">✅ Sim, fico aqui<div style=\"font-size:11px;font-weight:400;color:#64748b;margin-top:4px;\">Cronómetro continua</div></button>'
-    +'<button id="btn-parar-nao" style="padding:16px 12px;background:#f8fafc;border:2px solid #e2e8f0;border-radius:14px;font-size:14px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;">🏠 Não, faço depois<div style=\"font-size:11px;font-weight:400;color:#64748b;margin-top:4px;\">Cronómetro para aqui</div></button>'
-    +'</div></div>';
-  document.body.appendChild(picker);
-  document.getElementById('btn-parar-sim').onclick=async function(){
-    picker.remove();
-    await fsSetMerge('ordens',id,{estado:'concluida',horaFimReal:fim,paradoEm:new Date().toISOString()});
-    toast('⏹ Parado às '+fim+' · Cronómetro a contar...');
-    if(navigator.vibrate) navigator.vibrate(80);
-    abrirRelatorio(id);
-  };
-  document.getElementById('btn-parar-nao').onclick=async function(){
-    picker.remove();
-    if(_timerInterval){ clearInterval(_timerInterval); _timerInterval=null; }
-    var elapsedMs=getElapsedMs();
-    var tempoFinal=elapsedMs>0?Math.max(1,Math.ceil(elapsedMs/60000)):0;
-    _timerStart=null; _tempoAcumulado=0; _tempoMin=tempoFinal;
-    await fsSetMerge('ordens',id,{estado:'concluida',horaFimReal:fim,paradoEm:new Date().toISOString(),tempoMin:tempoFinal||null,tempoAcumuladoMin:tempoFinal||null});
-    toast('⏹ Parado às '+fim+' · Faz o relatório quando quiseres');
-    if(navigator.vibrate) navigator.vibrate(80);
-  };
+  fsSetMerge('ordens',id,{horaFimReal:fim,paradoEm:new Date().toISOString()});
+  toast('⏹ Parado às '+fim+'!');
 }
 
-function _calcAddQuartosT(horas){ if(horas<=1) return 0; var blocos=Math.ceil((horas-0.25)*2)/2; return Math.max(0,blocos-1); }
-function osFracaoInfoT(os){
-  var srv=(DB.servicos||[]).find(s=>s.id===os.servicoId)||{};
-  var h1=parseFloat(os.h1)||parseFloat(srv.h1)||0;
-  var haddV=parseFloat(os.haddV)||parseFloat(srv.hadd)||0;
-  var ivaPct=parseInt(os.iva||srv.iva||23);
-  function _m(h){var p=(h||'0:0').split(':');return (parseInt(p[0])||0)*60+(parseInt(p[1])||0);}
-  var durMin=(os.horaFim&&os.horaIni)?Math.max(0,_m(os.horaFim)-_m(os.horaIni)):0;
-  var addUnits=(os.haddN!=null&&os.haddN!=='')?parseFloat(os.haddN):_calcAddQuartosT(Math.max(1,durMin/60||1));
-  if(isNaN(addUnits))addUnits=0;
-  var horasCobradas=1+addUnits;
-  var net=(os.net!=null&&os.net!=='')?parseFloat(os.net):(h1+addUnits*haddV);
-  var total=(os.total!=null&&os.total!=='')?parseFloat(os.total):net*(1+ivaPct/100);
-  var hC=Math.floor(horasCobradas), mC=Math.round((horasCobradas-hC)*60);
-  var fracLabel=hC+'h'+(mC?(' '+mC+'min'):'');
-  var dH=Math.floor(durMin/60), dM=durMin%60;
-  var durLabel=durMin>0?(dH+'h'+(dM?(' '+dM+'min'):'')):'—';
-  return {durLabel:durLabel,fracLabel:fracLabel,addUnits:addUnits,h1:h1,haddV:haddV,net:net,total:total,ivaPct:ivaPct};
-}
-function osFracaoCardT(os){
-  if(os.naoFaturavel||os.tipoServico==='garantia') return '<div class="detail-row"><span class="detail-key">Valor est.</span><span class="detail-val" style="color:var(--accent);">€'+fmt(os.total||0)+'</span></div>';
-  var f=osFracaoInfoT(os);
-  if(!f.h1) return '<div class="detail-row"><span class="detail-key">Valor est.</span><span class="detail-val" style="color:var(--accent);">€'+fmt(os.total||0)+'</span></div>';
-  return '<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:10px 12px;margin:8px 0;">'+
-    '<div style="font-size:10px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">💶 Faturação pelo tempo agendado</div>'+
-    '<div class="detail-row"><span class="detail-key">Tempo agendado</span><span class="detail-val">'+f.durLabel+'</span></div>'+
-    '<div class="detail-row"><span class="detail-key">Fração cobrada</span><span class="detail-val"><strong>'+f.fracLabel+'</strong></span></div>'+
-    '<div class="detail-row"><span class="detail-key">1.ª hora</span><span class="detail-val">€'+fmt(f.h1)+'</span></div>'+
-    (f.addUnits>0?'<div class="detail-row"><span class="detail-key">Adicional ('+f.addUnits+'h × €'+fmt(f.haddV)+')</span><span class="detail-val">€'+fmt(f.addUnits*f.haddV)+'</span></div>':'')+
-    '<div class="detail-row"><span class="detail-key"><strong>Valor s/ IVA</strong></span><span class="detail-val" style="color:#4338ca;"><strong>€'+fmt(f.net)+'</strong></span></div>'+
-    '<div class="detail-row"><span class="detail-key">Total c/ IVA ('+f.ivaPct+'%)</span><span class="detail-val">€'+fmt(f.total)+'</span></div>'+
-    '</div>';
-}
 function abrirDetalheOS(id){
   var os=(DB.ordens||[]).find(x=>x.id===id); if(!os) return;
   var cli=(DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
@@ -1658,7 +1473,7 @@ function abrirDetalheOS(id){
     '<div class="detail-row"><span class="detail-key">Hora</span><span class="detail-val">'+(os.horaIni||'—')+(os.horaFim?'–'+os.horaFim:'')+'</span></div>'+
     (os.horaIniReal?'<div class="detail-row"><span class="detail-key">Início real</span><span class="detail-val" style="color:var(--green);">'+os.horaIniReal+'</span></div>':'')+
     (os.horaFimReal?'<div class="detail-row"><span class="detail-key">Fim real</span><span class="detail-val" style="color:var(--green);">'+os.horaFimReal+'</span></div>':'')+
-    osFracaoCardT(os)+
+    '<div class="detail-row"><span class="detail-key">Valor est.</span><span class="detail-val" style="color:var(--accent);">€'+fmt(os.total||0)+'</span></div>'+
     (cli.tel?'<div class="detail-row"><span class="detail-key">Telefone</span><a href="tel:'+cli.tel+'" class="detail-val" style="color:var(--accent);">'+cli.tel+'</a></div>':'')+
     '</div><div class="btn-action-row">'+
     (morada?'<a href="'+mapsUrl+'" target="_blank" class="btn-action primary">🗺️ Maps</a>':'')+
@@ -1670,13 +1485,13 @@ function abrirDetalheOS(id){
   if(!concluida){
     if(!os.horaIniReal){ btn.textContent='▶ Iniciar trabalho'; btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); iniciarOS(os.id); }); }
     else if(!os.horaFimReal){ btn.style.background='linear-gradient(135deg,var(--yellow),#d97706)'; btn.textContent='⏹ Parar trabalho'; btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); pararOS(os.id); }); }
-    else{ btn.textContent='⏱ Registar horas manualmente'; btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); abrirRegistarHoras(os.id); }); }
+    else{ btn.textContent='✅ Confirmar e concluir'; btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); abrirRegistarHoras(os.id); }); }
   }else{
     var rel=(DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
     var relPreenchido=rel&&(rel.estado==='preenchido'||rel.estado==='enviado');
-    btn.style.background=relPreenchido?'linear-gradient(135deg,var(--green),#15803d)':'linear-gradient(135deg,var(--accent),var(--accent2))';
-    btn.textContent=relPreenchido?'✅ Relatório enviado':'📋 Criar Relatório';
-    if(!relPreenchido) btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); abrirRelatorio(os.id); });
+    btn.style.background=relPreenchido?'linear-gradient(135deg,var(--accent),var(--accent2))':'linear-gradient(135deg,var(--accent),var(--accent2))';
+    btn.textContent=relPreenchido?'✏️ Editar relatório':'📋 Criar Relatório';
+    btn.addEventListener('click',function(){ fecharModal('mo-os-detail'); abrirRelatorio(os.id); });
   }
   actionDiv.appendChild(btn); body.appendChild(actionDiv);
   abrirModal('mo-os-detail');
@@ -1776,14 +1591,10 @@ async function capturarFatura(e){
     document.getElementById('d-ai-status').innerHTML='<div class="ai-loading"><div class="ai-spinner"></div>🤖 A analisar fatura com IA...</div>';
     try{ base64Full=await comprimirImagem(base64Full,0.7); }catch(err){}
     var base64Data=base64Full.split(',')[1];
-    function _msgErro(x){ if(x==null)return 'Erro desconhecido'; if(typeof x==='string')return x; if(x.message)return x.message; if(x.error)return (typeof x.error==='string')?x.error:(x.error.message||JSON.stringify(x.error)); try{return JSON.stringify(x);}catch(_){return String(x);} }
     try{
       var resp=await fetch('/.netlify/functions/ocr',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({imageData:base64Data,mediaType:'image/jpeg'}) });
-      var raw=await resp.text();
-      var data=null; try{ data=JSON.parse(raw); }catch(_){}
-      if(!resp.ok){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ Erro '+resp.status+': '+(data?_msgErro(data):(raw||('HTTP '+resp.status)))+'</div>'; return; }
-      if(!data){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ Resposta inválida do servidor: '+String(raw||'vazia').slice(0,200)+'</div>'; return; }
-      if(data.error){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+_msgErro(data.error)+'</div>'; return; }
+      var data=await resp.json();
+      if(data.error){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+data.error+'</div>'; return; }
       var txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
       txt=txt.replace(/```json/g,'').replace(/```/g,'').trim();
       var parsed=null;
@@ -1801,7 +1612,7 @@ async function capturarFatura(e){
       }else{
         document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">⚠️ Não foi possível ler. Preenche manualmente.</div>';
       }
-    }catch(err){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+_msgErro(err)+'</div>'; }
+    }catch(err){ document.getElementById('d-ai-status').innerHTML='<div class="ai-result baixa">❌ '+err.message+'</div>'; }
   };
   reader.readAsDataURL(file);
 }

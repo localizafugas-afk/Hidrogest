@@ -33,11 +33,16 @@ body {
 .load-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); opacity: .3; animation: dot 1.2s ease-in-out infinite; }
 .load-dots span:nth-child(2) { animation-delay: .2s; } .load-dots span:nth-child(3) { animation-delay: .4s; }
 @keyframes dot { 0%,80%,100% { opacity:.3; transform:scale(1); } 40% { opacity:1; transform:scale(1.3); } }
-#screen-login { position: fixed; inset: 0; z-index: 100; background: linear-gradient(160deg,#dbeafe 0%,#eff6ff 50%,#dbeafe 100%); overflow-y: auto; -webkit-overflow-scrolling: touch; display: none; flex-direction: column; align-items: center; padding: 40px 20px 32px; }
+#screen-login { position: fixed; inset: 0; z-index: 100; background: linear-gradient(160deg,#0c1f3d 0%,#0b3a66 50%,#0c1f3d 100%); overflow-y: auto; -webkit-overflow-scrolling: touch; display: none; flex-direction: column; align-items: center; padding: 40px 20px 32px; }
+#screen-gps-gate { position: fixed; inset: 0; z-index: 450; background: linear-gradient(160deg,#0c1f3d 0%,#0b3a66 50%,#0c1f3d 100%); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; text-align: center; color: #fff; }
+.gps-gate-icon { font-size: 56px; margin-bottom: 16px; animation: pulse-glow 2.4s ease-in-out infinite; }
+.gps-gate-title { font-size: 21px; font-weight: 900; margin-bottom: 10px; }
+.gps-gate-sub { font-size: 14px; color: rgba(255,255,255,.85); line-height: 1.6; max-width: 320px; margin-bottom: 24px; }
+#gps-gate-msg { font-size: 12px; color: #fde68a; margin-top: 16px; max-width: 300px; line-height: 1.6; min-height: 14px; }
 .login-header { text-align: center; margin-bottom: 32px; }
 .login-logo { font-size: 64px; margin-bottom: 12px; display: block; animation: pulse-glow 3s ease-in-out infinite; }
-.login-title { font-size: 26px; font-weight: 900; color: var(--accent2); letter-spacing: -0.5px; }
-.login-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+.login-title { font-size: 26px; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+.login-sub { font-size: 13px; color: rgba(255,255,255,.75); margin-top: 4px; }
 .login-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 24px; padding: 24px 20px; width: 100%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,.08); }
 .login-section-label { font-size: 11px; font-weight: 700; color: var(--accent2); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px; opacity: .8; }
 .tec-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; background: #f7f9fc; border: 1px solid #e2e8f0; border-radius: 14px; color: var(--text); font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 8px; transition: all .15s; text-align: left; -webkit-appearance: none; }
@@ -276,25 +281,26 @@ select.fi { appearance: none; -webkit-appearance: none; }
     <div class="login-sub">Área do Técnico</div>
   </div>
   <div class="login-card">
-    <div class="login-section-label">Selecciona o teu nome</div>
-    <div id="tec-grid"></div>
-    <div class="sep"></div>
-    <div id="senha-wrap">
-      <button class="back-btn" onclick="voltarSeleccao()">← Voltar</button>
-      <div class="sel-user-row">
-        <div id="sel-avatar" class="tec-av"></div>
-        <div><div id="sel-nome" style="font-size:17px;font-weight:800;"></div><div style="font-size:12px;color:var(--text3);">🔧 Técnico</div></div>
-      </div>
-      <div class="form-group"><label class="fi-label">Senha</label><input class="fi" type="password" id="senha-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')entrar()" autocomplete="current-password"></div>
-      <div class="erro-msg" id="erro-msg"></div>
-      <button class="btn-entrar" onclick="entrar()">Entrar →</button>
-    </div>
+    <div class="form-group"><label class="fi-label">Utilizador</label><input class="fi" id="login-input" placeholder="Nome ou email" autocomplete="username" autocapitalize="words" onkeydown="if(event.key==='Enter')document.getElementById('senha-input').focus()"></div>
+    <div class="form-group"><label class="fi-label">Senha</label><input class="fi" type="password" id="senha-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')entrar()" autocomplete="current-password"></div>
+    <div class="erro-msg" id="erro-msg"></div>
+    <button class="btn-entrar" onclick="entrar()">Entrar →</button>
     <div class="spinner-wrap" id="spinner">⏳ A verificar...</div>
   </div>
 </div>
 
+<!-- GPS OBRIGATÓRIO -->
+<div id="screen-gps-gate">
+  <div class="gps-gate-icon">📍</div>
+  <div class="gps-gate-title">Localização obrigatória</div>
+  <div class="gps-gate-sub">Esta aplicação precisa de saber a tua localização para registar correctamente o trabalho. Autoriza o acesso ao GPS para continuar.</div>
+  <button class="btn-entrar" style="max-width:280px;" onclick="activarGPSGate()">📡 Autorizar Localização</button>
+  <div id="gps-gate-msg"></div>
+</div>
+
 <!-- APP -->
 <div id="screen-app">
+
   <div class="topbar">
     <div class="topbar-left"><span class="topbar-logo">💧</span><span class="topbar-title">HidroGest</span></div>
     <div class="topbar-right">
@@ -1218,16 +1224,16 @@ async function iniciarFirebase(){
     };
     _db.get('users').then(function(s){ var tecs=s.docs.map(d=>d.data()).filter(u=>u.role==='tecnico'&&u.active!==false); if(tecs.length>0){_tecnicosFirebase=tecs;renderTecnicos(tecs);} }).catch(()=>{});
     _db.get('meta').then(function(s){ s.docs.forEach(d=>{ if(d.id==='emailConfig')DB.emailConfig=d.data().value||d.data()||{}; if(d.id==='nextDesp')DB.meta_nextDesp=d.data().value||1; }); }).catch(()=>{});
-    var saved=sessionStorage.getItem('hg_tec_session');
+    var saved=localStorage.getItem('hg_tec_session');
     if(saved){
       try{
         var sess=JSON.parse(saved);
-        if(Date.now()-sess.ts<12*3600*1000){
+        if(Date.now()-sess.ts<30*24*3600*1000){
           var snap=await _db.getDoc('users',sess.id);
           if(snap.exists){ _currentUser=snap.data(); iniciarApp(); return; }
         }
       }catch(e){}
-      sessionStorage.removeItem('hg_tec_session');
+      localStorage.removeItem('hg_tec_session');
     }
     mostrarLogin();
   }catch(e){ console.error('Firebase:',e); mostrarLogin(); }
@@ -1242,45 +1248,28 @@ function fsSet(c,id,data){ return _db.set(c,id,data,false); }
 function fsSetMerge(c,id,data){ return _db.set(c,id,data,true); }
 
 // ── Login ─────────────────────────────────────────────────────
+function _normalizarLogin(s){
+  return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
 function renderTecnicos(lista){
-  var grid=document.getElementById('tec-grid'); if(!grid) return; grid.innerHTML='';
-  lista.forEach(function(u){
-    var init=u.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-    var btn=document.createElement('button'); btn.className='tec-btn';
-    btn.innerHTML='<div class="tec-av" style="background:'+u.cor+';">'+init+'</div><div class="tec-info"><div class="tec-nome">'+u.name+'</div><div class="tec-role">🔧 Técnico</div></div><span style="color:var(--text3);font-size:18px;">›</span>';
-    btn.addEventListener('click',(function(id){ return function(){ selTecnico(id); }; })(u.id));
-    grid.appendChild(btn);
-  });
-}
-
-function selTecnico(id){
-  var u=_tecnicosFirebase.find(x=>x.id===id)||TECNICOS_MASTER.find(x=>x.id===id); if(!u) return;
-  _tecSel=u;
-  var init=u.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
-  document.getElementById('tec-grid').style.display='none';
-  document.getElementById('senha-wrap').style.display='block';
-  document.getElementById('sel-avatar').textContent=init;
-  document.getElementById('sel-avatar').style.background=u.cor||'#2563eb';
-  document.getElementById('sel-nome').textContent=u.name;
-  document.getElementById('erro-msg').style.display='none';
-  document.getElementById('senha-input').value='';
-  setTimeout(function(){ document.getElementById('senha-input').focus(); },300);
-}
-
-function voltarSeleccao(){
-  _tecSel=null;
-  document.getElementById('senha-wrap').style.display='none';
-  document.getElementById('tec-grid').style.display='block';
-  document.getElementById('senha-input').value='';
-  document.getElementById('erro-msg').style.display='none';
+  // Mantém as listas actualizadas (Firebase/master) para o login por texto encontrar o utilizador certo.
+  // Não há grelha de toque — o login é sempre por utilizador + senha digitados.
 }
 
 async function entrar(){
-  if(!_tecSel) return;
+  var loginTxt=_normalizarLogin(document.getElementById('login-input').value);
   var senha=document.getElementById('senha-input').value.trim();
   var erroEl=document.getElementById('erro-msg'), spinner=document.getElementById('spinner');
-  if(!senha){ erroEl.textContent='⚠️ Introduz a tua senha.'; erroEl.style.display='block'; return; }
+  if(!loginTxt||!senha){ erroEl.textContent='⚠️ Introduz o utilizador e a senha.'; erroEl.style.display='block'; return; }
   erroEl.style.display='none'; spinner.classList.add('show');
+  var lista=(_tecnicosFirebase&&_tecnicosFirebase.length)?_tecnicosFirebase:TECNICOS_MASTER;
+  var match=lista.find(function(u){
+    var n=_normalizarLogin(u.name);
+    var e=_normalizarLogin(u.email);
+    return n===loginTxt || n.split(' ')[0]===loginTxt || (e&&e===loginTxt);
+  });
+  if(!match){ spinner.classList.remove('show'); erroEl.textContent='❌ Utilizador não encontrado.'; erroEl.style.display='block'; return; }
+  _tecSel=match;
   try{
     var snap=await _db.getDoc('users',_tecSel.id);
     spinner.classList.remove('show');
@@ -1288,10 +1277,10 @@ async function entrar(){
       var data=snap.data();
       if(data.password===senha){
         if(data.mustChangePassword){ _mudarSenhaUser=data; document.getElementById('screen-login').style.display='none'; document.getElementById('screen-mudar-senha').style.display='flex'; return; }
-        _currentUser=data; sessionStorage.setItem('hg_tec_session',JSON.stringify({id:data.id,ts:Date.now()})); iniciarApp();
+        _currentUser=data; localStorage.setItem('hg_tec_session',JSON.stringify({id:data.id,ts:Date.now()})); iniciarApp();
       }else{ erroEl.textContent='❌ Senha incorrecta.'; erroEl.style.display='block'; document.getElementById('senha-input').value=''; }
     }else{
-      if(senha==='1234'){ _currentUser=Object.assign({},_tecSel,{role:'tecnico',active:true}); sessionStorage.setItem('hg_tec_session',JSON.stringify({id:_tecSel.id,ts:Date.now()})); iniciarApp(); }
+      if(senha==='1234'){ _currentUser=Object.assign({},_tecSel,{role:'tecnico',active:true}); localStorage.setItem('hg_tec_session',JSON.stringify({id:_tecSel.id,ts:Date.now()})); iniciarApp(); }
       else{ erroEl.textContent='❌ Utilizador não encontrado.'; erroEl.style.display='block'; }
     }
   }catch(e){ spinner.classList.remove('show'); erroEl.textContent='❌ Erro: '+(e?.code||e?.message||String(e)); erroEl.style.display='block'; }
@@ -1312,7 +1301,7 @@ async function guardarNS(){
   try{
     await fsSetMerge('users',_mudarSenhaUser.id,{password:s1,mustChangePassword:false});
     _currentUser=Object.assign({},_mudarSenhaUser,{password:s1,mustChangePassword:false});
-    sessionStorage.setItem('hg_tec_session',JSON.stringify({id:_mudarSenhaUser.id,ts:Date.now()}));
+    localStorage.setItem('hg_tec_session',JSON.stringify({id:_mudarSenhaUser.id,ts:Date.now()}));
     document.getElementById('screen-mudar-senha').style.display='none'; iniciarApp(); toast('✅ Senha definida!');
   }catch(e){ msg.innerHTML='<span style="color:var(--red);">Erro: '+e.message+'</span>'; }
 }
@@ -1328,7 +1317,11 @@ function iniciarApp(){
   document.getElementById('user-nome').textContent=(u.name||'').split(' ')[0];
   document.getElementById('perfil-av').textContent=init; document.getElementById('perfil-av').style.background=cor;
   document.getElementById('perfil-nome').textContent=u.name||'';
-  carregarDados(); iniciarGPS();
+  // Renovar a validade da sessão guardada (mantém o login mesmo passados vários dias de uso)
+  if(_currentUser?.id){ localStorage.setItem('hg_tec_session',JSON.stringify({id:_currentUser.id,ts:Date.now()})); }
+  carregarDados();
+  mostrarGpsGate();
+  iniciarGPS();
   // Garantir filtro "Hoje" activo visualmente ao entrar
   _filtroOS='hoje';
 }
@@ -1415,12 +1408,15 @@ function renderOS(){
   if(!list) return;
   var hoje=today();
 
-  // ── BARRA DE RELATÓRIOS ATRASADOS ──
+  // ── BARRA DE RELATÓRIOS PENDENTES / ATRASADOS ──
   var bannerWrap=document.getElementById('banner-atraso-wrap');
   if(bannerWrap){
+    var pendentesAll=relatoriosPendentes();
     var atrasados=relatoriosAtrasados();
     if(atrasados.length){
       bannerWrap.innerHTML='<div class="banner-atraso" onclick="setFiltroById(\'falta_rel\')"><span style="font-size:20px;">🔴</span><span style="flex:1;font-weight:700;font-size:13px;">Relatórios atrasados</span><span class="ba-count">'+atrasados.length+'</span></div>';
+    } else if(pendentesAll.length){
+      bannerWrap.innerHTML='<div class="banner-atraso" style="background:linear-gradient(135deg,#d97706,#b45309);" onclick="setFiltroById(\'falta_rel\')"><span style="font-size:20px;">📄</span><span style="flex:1;font-weight:700;font-size:13px;">Relatórios pendentes</span><span class="ba-count">'+pendentesAll.length+'</span></div>';
     } else { bannerWrap.innerHTML=''; }
   }
 
@@ -1799,12 +1795,26 @@ function renderDashboard(){
 }
 
 // ── GPS ───────────────────────────────────────────────────────
+function mostrarGpsGate(){ var g=document.getElementById('screen-gps-gate'); if(g) g.style.display='flex'; }
+function esconderGpsGate(){ var g=document.getElementById('screen-gps-gate'); if(g) g.style.display='none'; }
+
 function iniciarGPS(){
-  if(!navigator.geolocation){ atualizarGPSBar('error','GPS não disponível'); return; }
+  if(!navigator.geolocation){ atualizarGPSBar('error','GPS não disponível'); _gpsGateMsg('⚠️ Este dispositivo/browser não suporta localização.'); return; }
   atualizarGPSBar('verificando','A pedir GPS...');
   navigator.geolocation.getCurrentPosition(
-    function(pos){ atualizarGPSBar('ok','GPS activo — '+pos.coords.accuracy.toFixed(0)+'m'); document.getElementById('btn-activar-gps').style.display='none'; iniciarTrackingGPS(); },
-    function(err){ atualizarGPSBar('error',err.code===1?'GPS bloqueado':'GPS inactivo'); },
+    function(pos){ atualizarGPSBar('ok','GPS activo — '+pos.coords.accuracy.toFixed(0)+'m'); document.getElementById('btn-activar-gps').style.display='none'; esconderGpsGate(); iniciarTrackingGPS(); },
+    function(err){ atualizarGPSBar('error',err.code===1?'GPS bloqueado':'GPS inactivo'); _gpsGateMsg(err.code===1?'🚫 Permissão negada. Abre as definições do telemóvel/browser para este site → Localização → Permitir, e depois toca em "Autorizar Localização" outra vez.':'⚠️ Não foi possível obter a localização. Verifica se o GPS do telemóvel está ligado.'); },
+    {timeout:10000,enableHighAccuracy:true,maximumAge:0}
+  );
+}
+
+function _gpsGateMsg(txt){ var m=document.getElementById('gps-gate-msg'); if(m) m.textContent=txt; }
+
+function activarGPSGate(){
+  _gpsGateMsg('A pedir permissão...');
+  navigator.geolocation.getCurrentPosition(
+    function(pos){ atualizarGPSBar('ok','GPS activo — '+pos.coords.accuracy.toFixed(0)+'m'); esconderGpsGate(); iniciarTrackingGPS(); },
+    function(err){ _gpsGateMsg(err.code===1?'🚫 Permissão negada. Abre as definições do telemóvel/browser para este site → Localização → Permitir, e depois toca aqui outra vez.':'⚠️ Não foi possível obter a localização. Verifica se o GPS do telemóvel está ligado e tenta novamente.'); },
     {timeout:10000,enableHighAccuracy:true,maximumAge:0}
   );
 }
@@ -1819,7 +1829,7 @@ function atualizarGPSBar(estado,label){
 function activarGPS(){
   atualizarGPSBar('verificando','A ligar GPS...');
   navigator.geolocation.getCurrentPosition(
-    function(pos){ atualizarGPSBar('ok','GPS activo — '+pos.coords.accuracy.toFixed(0)+'m'); iniciarTrackingGPS(); },
+    function(pos){ atualizarGPSBar('ok','GPS activo — '+pos.coords.accuracy.toFixed(0)+'m'); esconderGpsGate(); iniciarTrackingGPS(); },
     function(){ atualizarGPSBar('error','Não foi possível activar'); }
   );
 }
@@ -1860,7 +1870,7 @@ function atualizarBadges(){
 
 function logoutConfirm(){
   if(!confirm('Terminar sessão?')) return;
-  sessionStorage.removeItem('hg_tec_session');
+  localStorage.removeItem('hg_tec_session');
   if(_gpsWatchId!==null) navigator.geolocation.clearWatch(_gpsWatchId);
   if(_currentUser) fsSetMerge('localizacoes',_currentUser.id,{online:false}).catch(()=>{});
   location.reload();

@@ -28,10 +28,13 @@ import { initializeApp }                          from "https://www.gstatic.com/
 import { getFirestore, collection, doc, getDocs, getDoc, runTransaction,
          setDoc, deleteDoc, onSnapshot, writeBatch,
          query, orderBy, limit, where }           from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getStorage, ref as stRef, uploadString, getDownloadURL,
+         deleteObject }                            from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 // ─── Inicialização ────────────────────────────────────────────
 const app = initializeApp(FIREBASE_CONFIG);
 const db  = getFirestore(app);
+const storage = getStorage(app);
 
 // ─── Coleções ─────────────────────────────────────────────────
 const COLS = {
@@ -339,6 +342,20 @@ window.fsDel    = async (col, id)       => {
 };
 window.fsMeta   = saveMeta;
 window.fsSetMerge = async (col, id, data) => { await setDoc(doc(db, col, id), data, {merge:true}); };
+
+// ─── Firebase Storage (fotos de relatórios) ───────────────────
+// Envia uma imagem (data URL) para o Storage e devolve {url, path}.
+// Guardar só o URL no documento evita o limite de 1 MB do Firestore.
+window.fsUploadFoto = async (path, dataUrl) => {
+  const r = stRef(storage, path);
+  await uploadString(r, dataUrl, 'data_url');
+  const url = await getDownloadURL(r);
+  return { url, path };
+};
+window.fsDeleteFoto = async (path) => {
+  if(!path) return;
+  try{ await deleteObject(stRef(storage, path)); }catch(e){ /* ficheiro já não existe — ignorar */ }
+};
 // Cria um documento SÓ se o ID ainda não existir no Firebase (evita escrever por cima de uma OS existente).
 window.fsCriarSeLivre = async (col, id, data) => {
   return await runTransaction(db, async (tx) => {
@@ -20199,6 +20216,45 @@ function agendarRetornoRastreador(osId){
 async function rpSaveDoc(id, data){
   await window.fsSet('relatorios_pesquisa', id, data);
 }
+
+// ── Migração das fotos para o Firebase Storage ────────────────────────────
+// Envia para o Storage qualquer foto que ainda esteja em base64 (dataUrl) e
+// substitui-a por {url, path, legenda}. Fotos que já têm url são ignoradas.
+// Migra também relatórios antigos automaticamente quando voltam a ser guardados.
+async function rpUploadFotosPendentes(osId){
+  // Serializar execuções para evitar uploads concorrentes (auto-save + guardar)
+  while(window._rpUploadEmCurso){ try{ await window._rpUploadEmCurso; }catch(e){} }
+  window._rpUploadEmCurso = (async()=>{
+    const arr = window._rpFotosTemp;
+    if(!Array.isArray(arr) || !arr.length) return;
+    if(typeof window.fsUploadFoto !== 'function') return; // Storage indisponível — mantém base64 (comportamento antigo)
+    for(let i=0;i<arr.length;i++){
+      const f = arr[i];
+      if(!f) continue;
+      // Item em formato string
+      if(typeof f === 'string'){
+        if(/^https?:/.test(f)){ arr[i] = {url:f, legenda:''}; continue; }   // já é URL
+        if(f.startsWith('data:')){
+          const path = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
+          const up = await window.fsUploadFoto(path, f);
+          arr[i] = { url:up.url, path:up.path, legenda:'' };
+        }
+        continue;
+      }
+      // Já está no Storage (tem url e não há base64 novo) → nada a fazer
+      if(f.url && !f.dataUrl) continue;
+      // Foto local em base64 → enviar para o Storage
+      const dataUrl = f.dataUrl || '';
+      if(dataUrl.startsWith('data:')){
+        const path = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
+        const up = await window.fsUploadFoto(path, dataUrl);
+        arr[i] = { url:up.url, path:up.path, legenda:f.legenda||'' };
+      }
+    }
+  })();
+  try{ await window._rpUploadEmCurso; }
+  finally{ window._rpUploadEmCurso = null; }
+}
 async function rpGetDoc(id){
   return (window.DB.relatorios_pesquisa||[]).find(x=>x.id===id)||null;
 }
@@ -21362,12 +21418,12 @@ function rpAdicionarFotosAdmin(evt, osId){
     reader.onload = e=>{
       const img = new Image();
       img.onload = ()=>{
-        const MAX=800; let w=img.width,h=img.height;
+        const MAX=1600; let w=img.width,h=img.height;
         if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
         const canvas=document.createElement('canvas');
         canvas.width=w;canvas.height=h;
         canvas.getContext('2d').drawImage(img,0,0,w,h);
-        window._rpFotosTemp.push({dataUrl:canvas.toDataURL('image/jpeg',.70),legenda:''});
+        window._rpFotosTemp.push({dataUrl:canvas.toDataURL('image/jpeg',.82),legenda:''});
         loaded++;
         if(loaded===files.length) rpAbrirFormulario(osId, true); // re-render com novas fotos
       };
@@ -21510,6 +21566,14 @@ async function rpAutoSaveInterno(){
   // Não sobrescrever relatório já finalizado
   const existing = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
   if(existing.estado==='pronto') return;
+  const badge = document.getElementById('rp-autosave-badge');
+  // Enviar fotos novas para o Storage (silencioso) — mantém o rascunho leve
+  try{
+    if(badge && (window._rpFotosTemp||[]).some(f=>f&&(f.dataUrl||(typeof f==='string'&&f.startsWith('data:'))))){
+      badge.style.display='inline-block'; badge.textContent='💾 A enviar fotos...';
+    }
+    await rpUploadFotosPendentes(osId);
+  }catch(e){ /* sem rede/Storage — guarda como estiver; o guardar manual tenta de novo */ }
   const rel = {
     ...existing,
     id: osId, osId,
@@ -21520,7 +21584,6 @@ async function rpAutoSaveInterno(){
     editadoEm: new Date().toISOString(),
     editadoPor: window.currentUser?.id,
   };
-  const badge = document.getElementById('rp-autosave-badge');
   try{
     if(badge){ badge.style.display='inline-block'; badge.textContent='💾 A guardar...'; }
     await rpSaveDoc(osId, rel);
@@ -21633,13 +21696,59 @@ async function rpSalvarRelatorio(){
     rel.alteradoPorTecnicoNome = window.currentUser?.name||'';
     rel.revistoPelaGestao    = false;
   }
-  await rpSaveDoc(osId, rel);
+  // Parar o auto-save para não competir com a gravação final
+  if(window._rpAutoSaveInterval){ clearInterval(window._rpAutoSaveInterval); window._rpAutoSaveInterval=null; }
+
+  // Botão "Guardar" — feedback e bloqueio anti-duplo-toque
+  const _btnSalvar = document.querySelector('[onclick="rpSalvarRelatorio()"]');
+  const _btnTxtOrig = _btnSalvar ? _btnSalvar.textContent : '';
+  const _restoreBtn = ()=>{ if(_btnSalvar){ _btnSalvar.disabled=false; _btnSalvar.textContent=_btnTxtOrig||'✅ Guardar e voltar à OS'; } };
+
+  if(_btnSalvar){ _btnSalvar.disabled=true; _btnSalvar.textContent='⏳ A guardar...'; }
+
+  // ── Enviar fotos para o Firebase Storage (em vez de as guardar dentro do documento) ──
+  // Assim o documento fica pequeno e nunca rebenta o limite de 1 MB do Firestore.
+  try{
+    if(_btnSalvar) _btnSalvar.textContent='⏳ A enviar fotos...';
+    await rpUploadFotosPendentes(osId);
+    rel.fotos = window._rpFotosTemp||[];   // agora só com links (url), sem base64
+    if(_btnSalvar) _btnSalvar.textContent='⏳ A guardar...';
+  }catch(e){
+    // Storage indisponível (sem rede ou regras por configurar) → volta ao modo antigo:
+    // guarda as fotos dentro do documento. A verificação de tamanho abaixo protege contra o limite de 1 MB.
+    console.warn('rpSalvarRelatorio — envio de fotos falhou, a usar modo antigo (base64):', e);
+    rel.fotos = window._rpFotosTemp||[];
+    toast('⚠️ Não foi possível enviar as fotos para o servidor de imagens — foram guardadas no relatório como antes. Avise o escritório para ativar o armazenamento de fotos.','⚠️',8000);
+  }
+
+  // ── Salvaguarda: documento Firestore tem limite ~1 MB. (Com fotos no Storage isto já não deve acontecer.) ──
+  const _aproxKB = Math.round((JSON.stringify(rel)||'').length/1024);
+  if(_aproxKB > 950){
+    toast(`⚠️ Relatório demasiado grande (${_aproxKB} KB) para guardar de uma vez. Normalmente é por causa de anexos pesados — remova ou reduza algum anexo e tente novamente.`,'⚠️',9000);
+    _restoreBtn();
+    return;
+  }
+
+  try{
+    await rpSaveDoc(osId, rel);
+  }catch(e){
+    console.error('rpSalvarRelatorio — falha ao guardar:', e);
+    _restoreBtn();
+    const _grande = /maximum|size|larger|1048576|exceed|too large|payload|entity|invalid-argument/i.test(String(e?.message||e));
+    const _msg = _grande
+      ? `O relatório ficou demasiado grande para guardar (fotografias muito pesadas). Remova ou reduza algumas fotos e tente novamente.`
+      : `Não foi possível guardar o relatório: ${e?.message||'erro de ligação'}. Verifique a Internet e tente novamente.`;
+    toast('❌ '+_msg,'❌',9000);
+    return;   // não fecha o modal — o técnico mantém o trabalho e pode tentar de novo
+  }
+  _restoreBtn();
+
   if(_alteracaoTecnico){ rpNotificarAlteracaoTecnico(os, rel).catch(()=>{}); }
 
   if(isNew){
-    await rpCriarRecibimentoAutomatico(os, rel);
-    rpNotificarEquipa(os, rel);
-    await rpNotificarSupervisoresRelatorio(os, rel);
+    try{ await rpCriarRecibimentoAutomatico(os, rel); }catch(e){ console.warn('recibo auto falhou:',e); }
+    try{ rpNotificarEquipa(os, rel); }catch(e){}
+    try{ await rpNotificarSupervisoresRelatorio(os, rel); }catch(e){ console.warn('notif supervisores falhou:',e); }
   }
 
   // Guardar e ficar no viewer — NÃO redirigir para a OS
@@ -24286,7 +24395,23 @@ async function osConcluirComAssinaturas(){
     assinaturaCliente:assCli||'',
     pagamento,
   };
-  await window.fsSet('ordens',osId,updated);
+  // Botão "Concluir OS" — feedback e nunca ficar preso
+  const _btnConc = document.querySelector('[onclick="osConcluirComAssinaturas()"]');
+  const _btnConcTxt = _btnConc ? _btnConc.textContent : '';
+  const _restoreConc = ()=>{ if(_btnConc){ _btnConc.disabled=false; _btnConc.textContent=_btnConcTxt||'✅ Concluir OS'; } };
+  if(_btnConc){ _btnConc.disabled=true; _btnConc.textContent='⏳ A concluir...'; }
+  try{
+    await window.fsSet('ordens',osId,updated);
+  }catch(e){
+    console.error('osConcluirComAssinaturas — falha ao gravar OS:', e);
+    _restoreConc();
+    const _grande = /maximum|size|larger|1048576|exceed|too large|payload|entity|invalid-argument/i.test(String(e?.message||e));
+    toast('❌ '+(_grande
+      ? 'A OS ficou demasiado grande para fechar (assinaturas/fotos pesadas). Tente novamente; se persistir, contacte o escritório.'
+      : 'Não foi possível fechar a OS: '+(e?.message||'erro de ligação')+'. Verifique a Internet e tente novamente.'),'❌',9000);
+    return;
+  }
+  _restoreConc();
 
   // ── Sincronizar as horas do relatório com as horas REAIS do fecho ──
   // Se o relatório foi preenchido antes de concluir, tinha a hora agendada.

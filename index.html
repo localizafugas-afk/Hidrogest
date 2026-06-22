@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -232,6 +231,15 @@ select.fi { appearance: none; -webkit-appearance: none; }
 .btn-ghost { background:var(--s2); border:1px solid var(--border); border-radius:14px; padding:13px; font-size:14px; font-weight:600; color:var(--text2); cursor:pointer; width:100%; font-family:inherit; margin-top:8px; }
 .sec-title { font-size:13px; font-weight:700; color:var(--text); }
 .spinner { width:24px; height:24px; border-radius:50%; border:3px solid rgba(2,132,199,.2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
+.banner-atraso { background:linear-gradient(135deg,#dc2626,#b91c1c); color:#fff; border-radius:var(--r2); padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; gap:10px; cursor:pointer; box-shadow:0 4px 16px rgba(220,38,38,.3); }
+.banner-atraso .ba-count { background:rgba(255,255,255,.25); padding:3px 10px; border-radius:14px; font-weight:900; font-size:14px; }
+.dash-card { background:#fff; border:1px solid #e2e8f0; border-radius:var(--r); padding:16px; margin-bottom:12px; }
+.dash-card-title { font-size:12px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
+.dash-stat-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f1f5f9; }
+.dash-stat-row:last-child { border-bottom:none; }
+.dash-stat-label { font-size:13px; color:var(--text2); }
+.dash-stat-val { font-size:16px; font-weight:800; }
+.comm-tier-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block; margin-top:6px; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -242,7 +250,7 @@ select.fi { appearance: none; -webkit-appearance: none; }
 <div id="screen-loading">
   <div class="load-logo">💧</div>
   <div class="load-title">HidroGest</div>
-  <div style="font-size:11px;color:#94a3b8;margin-top:-8px;font-family:monospace;">v3.2 · Jun 2026</div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:-8px;font-family:monospace;">v3.3 · Jun 2026</div>
   <div class="load-sub">A ligar ao servidor...</div>
   <div class="load-dots"><span></span><span></span><span></span></div>
 </div>
@@ -300,6 +308,7 @@ select.fi { appearance: none; -webkit-appearance: none; }
   <div class="content">
     <!-- OS -->
     <div class="page active" id="page-os">
+      <div id="banner-atraso-wrap"></div>
       <div id="resumo-dia"></div>
       <div class="gps-bar">
         <span class="gps-dot" id="gps-bar-dot"></span>
@@ -322,6 +331,11 @@ select.fi { appearance: none; -webkit-appearance: none; }
       <div id="desp-list"></div>
       <div style="height:80px;"></div>
     </div>
+    <!-- DASHBOARD -->
+    <div class="page" id="page-dash">
+      <div id="dash-content"></div>
+      <div style="height:24px;"></div>
+    </div>
     <!-- PERFIL -->
     <div class="page" id="page-perfil">
       <div style="text-align:center;padding:32px 20px 24px;">
@@ -333,13 +347,14 @@ select.fi { appearance: none; -webkit-appearance: none; }
         <div style="background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;">
           <button onclick="logoutConfirm()" style="width:100%;padding:16px 20px;background:none;border:none;color:var(--red);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;"><span>↩</span> Terminar Sessão</button>
         </div>
-        <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text3);">HidroGest · v3.2 · Jun 2026 · Localizafugas</div>
+        <div style="text-align:center;margin-top:24px;font-size:11px;color:var(--text3);">HidroGest · v3.3 · Jun 2026 · Localizafugas</div>
       </div>
     </div>
   </div>
   <nav class="bottom-nav">
     <button class="bn-item active" id="bn-os" onclick="navTo('os')"><div class="bn-ico">🔧<span class="bn-badge" id="bn-os-badge" style="display:none;"></span></div><span class="bn-label">Minhas OS</span></button>
     <button class="bn-item" id="bn-despesas" onclick="navTo('despesas')"><div class="bn-ico">🧾<span class="bn-badge" id="bn-desp-badge" style="display:none;"></span></div><span class="bn-label">Despesas</span></button>
+    <button class="bn-item" id="bn-dash" onclick="navTo('dash')"><div class="bn-ico">📊</div><span class="bn-label">Dashboard</span></button>
     <button class="bn-item" id="bn-perfil" onclick="navTo('perfil')"><div class="bn-ico">👤</div><span class="bn-label">Perfil</span></button>
   </nav>
 </div>
@@ -544,6 +559,19 @@ select.fi { appearance: none; -webkit-appearance: none; }
   </div>
 </div>
 
+<!-- MODAL CONFIRMAR PARAGEM / RELATÓRIO AGORA OU DEPOIS -->
+<div class="mo-overlay" id="mo-parar-confirm">
+  <div class="mo-sheet" onclick="event.stopPropagation()">
+    <div class="mo-handle"></div>
+    <div class="mo-header"><div class="mo-title">⏹ Trabalho parado</div></div>
+    <div class="mo-body">
+      <p style="font-size:14px;color:var(--text2);margin-bottom:16px;line-height:1.5;">Vais fazer o relatório agora, com o cliente presente?</p>
+      <button class="btn-save" onclick="_pararConfirmResposta(true)">✅ Sim, fico e faço agora</button>
+      <button class="btn-ghost" onclick="_pararConfirmResposta(false)">🏠 Não, faço mais tarde</button>
+    </div>
+  </div>
+</div>
+
 <script>
 
 const FIREBASE_CONFIG = {
@@ -636,10 +664,14 @@ function abrirRelatorio(osId){
   renderChecks('check-equipamentos', EQUIPAMENTOS, _equips);
   _fotos = (c.fotos||[]).map(f=>({url:f.url||'', dataUrl:f.dataUrl||'', legenda:f.legenda||''}));
   renderFotos();
+  // ── Cronómetro: se o trabalho ficou "congelado" (relatório feito depois), não voltar a contar ──
   _timerStart = null;
-  if(os.timerInicioMs){ _timerStart = os.timerInicioMs; }
-  else if(os.iniciadoEm){ _timerStart = new Date(os.iniciadoEm).getTime(); }
-  if(!_tempoMin && os.tempoAcumuladoMin){ _tempoAcumulado = os.tempoAcumuladoMin; }
+  _tempoAcumulado = 0;
+  if(!os.relatorioTimerCongelado){
+    if(os.timerInicioMs){ _timerStart = os.timerInicioMs; }
+    else if(os.iniciadoEm && !os.horaFimReal){ _timerStart = new Date(os.iniciadoEm).getTime(); }
+    if(!_tempoMin && os.tempoAcumuladoMin){ _tempoAcumulado = os.tempoAcumuladoMin; }
+  }
   iniciarTimerUI();
   _relStep = 1;
   renderRelProgress();
@@ -773,6 +805,7 @@ function escolherFonteDespesa(){
 async function _uploadFotos(osId){
   if(!_storage) return null;
   const out = [];
+  const _comTimeout = (p, ms)=> Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
   for(let i=0; i<_fotos.length; i++){
     const f = _fotos[i];
     if(f.url){ out.push({url:f.url, legenda:f.legenda||''}); continue; }
@@ -780,8 +813,8 @@ async function _uploadFotos(osId){
     try{
       const caminho = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
       const ref = _storage.ref(caminho);
-      await ref.putString(f.dataUrl, 'data_url');
-      const url = await ref.getDownloadURL();
+      await _comTimeout(ref.putString(f.dataUrl, 'data_url'), 20000);
+      const url = await _comTimeout(ref.getDownloadURL(), 15000);
       out.push({url, legenda:f.legenda||''});
     }catch(e){
       out.push({dataUrl:f.dataUrl, legenda:f.legenda||''});
@@ -826,7 +859,7 @@ function fecharRelatorio(){
   _tempoMin = Math.max(1, Math.ceil(elapsedMs / 60000));
   _timerStart = null; _tempoAcumulado = 0;
   if(_osActual?.id){
-    fsSetMerge('ordens', _osActual.id, { tempoMin:_tempoMin, tempoAcumuladoMin:_tempoMin, timerInicioMs:null, }).catch(()=>{});
+    fsSetMerge('ordens', _osActual.id, { tempoMin:_tempoMin, tempoAcumuladoMin:_tempoMin, timerInicioMs:null, relatorioTimerCongelado:false }).catch(()=>{});
   }
   _vozParar = true;
   if(_voiceRec){ try{ _voiceRec.stop(); }catch(e){} _voiceRec=null; }
@@ -1088,6 +1121,9 @@ async function concluirOS(){
   if(!_sigPad['sig-cliente']?.hasContent){ toast('Assinatura do cliente em falta','✍️'); return; }
   const os=_osActual; if(!os){ toast('Erro: sem OS activa','❌'); return; }
   const btn=document.getElementById('btn-concluir'); btn.disabled=true; btn.textContent='A processar...';
+  // ── Segurança: nunca deixar o botão bloqueado indefinidamente ──
+  const _resetBtn = ()=>{ if(btn){ btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório'; } };
+  const _watchdog = setTimeout(()=>{ toast('⚠️ Está a demorar muito. Verifica a ligação e tenta novamente.','⏳'); _resetBtn(); }, 25000);
   try{
     const srv=(DB.servicos||[]).find(s=>s.id===os.servicoId)||{};
     const v=calcValor(os,srv,_tempoMin);
@@ -1110,7 +1146,7 @@ async function concluirOS(){
     };
     if(!_fotosStorage){
       const _tam=new Blob([JSON.stringify(campos)]).size;
-      if(_tam>950*1024){ const _mb=(_tam/1024/1024).toFixed(2); toast(`As fotos estão demasiado pesadas (${_mb}MB). Tente novamente.`,'📷'); btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório'; return; }
+      if(_tam>950*1024){ const _mb=(_tam/1024/1024).toFixed(2); toast(`As fotos estão demasiado pesadas (${_mb}MB). Tente novamente.`,'📷'); clearTimeout(_watchdog); _resetBtn(); return; }
     }
     const relExistente=(DB.relatorios_pesquisa||[]).find(r=>r.id===os.id);
     await fsSet('relatorios_pesquisa', os.id, {
@@ -1126,16 +1162,19 @@ async function concluirOS(){
       tipo:'pedido_fatura', osId:os.id, tecnicoId:_currentUser.id, tecnicoNome:_currentUser.name,
       metodoPagamento:_metodoPag, tipoDocumento, valorTotal:v?.total??null, criadoEm:agora, lida:false,
     });
+    clearTimeout(_watchdog);
     toast(`OS concluída! ${tipoDocumento==='fatura-recibo'?'Fatura-Recibo':'Fatura'} a emitir.`,'✅');
     fecharAssinatura(); fecharModal('mo-os-detail');
     if(_timerInterval){ clearInterval(_timerInterval); _timerInterval=null; }
     _timerStart=null; _tempoMin=0; _metodoPag=null;
     _mets=new Set(); _equips=new Set(); _fotos=[];
+    _resetBtn();
     // Voltar para filtro "Hoje" e re-renderizar
     setFiltroById('hoje');
   }catch(e){
+    clearTimeout(_watchdog);
     const msg=e?.code?`Erro Firebase: ${e.code}`:(e?.message||'Erro desconhecido');
-    toast('❌ '+msg,'❌'); btn.disabled=false; btn.textContent='✅ Concluir e Enviar Relatório';
+    toast('❌ '+msg,'❌'); _resetBtn();
   }
 }
 
@@ -1144,8 +1183,10 @@ let _db=null, _fs=null, _storage=null, _tecSel=null, _tecnicosFirebase=[], _curr
 let _editingDespId=null,
     _filtroOS='hoje',  /* PADRÃO: Hoje (só trabalho por fazer) */
     _gpsWatchId=null, _mudarSenhaUser=null;
+let _salarioTecnico = 0;
+let _pararConfirmId = null;
 
-const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], emailConfig:null, meta_nextDesp:1 };
+const DB = { ordens:[], clientes:[], servicos:[], despesas:[], relatorios_pesquisa:[], recibos:[], emailConfig:null, meta_nextDesp:1 };
 
 // ── Firebase ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
@@ -1303,12 +1344,19 @@ function setFiltroById(id){
 function carregarDados(){
   if(!_db) return;
   var uid=_currentUser.id;
-  _db.listen('ordens',function(s){ DB.ordens=s.docs.map(d=>d.data()).filter(o=>(o.tecnicos||[]).includes(uid)&&o.estado!=='cancelada'); renderOS(); atualizarBadges(); });
+  _db.listen('ordens',function(s){ DB.ordens=s.docs.map(d=>d.data()).filter(o=>(o.tecnicos||[]).includes(uid)&&o.estado!=='cancelada'); renderOS(); atualizarBadges(); renderDashboard(); });
   _db.listen('clientes',function(s){ DB.clientes=s.docs.map(d=>d.data()); renderOS(); });
   _db.listen('servicos',function(s){ DB.servicos=s.docs.map(d=>d.data()); });
   _db.listen('despesas',function(s){ DB.despesas=s.docs.map(d=>d.data()).filter(d=>d.tecnicoId===uid&&!d._eliminado&&d.status!=='eliminado'); renderDespesas(); atualizarBadges(); });
-  _db.listen('relatorios_pesquisa',function(s){ DB.relatorios_pesquisa=s.docs.map(d=>d.data()); renderOS(); });
+  _db.listen('relatorios_pesquisa',function(s){ DB.relatorios_pesquisa=s.docs.map(d=>d.data()); renderOS(); renderDashboard(); });
+  _db.listen('recibos',function(s){ DB.recibos=s.docs.map(d=>d.data()).filter(r=>r.tech===_currentUser.name||r.techId===uid||String(r.tech||'').split(',').map(x=>x.trim()).includes(_currentUser.name)); renderDashboard(); });
   _db.listen('meta',function(s){ s.docs.forEach(d=>{ if(d.id==='emailConfig')DB.emailConfig=d.data().value||d.data()||{}; if(d.id==='nextDesp')DB.meta_nextDesp=d.data().value||1; }); });
+  // Salário do técnico (vem da colecção 'funcionarios', associado pelo nome)
+  _db.get('funcionarios').then(function(s){
+    var fn=s.docs.map(d=>d.data()).find(f=>f.name===_currentUser.name);
+    _salarioTecnico = fn ? (parseFloat(fn.salary)||0) : 0;
+    renderDashboard();
+  }).catch(()=>{});
 }
 
 // ── Navegação ─────────────────────────────────────────────────
@@ -1318,6 +1366,7 @@ function navTo(page){
   document.getElementById('page-'+page).classList.add('active');
   var bn=document.getElementById('bn-'+page); if(bn) bn.classList.add('active');
   document.getElementById('fab-desp').classList.toggle('show', page==='despesas');
+  if(page==='dash'){ renderDashboard(); }
   // Ao voltar para OS, garantir filtro "Hoje"
   if(page==='os'){ setFiltroById('hoje'); }
 }
@@ -1339,18 +1388,48 @@ function badge(estado, os){
   return M[estado]||'<span class="os-badge">'+estado+'</span>';
 }
 
+// ── Relatórios atrasados / pendentes (>5 dias úteis sem entrega) ──
+function _addDiasUteis(dateStr, n){
+  var d=new Date(String(dateStr).slice(0,10)); var added=0;
+  while(added<n){ d.setDate(d.getDate()+1); var wd=d.getDay(); if(wd!==0&&wd!==6) added++; }
+  return d;
+}
+function relatoriosPendentes(){
+  return (DB.ordens||[]).filter(function(o){
+    if(o.estado!=='concluida'&&o.estado!=='os_fechada') return false;
+    var rel=(DB.relatorios_pesquisa||[]).find(function(x){return x.id===o.id;});
+    var est=rel?(rel.estado||''):'';
+    return !(est==='preenchido'||est==='enviado');
+  });
+}
+function relatoriosAtrasados(){
+  return relatoriosPendentes().filter(function(o){
+    var base=o.concluidoEm||o.data; if(!base) return false;
+    return new Date() > _addDiasUteis(base,5);
+  });
+}
+
 // ── Render OS ─────────────────────────────────────────────────
 function renderOS(){
   var list=document.getElementById('os-list'), resumoEl=document.getElementById('resumo-dia');
   if(!list) return;
   var hoje=today();
 
+  // ── BARRA DE RELATÓRIOS ATRASADOS ──
+  var bannerWrap=document.getElementById('banner-atraso-wrap');
+  if(bannerWrap){
+    var atrasados=relatoriosAtrasados();
+    if(atrasados.length){
+      bannerWrap.innerHTML='<div class="banner-atraso" onclick="setFiltroById(\'falta_rel\')"><span style="font-size:20px;">🔴</span><span style="flex:1;font-weight:700;font-size:13px;">Relatórios atrasados</span><span class="ba-count">'+atrasados.length+'</span></div>';
+    } else { bannerWrap.innerHTML=''; }
+  }
+
   // ── RESUMO DO DIA (sempre com os dados reais, independente do filtro) ──
   var todasHoje=(DB.ordens||[]).filter(o=>o.data===hoje&&o.estado!=='cancelada');
   if(todasHoje.length&&resumoEl){
     var emC=todasHoje.filter(o=>o.estado==='em_curso').length;
     var conc=todasHoje.filter(o=>o.estado==='concluida'||o.estado==='os_fechada').length;
-    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
+    resumoEl.innerHTML='<div class="resumo-grid"><div class="resumo-card" onclick="setFiltroById(\'hoje\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--accent);">'+todasHoje.length+'</div><div class="resumo-label">Hoje</div></div>'+(emC?'<div class="resumo-card" onclick="setFiltroById(\'em_curso\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--yellow);">'+emC+'</div><div class="resumo-label">Em curso</div></div>':'')+'<div class="resumo-card" onclick="setFiltroById(\'fechadas\')" style="cursor:pointer;"><div class="resumo-val" style="color:var(--green);">'+conc+'</div><div class="resumo-label">Concluídas</div></div></div>';
   }else if(resumoEl) resumoEl.innerHTML='';
 
   // ── LISTA FILTRADA ──
@@ -1367,6 +1446,7 @@ function renderOS(){
       return true;
     });
   } else if(_filtroOS==='agendada'){
+    // Todas as agendadas, hoje e no futuro (ordenadas por data ascendente)
     minhas=minhas.filter(function(o){ return o.estado==='agendada'; });
   } else if(_filtroOS==='em_curso'){
     minhas=minhas.filter(function(o){ return o.estado==='em_curso'; });
@@ -1387,7 +1467,7 @@ function renderOS(){
   // filtro '' = Todas (sem filtro adicional)
 
   if(!minhas.length){
-    var _eTit=_filtroOS==='hoje'?'Sem OS por fazer hoje':_filtroOS==='fechadas'?'Sem OS concluídas':_filtroOS==='falta_rel'?'Sem relatórios em falta':'Sem OS atribuídas';
+    var _eTit=_filtroOS==='hoje'?'Sem OS por fazer hoje':_filtroOS==='fechadas'?'Sem OS concluídas':_filtroOS==='falta_rel'?'Sem relatórios em falta':_filtroOS==='agendada'?'Sem OS agendadas':'Sem OS atribuídas';
     var _eSub=_filtroOS==='hoje'?'Tudo feito por hoje! Vê "✅ Concluídas" para o trabalho terminado.':_filtroOS==='falta_rel'?'🎉 Todos os relatórios estão preenchidos.':'Tenta outro filtro';
     list.innerHTML='<div class="empty-state"><div class="es-ico">📋</div><div class="es-title">'+_eTit+'</div><div class="es-sub">'+_eSub+'</div></div>';
     return;
@@ -1444,14 +1524,37 @@ function renderOS(){
 // ── OS Actions ────────────────────────────────────────────────
 function iniciarOS(id){
   var ini=new Date().toTimeString().slice(0,5);
-  fsSetMerge('ordens',id,{estado:'em_curso',horaIniReal:ini,iniciadoEm:new Date().toISOString()});
+  fsSetMerge('ordens',id,{estado:'em_curso',horaIniReal:ini,iniciadoEm:new Date().toISOString(),relatorioTimerCongelado:false});
   toast('▶ Iniciado às '+ini+'!');
   if(navigator.vibrate) navigator.vibrate(80);
 }
+
+// Ao parar, perguntar se vai fazer o relatório agora (cronómetro continua)
+// ou mais tarde (cronómetro pára e fica congelado nessa duração)
 function pararOS(id){
+  _pararConfirmId = id;
+  abrirModal('mo-parar-confirm');
+}
+
+function _pararConfirmResposta(fazerAgora){
+  fecharModal('mo-parar-confirm');
+  var id=_pararConfirmId; if(!id) return;
   var fim=new Date().toTimeString().slice(0,5);
-  fsSetMerge('ordens',id,{horaFimReal:fim,paradoEm:new Date().toISOString()});
-  toast('⏹ Parado às '+fim+'!');
+  var os=(DB.ordens||[]).find(x=>x.id===id);
+  var updates={horaFimReal:fim, paradoEm:new Date().toISOString()};
+  if(!fazerAgora && os && os.iniciadoEm){
+    var iniMs=new Date(os.iniciadoEm).getTime();
+    var minsDecorridos=Math.max(1, Math.ceil((Date.now()-iniMs)/60000));
+    updates.tempoAcumuladoMin=minsDecorridos;
+    updates.tempoMin=minsDecorridos;
+    updates.timerInicioMs=null;
+    updates.relatorioTimerCongelado=true;
+  } else {
+    updates.relatorioTimerCongelado=false;
+  }
+  fsSetMerge('ordens',id,updates);
+  toast(fazerAgora ? '⏹ Parado às '+fim+'! O tempo continua a contar até concluíres o relatório.' : '⏹ Parado às '+fim+'! Tempo registado — não volta a contar.');
+  _pararConfirmId=null;
 }
 
 function abrirDetalheOS(id){
@@ -1630,6 +1733,69 @@ async function guardarDespesa(){
   };
   if(temFoto){ try{ var comp=await comprimirImagem(imgSrc,0.6); await doSave(comp); }catch(e){ await doSave(imgSrc); } }
   else await doSave('');
+}
+
+// ── Dashboard do técnico (faturação, recebido/a receber, comissões) ──
+function _commIsCipp(n){ return String(n||'').toLowerCase().includes('cipp'); }
+function _commIsImperm(n){ return String(n||'').toLowerCase().includes('impermeab'); }
+
+function renderDashboard(){
+  var el=document.getElementById('dash-content'); if(!el||!_currentUser) return;
+  var periodo=new Date().toISOString().slice(0,7); // mês actual 'YYYY-MM'
+
+  // ── IDs de OS de "retorno" (revisitas) — valor excluído da receita ──
+  var idsRetorno=new Set((DB.ordens||[]).filter(function(o){ return !!o._retornoDe; }).map(function(o){ return o.id; }));
+
+  var recsMes=(DB.recibos||[]).filter(function(r){ return String(r.date||'').slice(0,7)===periodo && !idsRetorno.has(r.osId); });
+  var pagos=recsMes.filter(function(r){ return r.status==='paid'; });
+  var pendentes=recsMes.filter(function(r){ return r.status==='pending'; });
+  var recebido=pagos.reduce(function(a,r){ return a+(parseFloat(r.total)||0); },0);
+  var aReceber=pendentes.reduce(function(a,r){ return a+(parseFloat(r.total)||0); },0);
+
+  var recCipp=pagos.filter(function(r){ return _commIsCipp(r.service); });
+  var recImp=pagos.filter(function(r){ return _commIsImperm(r.service); });
+  var recOut=pagos.filter(function(r){ return !_commIsCipp(r.service)&&!_commIsImperm(r.service); });
+  var netOut=recOut.reduce(function(a,r){ return a+(parseFloat(r.net)||0); },0);
+  var netCipp=recCipp.reduce(function(a,r){ return a+(parseFloat(r.net)||0); },0);
+  var netImp=recImp.reduce(function(a,r){ return a+(parseFloat(r.net)||0); },0);
+
+  var limiar=_salarioTecnico*10;
+
+  // ── Escalão por relatórios atrasados no mês ──
+  var atrasadosMes=relatoriosAtrasados().filter(function(o){ return String(o.concluidoEm||o.data||'').slice(0,7)===periodo; }).length;
+  var reducaoPontos=0, semComissao=false;
+  if(atrasadosMes>=8){ semComissao=true; }
+  else if(atrasadosMes>=6){ reducaoPontos=2; }
+  else if(atrasadosMes>=1){ reducaoPontos=1; }
+
+  var taxaNormal=Math.max(0,5-reducaoPontos), taxaCipp=Math.max(0,5-reducaoPontos), taxaImp=Math.max(0,3-reducaoPontos);
+  var comNormal = semComissao?0:Math.max(0,(netOut-limiar))*(taxaNormal/100);
+  var comCipp   = semComissao?0:netCipp*(taxaCipp/100);
+  var comImp    = semComissao?0:netImp*(taxaImp/100);
+  var comTotal  = comNormal+comCipp+comImp;
+
+  var tierLabel = semComissao
+    ? '<span class="comm-tier-badge" style="background:#fee2e2;color:#991b1b;">🚫 '+atrasadosMes+' relatórios atrasados — sem comissão este mês</span>'
+    : reducaoPontos>0
+      ? '<span class="comm-tier-badge" style="background:#fef3c7;color:#92400e;">⚠️ '+atrasadosMes+' relatórios atrasados — taxa reduzida em '+reducaoPontos+' ponto'+(reducaoPontos>1?'s':'')+'</span>'
+      : '<span class="comm-tier-badge" style="background:#dcfce7;color:#166534;">✅ Sem relatórios atrasados — comissão completa</span>';
+
+  el.innerHTML =
+    '<div class="dash-card">'+
+      '<div class="dash-card-title">📅 Este mês ('+periodo.split('-').reverse().join('/')+')</div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label">💰 Já recebido</span><span class="dash-stat-val" style="color:var(--green);">€'+fmt(recebido)+'</span></div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label">⏳ A receber</span><span class="dash-stat-val" style="color:var(--yellow);">€'+fmt(aReceber)+'</span></div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label">📊 Total facturado</span><span class="dash-stat-val">€'+fmt(recebido+aReceber)+'</span></div>'+
+    '</div>'+
+    '<div class="dash-card">'+
+      '<div class="dash-card-title">💎 Comissão estimada — este mês</div>'+
+      tierLabel+
+      '<div class="dash-stat-row" style="margin-top:8px;"><span class="dash-stat-label">Normal (líq. €'+fmt(netOut)+' − limiar €'+fmt(limiar)+') × '+taxaNormal+'%</span><span class="dash-stat-val" style="color:var(--purple);">€'+fmt(comNormal)+'</span></div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label">CIPP (líq. €'+fmt(netCipp)+') × '+taxaCipp+'%</span><span class="dash-stat-val" style="color:var(--accent);">€'+fmt(comCipp)+'</span></div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label">Impermeabilização (líq. €'+fmt(netImp)+') × '+taxaImp+'%</span><span class="dash-stat-val" style="color:var(--accent);">€'+fmt(comImp)+'</span></div>'+
+      '<div class="dash-stat-row"><span class="dash-stat-label" style="font-weight:800;color:var(--text);">Total estimado</span><span class="dash-stat-val" style="color:var(--green);font-size:20px;">€'+fmt(comTotal)+'</span></div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Limiar = salário × 10 · Valor estimado, sujeito a confirmação do admin · Receitas de retorno/revisita não contam.</div>'+
+    '</div>';
 }
 
 // ── GPS ───────────────────────────────────────────────────────

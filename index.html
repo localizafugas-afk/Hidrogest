@@ -126,6 +126,7 @@ body {
 .action-btn.stop { background: #fffbeb; color: #92400e; }
 .action-btn.conclude { background: #e0f2fe; color: var(--accent2); }
 .action-btn.report { background: #f5f3ff; color: var(--purple); }
+.action-btn.send { background: #ecfdf5; color: #047857; border-top: 1px solid var(--border); }
 .desp-card { background: #fff; border: 1px solid #e2e8f0; border-radius: var(--r); padding: 14px 16px; margin-bottom: 10px; display: flex; gap: 12px; }
 .desp-status { width: 4px; border-radius: 2px; flex-shrink: 0; align-self: stretch; }
 .desp-status.pendente { background: var(--yellow); } .desp-status.verificado { background: var(--green); }
@@ -329,6 +330,7 @@ select.fi { appearance: none; -webkit-appearance: none; }
         <button class="filter-chip" onclick="setFiltro(this,'em_curso')">🔧 Em curso</button>
         <button class="filter-chip" onclick="setFiltro(this,'fechadas')">✅ Concluídas</button>
         <button class="filter-chip falta" onclick="setFiltro(this,'falta_rel')">📄 Falta relatório</button>
+        <button class="filter-chip" onclick="setFiltro(this,'enviados')">📤 Enviados</button>
       </div>
       <div id="os-list"></div>
     </div>
@@ -1162,7 +1164,8 @@ async function concluirOS(){
       editadoEm:relExistente?.edicaoMobileAutorizada?agora:null,
       edicaoMobileAutorizada:false, edicaoMobileAutorizadaPor:null,
     });
-    await fsSetMerge('ordens', os.id, { estado:'concluida', horaFimReal, concluidoEm:agora, metodoPagamento:_metodoPag, valorTotal:v?.total??null });
+    var _pagoAuto = METODOS_ENVIO_DIRETO.includes(_metodoPag);
+    await fsSetMerge('ordens', os.id, { estado:'concluida', horaFimReal, concluidoEm:agora, metodoPagamento:_metodoPag, valorTotal:v?.total??null, pago:_pagoAuto?true:(os.pago||false) });
     const tipoDocumento=['numerario','mbway','mb'].includes(_metodoPag)?'fatura-recibo':'fatura';
     await fsSet('mensagens_internas', `msg_${os.id}_${Date.now()}`, {
       tipo:'pedido_fatura', osId:os.id, tecnicoId:_currentUser.id, tecnicoNome:_currentUser.name,
@@ -1402,6 +1405,88 @@ function relatoriosAtrasados(){
   });
 }
 
+// ── Envio de relatório ao cliente ──────────────────────────────
+// Regra: Multibanco e Dinheiro -> o técnico pode enviar de imediato.
+// Outras modalidades -> fica à espera da confirmação do pagamento pelo admin (campo os.pago).
+var METODOS_ENVIO_DIRETO = ['mb','numerario'];
+
+function envioClienteLiberado(os){
+  // O técnico só envia directamente para MB/Dinheiro. Nas outras modalidades,
+  // é sempre o admin que envia depois de confirmar o pagamento — o técnico só vê o resultado.
+  return METODOS_ENVIO_DIRETO.includes(os.metodoPagamento);
+}
+
+async function enviarRelatorioCliente(osId){
+  var os=(DB.ordens||[]).find(function(x){return x.id===osId;}); if(!os) return;
+  var relCheck=(DB.relatorios_pesquisa||[]).find(function(x){return x.id===osId;})||{};
+  if(relCheck.estado==='enviado'){ toast('Este relatório já foi enviado ao cliente.'); return; }
+  if(!envioClienteLiberado(os)){
+    toast('🔒 Para esta modalidade de pagamento, o envio é feito pelo admin.','🔒');
+    return;
+  }
+  var cli=(DB.clientes||[]).find(function(x){return x.id===os.clienteId;})||{};
+  if(!cli.email){ toast('⚠️ Cliente sem email registado. Avisa o admin.'); return; }
+  var cfg=DB.emailConfig||{};
+  var apiKey=cfg.brevoApiKey||'';
+  if(!apiKey){ toast('⚠️ Email não configurado pelo admin.'); return; }
+  var rel=(DB.relatorios_pesquisa||[]).find(function(x){return x.id===osId;})||{};
+  var srv=(DB.servicos||[]).find(function(x){return x.id===os.servicoId;})||{};
+  var campos=rel.campos||{};
+  var empNome=cfg.empresa||'Localiza Fugas — Valentim Fialho Unip. Lda.';
+  var empEmail=cfg.remetente||'localizafugas@gmail.com';
+  var empTel=cfg.tel||'253 000 000';
+  var dataFmt=fmtDate(os.data);
+  var corpoHtml =
+    '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">'+
+      '<div style="background:#1e3a5f;padding:20px 24px;border-radius:8px 8px 0 0;">'+
+        '<div style="color:#fff;font-size:20px;font-weight:800;">💧 '+empNome+'</div>'+
+        '<div style="color:#93c5fd;font-size:13px;margin-top:4px;">Relatório de Peritagem Não Destrutiva</div>'+
+      '</div>'+
+      '<div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;">'+
+        '<p style="margin:0 0 16px;">Exmo(a) Sr(a) <strong>'+(cli.nome||'')+'</strong>,</p>'+
+        '<p style="margin:0 0 16px;">Segue o resumo do relatório de peritagem referente ao serviço prestado nas suas instalações.</p>'+
+        '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">'+
+          '<table style="width:100%;font-size:13px;border-collapse:collapse;">'+
+            '<tr><td style="padding:5px 0;color:#64748b;width:140px;">Nº OS</td><td style="font-weight:700;">'+osId+'</td></tr>'+
+            '<tr><td style="padding:5px 0;color:#64748b;">Serviço</td><td>'+(srv.nome||'—')+'</td></tr>'+
+            '<tr><td style="padding:5px 0;color:#64748b;">Técnico</td><td>'+(_currentUser?.name||'')+'</td></tr>'+
+            '<tr><td style="padding:5px 0;color:#64748b;">Data</td><td>'+dataFmt+'</td></tr>'+
+          '</table>'+
+        '</div>'+
+        (campos.conclusao?('<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px;margin:16px 0;">'+
+          '<div style="font-size:12px;color:#166534;font-weight:700;margin-bottom:6px;">✅ Conclusão Técnica</div>'+
+          '<p style="margin:0;font-size:13px;color:#14532d;">'+campos.conclusao.split('\n').join('<br>')+'</p></div>'):'')+
+        (campos.sugestao?('<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin:16px 0;">'+
+          '<div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:6px;">🔧 Recomendação</div>'+
+          '<p style="margin:0;font-size:13px;color:#92400e;">'+campos.sugestao.split('\n').join('<br>')+'</p></div>'):'')+
+        '<p style="margin:16px 0 0;font-size:13px;">Para qualquer questão:<br>'+
+          '📞 <a href="tel:'+empTel+'" style="color:#1e3a5f;">'+empTel+'</a> &nbsp;·&nbsp; '+
+          '✉️ <a href="mailto:'+empEmail+'" style="color:#1e3a5f;">'+empEmail+'</a></p>'+
+        '<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">'+
+          'Com os melhores cumprimentos,<br><strong style="color:#1e3a5f;">'+empNome+'</strong></div>'+
+      '</div></div>';
+  toast('⏳ A enviar email ao cliente...','📧');
+  try{
+    var r=await fetch('https://api.brevo.com/v3/smtp/email',{
+      method:'POST',
+      headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
+      body:JSON.stringify({
+        sender:{name:empNome, email:empEmail},
+        to:[{email:cli.email, name:cli.nome||''}],
+        subject:'Relatório de Peritagem — OS '+osId+' — '+(cli.nome||''),
+        htmlContent:corpoHtml,
+      }),
+    });
+    if(!r.ok){
+      var err=await r.json().catch(function(){return {};});
+      toast('❌ Erro Brevo: '+(err.message||r.status));
+      return;
+    }
+    await fsSetMerge('relatorios_pesquisa', osId, {estado:'enviado', enviadoEm:new Date().toISOString(), enviadoPor:_currentUser?.id||'', enviadoPara:cli.email});
+    toast('✅ Relatório enviado ao cliente!');
+  }catch(e){ toast('❌ Erro de ligação: '+e.message); }
+}
+
 // ── Render OS ─────────────────────────────────────────────────
 function renderOS(){
   var list=document.getElementById('os-list'), resumoEl=document.getElementById('resumo-dia');
@@ -1459,12 +1544,19 @@ function renderOS(){
       return!(_est==='preenchido'||_est==='enviado');
     });
     minhas=minhas.slice().reverse();
+  } else if(_filtroOS==='enviados'){
+    // Relatórios já enviados ao cliente
+    minhas=minhas.filter(function(o){
+      var _r=(DB.relatorios_pesquisa||[]).find(function(x){return x.id===o.id;});
+      return _r&&_r.estado==='enviado';
+    });
+    minhas=minhas.slice().reverse();
   }
   // filtro '' = Todas (sem filtro adicional)
 
   if(!minhas.length){
-    var _eTit=_filtroOS==='hoje'?'Sem OS por fazer hoje':_filtroOS==='fechadas'?'Sem OS concluídas':_filtroOS==='falta_rel'?'Sem relatórios em falta':_filtroOS==='agendada'?'Sem OS agendadas':'Sem OS atribuídas';
-    var _eSub=_filtroOS==='hoje'?'Tudo feito por hoje! Vê "✅ Concluídas" para o trabalho terminado.':_filtroOS==='falta_rel'?'🎉 Todos os relatórios estão preenchidos.':'Tenta outro filtro';
+    var _eTit=_filtroOS==='hoje'?'Sem OS por fazer hoje':_filtroOS==='fechadas'?'Sem OS concluídas':_filtroOS==='falta_rel'?'Sem relatórios em falta':_filtroOS==='agendada'?'Sem OS agendadas':_filtroOS==='enviados'?'Sem relatórios enviados':'Sem OS atribuídas';
+    var _eSub=_filtroOS==='hoje'?'Tudo feito por hoje! Vê "✅ Concluídas" para o trabalho terminado.':_filtroOS==='falta_rel'?'🎉 Todos os relatórios estão preenchidos.':_filtroOS==='enviados'?'Ainda não enviaste nenhum relatório ao cliente.':'Tenta outro filtro';
     list.innerHTML='<div class="empty-state"><div class="es-ico">📋</div><div class="es-title">'+_eTit+'</div><div class="es-sub">'+_eSub+'</div></div>';
     return;
   }
@@ -1510,7 +1602,28 @@ function renderOS(){
         actionBtn.textContent=_relEst==='preenchido'?'✏️ Editar relatório':_relEst==='rascunho'?'📝 Continuar relatório':'📄 Criar relatório';
         actionBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); abrirRelatorio(id); }; })(o.id));
       }
-      card.appendChild(actionBtn); groupEl.appendChild(card);
+      card.appendChild(actionBtn);
+      // ── Estado/ação de envio ao cliente (só quando o relatório já está preenchido/enviado) ──
+      if(concluida && (_relEst==='preenchido'||_relEst==='enviado')){
+        if(_relEst==='enviado'){
+          var okDiv=document.createElement('div');
+          okDiv.className='os-card-horas'; okDiv.style.color='var(--green)'; okDiv.style.fontWeight='700';
+          okDiv.innerHTML='✅ Enviado ao cliente'+(_rel&&_rel.enviadoEm?(' em '+fmtDate(_rel.enviadoEm)):'');
+          card.appendChild(okDiv);
+        } else if(envioClienteLiberado(o)){
+          var sendBtn=document.createElement('button');
+          sendBtn.className='action-btn send';
+          sendBtn.textContent='📧 Enviar ao Cliente';
+          sendBtn.addEventListener('click',(function(id){ return function(e){ e.stopPropagation(); enviarRelatorioCliente(id); }; })(o.id));
+          card.appendChild(sendBtn);
+        } else {
+          var lockDiv=document.createElement('div');
+          lockDiv.className='os-card-nota'; lockDiv.style.color='#92400e';
+          lockDiv.innerHTML='<span>🔒</span><div><strong style="display:block;font-size:12px;">Envio ao cliente</strong><span style="font-size:12px;">Esta modalidade de pagamento é enviada pelo admin, após confirmar o recebimento</span></div>';
+          card.appendChild(lockDiv);
+        }
+      }
+      groupEl.appendChild(card);
     });
     list.appendChild(groupEl);
   });

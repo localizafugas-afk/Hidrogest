@@ -674,11 +674,10 @@ function abrirRelatorio(osId){
   renderFotos();
   // ── Cronómetro: se o trabalho ficou "congelado" (relatório feito depois), não voltar a contar ──
   _timerStart = null;
-  _tempoAcumulado = 0;
+  _tempoAcumulado = os.tempoAcumuladoMin || 0;
   if(!os.relatorioTimerCongelado){
     if(os.timerInicioMs){ _timerStart = os.timerInicioMs; }
-    else if(os.iniciadoEm && !os.horaFimReal){ _timerStart = new Date(os.iniciadoEm).getTime(); }
-    if(!_tempoMin && os.tempoAcumuladoMin){ _tempoAcumulado = os.tempoAcumuladoMin; }
+    else if(os.iniciadoEm){ _timerStart = new Date(os.iniciadoEm).getTime(); }
   }
   iniciarTimerUI();
   _relStep = 1;

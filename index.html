@@ -2074,7 +2074,6 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <button class="cfg-tab" onclick="cfgTab('tipos-despesa',this)">🧾 Tipos de Despesa</button>
     <button class="cfg-tab" onclick="cfgTab('testes-relatorio',this)">🔬 Testes Relatório</button>
     <button class="cfg-tab" onclick="cfgTab('equipamentos-relatorio',this)">🛠️ Equipamentos</button>
-    <button class="cfg-tab" onclick="cfgTab('moloni',this)">🧾 Moloni</button>
     <button class="cfg-tab" onclick="cfgTab('modelos-proposta',this)">📝 Modelos de Proposta</button>
     <button class="cfg-tab" id="cfg-tab-btn-manutencao" onclick="cfgTab('manutencao',this)" style="display:none;">🗑 Manutenção</button>
   </div>
@@ -2235,19 +2234,27 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <!-- Dados empresa para emails -->
     <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;">
       <div style="font-size:13px;font-weight:800;color:#1e3a5f;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">🏢 Dados da empresa nos emails</div>
-      <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#065f46;">
-        ✅ <strong>Remetente fixo:</strong> todos os emails são enviados sempre como <strong>localizafugas@gmail.com</strong>, independentemente de quem fez o agendamento.
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;">
+        ⚠️ <strong>Importante:</strong> enviar emails "como" localizafugas@gmail.com através de um serviço externo (Brevo) faz com que o Gmail/Outlook dos clientes mostrem um aviso de "email perigoso" — porque só os servidores do próprio Gmail estão autorizados a enviar como @gmail.com. A solução é configurar um endereço de um domínio que controles (ex: propostas@hidrogest.net) como remetente verificado no Brevo. As respostas continuam a chegar ao teu Gmail (ver "Responder para" abaixo). Podes usar remetentes diferentes para Propostas e para Relatórios, se preferires.
       </div>
       <div class="fgrid">
-        <div class="fg"><label>Email remetente <span style="font-size:10px;color:var(--text3);">(aparece nos emails)</span></label>
-          <input class="fi" type="email" id="cfg-email-remetente" placeholder="localizafugas@gmail.com" value="localizafugas@gmail.com" readonly style="background:var(--s2);color:var(--text2);">
-          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Fixo — configurado via EmailJS ou Gmail web</div>
+        <div class="fg"><label>Email remetente — Propostas <span style="font-size:10px;color:var(--text3);">(precisa de estar verificado no Brevo)</span></label>
+          <input class="fi" type="email" id="cfg-email-remetente" placeholder="propostas@hidrogest.net">
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Domínio próprio recomendado — evita o aviso de "email perigoso"</div>
+        </div>
+        <div class="fg"><label>Email remetente — Relatórios <span style="font-size:10px;color:var(--text3);">(precisa de estar verificado no Brevo)</span></label>
+          <input class="fi" type="email" id="cfg-email-remetente-relatorio" placeholder="relatorios@hidrogest.net">
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Pode ser diferente do remetente das Propostas</div>
+        </div>
+        <div class="fg"><label>Responder para <span style="font-size:10px;color:var(--text3);">(onde chegam as respostas, para ambos)</span></label>
+          <input class="fi" type="email" id="cfg-email-replyto" placeholder="localizafugas@gmail.com">
         </div>
         <div class="fg"><label>Telefone</label>
           <input class="fi" id="cfg-email-tel" placeholder="253 000 000">
         </div>
         <div class="fg"><label>Nome empresa</label>
           <input class="fi" id="cfg-email-empresa" placeholder="Localiza Fugas — Valentim Fialho Unip. Lda.">
+        </div>
         </div>
         <div class="fg"><label>Website</label>
           <input class="fi" id="cfg-email-website" placeholder="www.localizafugas.com">
@@ -2541,88 +2548,6 @@ Localiza Fugas
     <div id="cfg-equip-lista" style="display:flex;flex-direction:column;gap:8px;"></div>
   </div>
 
-
-  <!-- ABA: MOLONI FATURAÇÃO -->
-  <div id="cfg-tab-moloni" style="display:none;min-width:600px;">
-    <div class="sh">
-      <div class="sh-title">🧾 Integração Moloni</div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="moloniTestarLigacao()">🔗 Testar ligação</button>
-        <button class="btn btn-primary btn-sm" onclick="cfgSalvarMoloni()">💾 Guardar</button>
-      </div>
-    </div>
-
-    <!-- Guia de credenciais -->
-    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:800;color:#1e40af;margin-bottom:8px;">📋 Como obter as credenciais Moloni</div>
-      <ol style="font-size:12px;color:#1e40af;margin:0;padding-left:18px;line-height:2;">
-        <li>Aceda ao <strong>Moloni</strong> → <strong>Configurações</strong> → <strong>API</strong></li>
-        <li>Clique em <strong>"Criar nova aplicação"</strong></li>
-        <li>Copie o <strong>Client ID</strong> e <strong>Client Secret</strong></li>
-        <li>O <strong>Username</strong> e <strong>Password</strong> são os mesmos do login Moloni</li>
-        <li>O <strong>Company ID</strong> encontra-se em <strong>Configurações → Empresa</strong></li>
-      </ol>
-      <div style="margin-top:10px;font-size:11px;color:#3b82f6;">
-        🔗 <a href="https://www.moloni.pt/dev/api/" target="_blank" style="color:#1d4ed8;">Documentação oficial da API Moloni</a>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-      <div class="fg">
-        <label>Client ID <span style="font-size:10px;color:var(--text3);">da aplicação API</span></label>
-        <input class="fi" id="moloni-client-id" type="text" placeholder="Ex: 12345" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Client Secret <span style="font-size:10px;color:var(--text3);">da aplicação API</span></label>
-        <input class="fi" id="moloni-client-secret" type="password" placeholder="Ex: abc123xyz..." autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Username <span style="font-size:10px;color:var(--text3);">email de login</span></label>
-        <input class="fi" id="moloni-username" type="text" placeholder="Ex: geral@localizafugas.pt" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Password <span style="font-size:10px;color:var(--text3);">senha de login</span></label>
-        <input class="fi" id="moloni-password" type="password" placeholder="Senha do Moloni" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Company ID / Slug <span style="font-size:10px;color:var(--text3);">ID numérico (272330) ou slug</span></label>
-        <input class="fi" id="moloni-company-id" type="text" placeholder="Ex: valentimfialhouniplda ou 272330" value="272330" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Série de documentos <span style="font-size:10px;color:var(--text3);">ex: FR, FT, FS</span></label>
-        <input class="fi" id="moloni-serie" type="text" placeholder="Ex: 2026" value="2026">
-      </div>
-    </div>
-
-    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px;">
-      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:12px;">⚙️ Comportamento automático</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-auto-fatura" style="width:16px;height:16px;accent-color:var(--accent);">
-          <div>
-            <div style="font-weight:600;">Criar fatura automaticamente quando OS é fechada</div>
-            <div style="font-size:11px;color:var(--text3);">Cria rascunho de fatura no Moloni assim que o técnico fecha a OS</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-auto-cliente" style="width:16px;height:16px;accent-color:var(--accent);">
-          <div>
-            <div style="font-weight:600;">Criar/sincronizar cliente no Moloni</div>
-            <div style="font-size:11px;color:var(--text3);">Se o cliente ainda não existir no Moloni, cria automaticamente</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-notif-baixa" style="width:16px;height:16px;accent-color:var(--accent);" checked>
-          <div>
-            <div style="font-weight:600;">Mostrar botão "Criar no Moloni" no painel de faturação</div>
-            <div style="font-size:11px;color:var(--text3);">Botão manual para criar a fatura quando desejar</div>
-          </div>
-        </label>
-      </div>
-    </div>
-
-    <div id="moloni-status" style="font-size:13px;color:var(--text3);padding:8px 0;min-height:24px;"></div>
-  </div>
 
   <!-- ABA: MODELOS DE PROPOSTA -->
   <div id="cfg-tab-modelos-proposta" style="display:none;min-width:600px;">
@@ -4430,7 +4355,7 @@ function rpPendentesCount(){
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
       if(rel?.estado==='enviado') return false;
       const pay=rel?.pagamento?.metodo||'';
-      const imediato=['mb','mbway','dinheiro'].includes(pay);
+      const imediato=['mb','mbway','dinheiro','cheque'].includes(pay);
       let dataBase=null;
       if(imediato||!pay) dataBase=os.concluidoEm?os.concluidoEm.slice(0,10):os.data;
       else dataBase=rel?.pagamento?.data||null;
@@ -5015,7 +4940,7 @@ function dashAbrirTrabalhosHoje(){
     const valor=_fN(o.total)||_fN(recibo?.total);
     let info;
     if(concl){
-      const metBadge=met?`<span style="font-size:12px;font-weight:700;color:${['mb','mbway','dinheiro','numerario'].includes(met)?'#15803d':'#92400e'};">${pagLabels[met]||met}</span>`:'<span style="color:#94a3b8;font-size:12px;">— por definir</span>';
+      const metBadge=met?`<span style="font-size:12px;font-weight:700;color:${['mb','mbway','dinheiro','numerario','cheque'].includes(met)?'#15803d':'#92400e'};">${pagLabels[met]||met}</span>`:'<span style="color:#94a3b8;font-size:12px;">— por definir</span>';
       const pagoBadge=pago?'<span style="font-size:10px;font-weight:800;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px;">✅ Recebido</span>':'<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#854d0e;padding:1px 7px;border-radius:10px;">⏳ Por receber</span>';
       info=`${metBadge}<br>${pagoBadge}`;
     } else {
@@ -5368,17 +5293,17 @@ function onPayChange(){
   document.getElementById('bank-sel').style.display=pay==='mb'?'block':'none';
   const docInfo=document.getElementById('doc-info');
   if(['mb','dinheiro','mbway','cheque'].includes(pay)){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--green-g);border:1px solid var(--green);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--green);">📄 <strong>Emitir Fatura-Recibo</strong> — Pagamento imediato confirmado</div>`;}
-  else if(pay==='entidade'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--yellow-g);border:1px solid var(--yellow);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--yellow);">📄 <strong>Emitir Recibo</strong> — Aguarda pagamento por entidade/referência</div>`;}
+  else if(pay==='entidade'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--accent-g);border:1px solid var(--accent);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--accent);">📄 <strong>Emitir Fatura</strong> — Aguarda confirmação de pagamento por entidade/referência</div>`;}
   else if(pay==='transferencia'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--accent-g);border:1px solid var(--accent);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--accent);">📄 <strong>Emitir Fatura</strong> — Aguarda confirmação de transferência</div>`;}
   else docInfo.style.display='none';
 }
 function selectBank(b){selectedBank=b;clearBankSelection();document.getElementById('bk-'+b).classList.add('selected');}
 function clearBankSelection(){document.querySelectorAll('.bank-card').forEach(c=>c.classList.remove('selected'));}
 // ── Regra única do tipo de documento ───────────────────────────
-// Só MULTIBANCO ou DINHEIRO/NUMERÁRIO geram Fatura-Recibo (recebimento imediato confirmado).
-// Todos os outros meios (MBWay, transferência, cheque, entidade/referência) → Fatura.
+// MULTIBANCO, NUMERÁRIO/DINHEIRO, MBWAY ou CHEQUE → Fatura-Recibo (recebimento imediato).
+// TRANSFERÊNCIA ou ENTIDADE/REFERÊNCIA → Fatura (recebimento diferido, aguarda confirmação).
 function ehFaturaReciboMetodo(m){
-  return ['mb','dinheiro','numerario'].includes(String(m||'').toLowerCase());
+  return ['mb','dinheiro','numerario','mbway','cheque'].includes(String(m||'').toLowerCase());
 }
 function docTipoLabelMetodo(m){ return ehFaturaReciboMetodo(m) ? 'Fatura-Recibo' : 'Fatura'; }
 window.ehFaturaReciboMetodo = ehFaturaReciboMetodo;
@@ -11010,8 +10935,8 @@ function adminMostrarNovasMensagens(msgs){
     const key = m.osId||m.id;
     if(!window._msgsMostradas.has(key)){
       window._msgsMostradas.add(key);
-      const met  = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'}[m.metodoPagamento]||m.metodoPagamento||'—';
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const met  = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'}[m.metodoPagamento]||m.metodoPagamento||'—';
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
 
       if(imediato){
         // Criar recibo automaticamente se não existir
@@ -11052,7 +10977,7 @@ function adminAbrirPainelMensagens(filtro){
   else if(filtro==='emitidos' || filtro==='todas') msgs = emitidos; // baixados → "recebidos"
   else msgs = pendentes; // 'pendentes'
 
-  const metLabel = {numerario:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
+  const metLabel = {numerario:'💵 Numerário',dinheiro:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
 
   let rows = '';
   if(!msgs.length){
@@ -11091,7 +11016,7 @@ function adminAbrirPainelMensagens(filtro){
       }
       const dt      = m.criadoEm ? new Date(m.criadoEm).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
       const metLbl  = metLabel[m.metodoPagamento] || m.metodoPagamento || '—';
-      const imediato= ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato= ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const recibo  = (window.DB.recibos||[]).find(function(r){return r.osId===m.osId;});
       const recPago = recibo && recibo.status==='paid';
       const emitido = !!m.documentoEmitido;
@@ -11145,9 +11070,6 @@ function adminAbrirPainelMensagens(filtro){
         }
         btns += '<button onclick="adminEditarAviso(\''+msgId+'\')" style="background:transparent;border:1px solid var(--accent);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--accent);font-weight:600;">✏️ Editar</button>';
         btns += '<button onclick="adminAbrirDetalheOS(\''+m.osId+'\')" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--text2);">Ver OS</button>';
-        if(window._moloniCfg?.clientId || window.DB?.empresaConfig?.moloni?.clientId){
-          btns += '<button onclick="moloniCriarFaturaDeOS(\''+m.osId+'\',\''+msgId+'\')" style="background:#1a1a2e;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;" title="Criar fatura no Moloni">🧾 Moloni</button>';
-        }
         btns += '<button onclick="adminArquivarAviso(\''+msgId+'\')" style="background:transparent;border:1px solid #d97706;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:#d97706;font-weight:600;" title="Mover para arquivo — não interfere no sistema">📦 Arquivar</button>';
         btns += '<button onclick="adminExcluirAviso(\''+msgId+'\')" style="background:transparent;border:1px solid var(--red);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--red);">🗑 Excluir</button>';
       }
@@ -11249,7 +11171,7 @@ async function adminImprimirAvisos(filtro){
   const empNif  = emp.nif  || '517551543';
   const fmtE = v => '€'+(parseFloat(v)||0).toFixed(2).replace('.',',');
   const hoje = new Date().toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const metLabel = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
+  const metLabel = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
 
   let totalSemIva=0, totalIva=0, totalCom=0;
 
@@ -11259,7 +11181,7 @@ async function adminImprimirAvisos(filtro){
     const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
     const srv = (window.DB.servicos||[]).find(s=>s.id===os.servicoId)||{};
     const srvNome = srv.nome || os.servicoNome || m.servicoNome || '—';
-    const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+    const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
     const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento).toUpperCase();
     const metPag   = metLabel[m.metodoPagamento] || m.metodoPagamento || '—';
     const tecNome  = m.tecnicoNome || '—';
@@ -11501,7 +11423,7 @@ async function adminEditarAviso(msgId){
   const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
   const valorAtual=os.valorTotal||os.total||m.valorTotal||'';
   const valorFmt=valorAtual?parseFloat(valorAtual).toFixed(2):'';
-  const metLabel={numerario:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
+  const metLabel={numerario:'💵 Numerário',dinheiro:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
   const metLbl=metLabel[m.metodoPagamento]||m.metodoPagamento||'—';
   const existing=document.getElementById('mo-editar-aviso'); if(existing) existing.remove();
   const mo=document.createElement('div'); mo.id='mo-editar-aviso';
@@ -11514,7 +11436,7 @@ async function adminEditarAviso(msgId){
     +'<input class="fi" id="edit-aviso-valor" type="number" step="0.01" min="0" placeholder="Ex: 123.45" value="'+valorFmt+'"></div>'
     +'<div class="fg"><label>Método de pagamento</label>'
     +'<select class="fi" id="edit-aviso-metodo">'
-    +'<option value="numerario"'+(m.metodoPagamento==='numerario'?' selected':'')+'>💵 Numerário</option>'
+    +'<option value="dinheiro"'+((m.metodoPagamento==='dinheiro'||m.metodoPagamento==='numerario')?' selected':'')+'>💵 Numerário</option>'
     +'<option value="mb"'+(m.metodoPagamento==='mb'?' selected':'')+'>🏧 Multibanco</option>'
     +'<option value="mbway"'+(m.metodoPagamento==='mbway'?' selected':'')+'>📱 MBWay</option>'
     +'<option value="transferencia"'+(m.metodoPagamento==='transferencia'?' selected':'')+'>🏦 Transferência</option>'
@@ -11546,7 +11468,7 @@ async function adminSalvarEdicaoAviso(msgId){
     await window.fsSetMerge('mensagens_internas',msgId,update);
     const m=(window.DB.mensagens_internas||[]).find(x=>x._firebaseId===msgId||(x.id||x.osId)===msgId)||{};
     if(m.osId&&!isNaN(valorNum)&&valorNum>0)
-      await window.fsSetMerge('ordens',m.osId,{valorTotal:valorNum.toFixed(2),metodoPagamento:metodo});
+      await window.fsSetMerge('ordens',m.osId,{valorTotal:valorNum.toFixed(2),pagamento:{metodo:metodo}});
     toast('✅ Aviso actualizado','✏️');
     if(typeof auditLog==='function') auditLog('aviso_editado','Aviso '+msgId+' editado'+(valorNum?' — €'+valorNum.toFixed(2):''));
     adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
@@ -12236,7 +12158,7 @@ function osCalcPreview(id){
 // ── Registar pagamento rápido (botões directos) ──────────────
 async function osRegistarPagamentoRapido(id, met){
   const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
-  const imediato=['mb','mbway','dinheiro'].includes(met);
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met);
   const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência',cheque:'Cheque'}[met]||met;
   const updated={...os, pagamento:{ metodo:met, data:today(), imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id }};
   if(imediato){
@@ -13400,7 +13322,7 @@ function osRenderMinhas(){
       // Pagamento badge
       const pagMet=o.pagamento?.metodo||'';
       const pagLabels={mb:'💳 MB',mbway:'📱 MBWay',dinheiro:'💵 Numerário',transferencia:'🏦 Transf.',cheque:'📝 Cheque',entidade:'🏢 Entidade'};
-      const pagBadge=pagMet?`<span style="font-size:11px;font-weight:700;color:${['mb','mbway','dinheiro'].includes(pagMet)?'#15803d':'#92400e'};background:${['mb','mbway','dinheiro'].includes(pagMet)?'#f0fdf4':'#fffbeb'};padding:2px 8px;border-radius:6px;">${pagLabels[pagMet]||pagMet}</span>`:'';
+      const pagBadge=pagMet?`<span style="font-size:11px;font-weight:700;color:${['mb','mbway','dinheiro','cheque'].includes(pagMet)?'#15803d':'#92400e'};background:${['mb','mbway','dinheiro','cheque'].includes(pagMet)?'#f0fdf4':'#fffbeb'};padding:2px 8px;border-radius:6px;">${pagLabels[pagMet]||pagMet}</span>`:'';
 
       return `
       <div class="${cardClass}" onclick="osAbrirDetalhe('${o.id}')">
@@ -14292,13 +14214,13 @@ async function relDiarioEnviarGestao(dataStr){
 
   // Secção 2 — Faturas por emitir
   let s2 = '';
-  const metLabel = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
+  const metLabel = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
   if(fatPorEmitir.length){
     let totalFat=0;
     const linhas = fatPorEmitir.map((m,i)=>{
       const os  = ordens.find(o=>o.id===m.osId)||{};
       const cli = clientes.find(c=>c.id===os.clienteId)||{};
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento);
       const valor    = parseFloat(os.valorTotal||os.total||m.valorTotal||0)||0;
       totalFat += valor;
@@ -14331,7 +14253,7 @@ async function relDiarioEnviarGestao(dataStr){
     const linhas = fatEmitidas.map((m,i)=>{
       const os  = ordens.find(o=>o.id===m.osId)||{};
       const cli = clientes.find(c=>c.id===os.clienteId)||{};
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento);
       const valor    = parseFloat(os.valorTotal||os.total||m.valorTotal||0)||0;
       totalEmit += valor;
@@ -14678,304 +14600,6 @@ async function relDiarioEnviarFaturamento(dataStr){
 }
 
 
-// ══════════════════════════════════════════════════════════════
-// MÓDULO: INTEGRAÇÃO MOLONI
-// API: https://api.moloni.pt/v1/
-// Fluxo: 1) grant → access_token  2) companies/getAll → company_id
-//         3) customers/getByVat ou insert  4) invoices/insert
-// ══════════════════════════════════════════════════════════════
-
-window._moloniCfg       = null;
-window._moloniToken     = null;
-window._moloniTokenExp  = null;
-window._moloniCompanyId = null; // obtido automaticamente após login
-
-// ── Carregar/guardar configuração ────────────────────────────
-function cfgCarregarMoloni(){
-  const cfg = window.DB?.empresaConfig?.moloni || {};
-  window._moloniCfg = cfg;
-  window._moloniCompanyId = null; // forçar nova pesquisa de company_id
-  const set = (id,v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
-  const chk = (id,v) => { const el=document.getElementById(id); if(el) el.checked=!!v; };
-  set('moloni-client-id',     cfg.clientId);
-  set('moloni-client-secret', cfg.clientSecret);
-  set('moloni-username',      cfg.username);
-  set('moloni-password',      cfg.password);
-  set('moloni-company-id',    cfg.companySlug||cfg.companyId||'valentimfialhouniplda');
-  set('moloni-serie',         cfg.serie||'2026');
-  chk('moloni-auto-fatura',   cfg.autoFatura);
-  chk('moloni-auto-cliente',  cfg.autoCliente);
-  chk('moloni-notif-baixa',   cfg.notifBaixa!==false);
-  const st = document.getElementById('moloni-status');
-  if(st) st.innerHTML = cfg.clientId
-    ? '<span style="color:#16a34a;">✅ Credenciais configuradas</span>'
-    : '<span style="color:#94a3b8;">Sem credenciais — preencha os campos acima</span>';
-}
-
-async function cfgSalvarMoloni(){
-  const g = id => document.getElementById(id)?.value?.trim()||'';
-  const c = id => document.getElementById(id)?.checked||false;
-  const cfg = {
-    clientId:     g('moloni-client-id'),
-    clientSecret: g('moloni-client-secret'),
-    username:     g('moloni-username'),
-    password:     g('moloni-password'),
-    companyId:    g('moloni-company-id'),
-    serie:        g('moloni-serie')||'2026',
-    autoFatura:   c('moloni-auto-fatura'),
-    autoCliente:  c('moloni-auto-cliente'),
-    notifBaixa:   c('moloni-notif-baixa'),
-  };
-  window._moloniCfg = cfg;
-  // Guardar dentro de empresaConfig.moloni
-  const empCfg = window.DB?.empresaConfig || {};
-  const updated = { ...empCfg, moloni: cfg };
-  await window.fsMeta('empresaConfig', updated);
-  if(!window.DB) window.DB={};
-  window.DB.empresaConfig = updated;
-  window._empCfg = updated;
-  toast('✅ Configuração Moloni guardada!','🧾');
-  cfgCarregarMoloni();
-}
-
-// ── Autenticação Moloni — passo 1: obter access_token ────────
-async function moloniAutenticar(){
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  if(!cfg.clientId || !cfg.clientSecret || !cfg.username || !cfg.password){
-    throw new Error('Credenciais Moloni não configuradas. Vá a Configurações → Moloni.');
-  }
-
-  // Reutilizar token se ainda válido (margem de 2 min)
-  if(window._moloniToken && window._moloniTokenExp && Date.now() < window._moloniTokenExp - 120000){
-    return window._moloniToken;
-  }
-
-  // Autenticação via GET conforme documentação Moloni
-  const url = `https://moloni-proxy.localizafugas.workers.dev/grant/?grant_type=password`
-    + `&client_id=${encodeURIComponent(cfg.clientId)}`
-    + `&client_secret=${encodeURIComponent(cfg.clientSecret)}`
-    + `&username=${encodeURIComponent(cfg.username)}`
-    + `&password=${encodeURIComponent(cfg.password)}`
-    + `&json=1`;
-
-  const r = await fetch(url);
-  if(!r.ok) throw new Error(`Moloni auth HTTP ${r.status}`);
-  const data = await r.json();
-  if(data.errors) throw new Error('Moloni auth erro: ' + JSON.stringify(data.errors));
-  if(!data.access_token) throw new Error('Sem access_token — verifique Client ID, Client Secret, username e password');
-
-  window._moloniToken    = data.access_token;
-  window._moloniTokenExp = Date.now() + (data.expires_in||3600)*1000;
-  console.log('[Moloni] ✅ Token obtido, expira em', new Date(window._moloniTokenExp).toLocaleTimeString());
-
-  // Passo 2: obter Company ID numérico automaticamente
-  await moloniObterCompanyId(data.access_token);
-
-  return window._moloniToken;
-}
-
-// ── Passo 2: obter Company ID numérico via companies/getAll ──
-async function moloniObterCompanyId(token){
-  if(window._moloniCompanyId) return window._moloniCompanyId;
-  const r = await fetch(`https://moloni-proxy.localizafugas.workers.dev/companies/getAll/?access_token=${token}&json=1`);
-  if(!r.ok) throw new Error(`companies/getAll HTTP ${r.status}`);
-  const data = await r.json();
-  const empresas = Array.isArray(data) ? data : (data.data||[]);
-  if(!empresas.length) throw new Error('Nenhuma empresa encontrada na conta Moloni');
-  console.log('[Moloni] Empresas disponíveis:', empresas.map(e=>e.company_id+' — '+e.name));
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  // Estratégia de selecção (por ordem de prioridade):
-  // 1. Se companyId numérico configurado → usar directamente
-  // 2. Excluir empresa de demonstração (nome contém "demonstra" ou id <= 10)
-  // 3. Usar a que tiver maior company_id (a conta real é sempre maior que a demo)
-  let match;
-  const companyIdNum = parseInt(cfg.companySlug);
-  if(!isNaN(companyIdNum) && companyIdNum > 10){
-    match = empresas.find(e=>e.company_id===companyIdNum);
-  }
-  if(!match){
-    const reais = empresas.filter(e=>
-      e.company_id > 10 &&
-      !(e.name||'').toLowerCase().includes('demonstra')
-    );
-    match = reais.sort((a,b)=>b.company_id-a.company_id)[0];
-  }
-  if(!match) match = empresas[0];
-  window._moloniCompanyId = match.company_id || match.id;
-  console.log('[Moloni] ✅ Company ID:', window._moloniCompanyId, '—', match.name);
-  return window._moloniCompanyId;
-}
-
-// ── Testar ligação ───────────────────────────────────────────
-async function moloniTestarLigacao(){
-  const st = document.getElementById('moloni-status');
-  if(st) st.innerHTML = '⏳ A testar...';
-  try{
-    await cfgSalvarMoloni();
-    const token = await moloniAutenticar();
-    const cfg = window._moloniCfg;
-    // Verificar empresa
-    // Company ID foi obtido automaticamente em moloniAutenticar → moloniObterCompanyId
-    const compId = window._moloniCompanyId;
-    const r2 = await fetch(`https://moloni-proxy.localizafugas.workers.dev/companies/getAll/?access_token=${token}&json=1`);
-    const d2 = await r2.json();
-    const empresas = Array.isArray(d2) ? d2 : (d2.data||[]);
-    const emp = empresas.find(e=>e.company_id===compId)||empresas[0]||{};
-    const empNome = emp.name||emp.slug||'—';
-    if(st) st.innerHTML = `<span style="color:#16a34a;">✅ Ligado — <strong>${empNome}</strong> (Company ID: ${compId})</span>`;
-    toast(`✅ Moloni — ${empNome} (ID: ${compId})`, '🧾');
-  }catch(e){
-    if(st) st.innerHTML = `<span style="color:#dc2626;">❌ Erro: ${e.message}</span>`;
-    toast(`❌ Moloni: ${e.message}`, '❌');
-  }
-}
-
-// ── Obter customer_id do Moloni ──────────────────────────────
-// Estratégia: usar consumidor final (NIF 999999990)
-// Não requer permissões especiais de clientes
-async function moloniObterCliente(token, cli){
-  const companyId = window._moloniCompanyId;
-  if(!companyId) throw new Error('Company ID não obtido — autentique primeiro');
-
-  // Usar consumidor final genérico (999999990)
-  // Os dados reais do cliente ficam nas notas/referência da fatura
-  // Procurar o customer_id do consumidor final na empresa
-  const r = await fetch(
-    `https://moloni-proxy.localizafugas.workers.dev/customers/getByVat/?access_token=${token}&company_id=${companyId}&vat=999999990&json=1`
-  );
-  const data = await r.json();
-  const lista = Array.isArray(data) ? data : (data.data||[]);
-  if(lista.length){
-    console.log('[Moloni] Consumidor final encontrado, ID:', lista[0].customer_id);
-    return lista[0].customer_id;
-  }
-
-  // Se não encontrar, devolver 0 — o Moloni aceita customer_id=0 para consumidor final
-  console.log('[Moloni] Usando customer_id=0 (consumidor final)');
-  return 0;
-}
-
-// ── Criar fatura no Moloni a partir de uma OS ────────────────
-async function moloniCriarFaturaDeOS(osId, msgId){
-  if(!osId){ toast('OS não encontrada','⚠️'); return; }
-  const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
-  if(!os){ toast('OS '+osId+' não encontrada','⚠️'); return; }
-  const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
-  const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
-
-  toast('⏳ A criar fatura no Moloni...','🧾');
-  try{
-    const cfg   = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-    const token = await moloniAutenticar(); // também obtém _moloniCompanyId
-    const companyId = window._moloniCompanyId;
-
-    // 1. Obter/criar cliente
-    const customerId = await moloniObterCliente(token, cli);
-
-    // 2. Calcular valores (sem IVA)
-    const ivaPct   = parseInt(srv?.iva||os.iva||23);
-    const total    = parseFloat(os.valorTotal||os.total||0);
-    const semIva   = parseFloat((total / (1 + ivaPct/100)).toFixed(4));
-
-    // 3. Data do documento
-    const dataDoc = (os.concluidoEm||os.fechadaEm||os.data||new Date().toISOString()).slice(0,10);
-
-    // Referência da administradora (condomínios) — para correspondência/pagamento
-    const refAdm = (cli.tipo==='condominio' && cli.admNome)
-      ? ` | Correspondência/Pagamento — Administradora: ${cli.admNome}${cli.admNif?' (NIF '+cli.admNif+')':''}${cli.admTel?' · Tel: '+cli.admTel:''}${cli.admEmail?' · '+cli.admEmail:''}`
-      : '';
-
-    // 4. Criar fatura (status 0 = rascunho para revisão antes de emitir)
-    const payload = new URLSearchParams({
-      company_id:          companyId,   // também no body para garantir
-      access_token:        token,       // também no body para garantir
-      date:                dataDoc,
-      expiration_date:     dataDoc,
-      document_set_name:   cfg.serie||'2026',
-      customer_id:         customerId,
-      status:              0,
-      our_reference:       osId,
-      financial_discount:  0,
-      special_discount:    0,
-      salesman_id:         0,
-      salesman_commission: 0,
-      payment_method_id:   0,
-      delivery_method_id:  0,
-      notes: `Cliente: ${cli.nome||'—'} | NIF: ${cli.nif||'—'} | ${[cli.srvRua||cli.rua, cli.srvLocalidade||cli.localidade].filter(Boolean).join(', ')} | OS: ${osId}${refAdm}${os.obs?' | '+os.obs.slice(0,80):''}`,
-      'products[0][product_id]':  0,
-      'products[0][name]':        srv.nome||'Serviço de Peritagem Hidráulica',
-      'products[0][summary]':     `${srv.nome||'Serviço'} — OS ${osId}`,
-      'products[0][qty]':         1,
-      'products[0][price]':       semIva,
-      'products[0][discount]':    0,
-      'products[0][order]':       1,
-      'products[0][taxes][0][tax_id]':    0,
-      'products[0][taxes][0][value]':     ivaPct,
-      'products[0][taxes][0][order]':     1,
-      'products[0][taxes][0][cumulative]':0,
-    });
-
-    // access_token e company_id vão no URL, restantes dados no BODY
-    const r = await fetch(`https://moloni-proxy.localizafugas.workers.dev/invoices/insert/?access_token=${token}&company_id=${companyId}&json=1`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payload,
-    });
-    const rawText = await r.text();
-    console.log('[Moloni] Resposta raw:', rawText.slice(0,300));
-    let data = null;
-    try{ data = JSON.parse(rawText); } catch(e){ data = rawText; }
-
-    // Moloni pode devolver vários formatos de sucesso:
-    // {document_id: X} ou {valid:1, document_id:X} ou [docId] ou apenas o ID
-    const docId = data?.document_id || data?.id ||
-                  (Array.isArray(data) && data[0]?.document_id) ||
-                  (typeof data === 'number' ? data : null);
-
-    if(docId || data?.valid === 1){
-      const finalDocId = docId || 'N/A';
-      const docNum = data?.document_set_number
-        ? `${cfg.serie||'2026'}/${data.document_set_number}`
-        : String(finalDocId);
-
-      // Actualizar aviso de faturação com nº do documento
-      if(msgId){
-        await window.fsSetMerge('mensagens_internas', msgId, {
-          documentoEmitido:   true,
-          documentoNumero:    docNum,
-          documentoEmitidoEm: new Date().toISOString(),
-          documentoEmitidoPor:'Moloni (automático)',
-          documentoObs:       `Fatura criada no Moloni — ID: ${docId}`,
-        });
-      }
-      // Guardar referência na OS
-      await window.fsSetMerge('ordens', osId, { moloniDocId: docId, moloniDocNum: docNum });
-      if(typeof auditLog==='function') auditLog('moloni_fatura_criada', `OS ${osId} — Fatura ${docNum} criada no Moloni (ID: ${finalDocId})`);
-
-      toast(`✅ Fatura ${docNum} criada no Moloni!`, '🧾');
-      console.log('[Moloni] ✅ Sucesso:', data);
-      if(typeof adminAbrirPainelMensagens==='function') adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
-    } else {
-      console.error('[Moloni] Resposta inesperada:', data);
-      throw new Error(data?.message || data?.errors?.[0]?.message || JSON.stringify(data).slice(0,120));
-    }
-  }catch(e){
-    console.error('[Moloni] Erro:', e);
-    toast(`❌ Moloni: ${e.message}`, '❌');
-  }
-}
-
-// ── Auto-criar fatura quando OS é fechada (se activado) ──────
-async function moloniAutoFaturaOsFechada(osId){
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  if(!cfg.autoFatura || !cfg.clientId) return;
-  const msg = (window.DB.mensagens_internas||[]).find(m=>m.osId===osId&&m.tipo==='pedido_fatura');
-  const msgId = msg?._firebaseId || msg?.id || null;
-  await moloniCriarFaturaDeOS(osId, msgId).catch(e=>console.warn('[Moloni auto]',e));
-}
-
-
-// ── Badge de prazo de relatório ─────────────────────────────
 function rpPrazoBadge(os){
   if(!os.fechadaSemRelatorio) return '';
   const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
@@ -15097,7 +14721,7 @@ async function tecReabrirParaRelatorio(osId){
       const cfg=window._emailCfg||{}, emp=window._empCfg||{};
       if(cfg.brevoApiKey){
         const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
-        const dest=emp.email||cfg.remetente||'localizafugas@gmail.com';
+        const dest=cfg.remetente||emp.email||'localizafugas@gmail.com';
         await fetch('https://api.brevo.com/v3/smtp/email',{
           method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
           body:JSON.stringify({
@@ -15137,7 +14761,7 @@ async function osReconciliarImediatos(){
   const limite=new Date(); limite.setDate(limite.getDate()-60);
   const cands=(window.DB.ordens||[]).filter(o=>{
     if(o.estado!=='concluida' && o.estado!=='os_fechada') return false;
-    const met=(o.metodoPagamento||o.pagamento?.metodo||'').toLowerCase();
+    const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
     if(!imed.includes(met)) return false;
     if(o.pago===true) return false;
     if(_osImediatosFeitos.has(o.id)) return false;
@@ -15151,7 +14775,7 @@ async function osReconciliarImediatos(){
     for(const o of cands){
       _osImediatosFeitos.add(o.id);
       try{
-        const met=(o.metodoPagamento||o.pagamento?.metodo||'').toLowerCase();
+        const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
         const dataRec=(o.pagamento?.data||o.concluidoEm||o.data||today());
         const now=new Date().toISOString();
         const patch={faturaEmitida:true, faturaEmitidaEm:now, pago:true, pagoEm:now, pagoPor:'auto-imediato'};
@@ -18349,7 +17973,7 @@ const _origCfgRender = typeof cfgRender === 'function' ? cfgRender : null;
 // (será chamado via cfgTab quando navegado)
 
 function cfgTab(tab, el){
-  ['utilizadores','funcionarios','servicos','email','empresa','metodos-pag','tipos-despesa','testes-relatorio','equipamentos-relatorio','moloni','modelos-proposta','manutencao'].forEach(t=>{
+  ['utilizadores','funcionarios','servicos','email','empresa','metodos-pag','tipos-despesa','testes-relatorio','equipamentos-relatorio','modelos-proposta','manutencao'].forEach(t=>{
     const el2=document.getElementById('cfg-tab-'+t);
     if(el2) el2.style.display = t===tab ? 'block' : 'none';
   });
@@ -18361,7 +17985,6 @@ function cfgTab(tab, el){
   if(tab==='tipos-despesa')          cfgRenderTiposDesp();
   if(tab==='testes-relatorio')       cfgRenderTestes();
   if(tab==='equipamentos-relatorio') cfgRenderEquipamentos();
-  if(tab==='moloni')                 cfgCarregarMoloni();
   if(tab==='modelos-proposta')       cfgRenderModelosProposta();
   if(tab==='manutencao')             limpezaAtualizarInfo();
 }
@@ -18372,6 +17995,8 @@ function cfgCarregarEmail(){
   const set = (id,v)=>{ const el=document.getElementById(id); if(el&&v!==undefined) el.value=v; };
   set('cfg-email-empresa',    cfg.empresa    || 'Localiza Fugas — Valentim Fialho Unip. Lda.');
   set('cfg-email-remetente',  cfg.remetente  || 'localizafugas@gmail.com');
+  set('cfg-email-replyto',    cfg.replyTo    || 'localizafugas@gmail.com');
+  set('cfg-email-remetente-relatorio', cfg.remetenteRelatorio || 'localizafugas@gmail.com');
   set('cfg-email-tel',        cfg.tel        || '253 000 000');
   set('cfg-email-website',    cfg.website    || 'www.localizafugas.com');
   set('cfg-email-assinatura', cfg.assinatura || 'Com os melhores cumprimentos,\nLocaliza Fugas — Valentim Fialho Unip. Lda.\nTel: 253 000 000\nlocalizafugas@gmail.com');
@@ -18420,6 +18045,8 @@ async function cfgSalvarEmail(){
   const cfg = {
     empresa:           g('cfg-email-empresa'),
     remetente:         g('cfg-email-remetente'),
+    replyTo:           g('cfg-email-replyto'),
+    remetenteRelatorio: g('cfg-email-remetente-relatorio'),
     tel:               g('cfg-email-tel'),
     website:           g('cfg-email-website'),
     assinatura:        g('cfg-email-assinatura'),
@@ -18735,9 +18362,9 @@ async function rpNotificarAlteracaoTecnico(os, rel){
     const cfg = window._emailCfg||{};
     const emp = window._empCfg||{};
     if(cfg.brevoApiKey){
-      const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+      const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
       const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
-      const destino   = emp.email||cfg.remetente||'localizafugas@gmail.com';
+      const destino   = cfg.remetente||emp.email||'localizafugas@gmail.com';
       const assunto   = `✏️ Relatório alterado pelo técnico — OS ${os.id}`;
       const corpo     =
         `O técnico ${tec} alterou o relatório de uma OS já finalizada.\n\n`+
@@ -19970,7 +19597,7 @@ async function agRecSalvar(){
   const nif=document.getElementById('ag-rec-nif').value.trim();
   const srv=(window.DB.servicos||[]).find(x=>x.id===o?.servicoId);
 
-  function getDocType(pay){ return (window.ehFaturaReciboMetodo? window.ehFaturaReciboMetodo(pay) : ['mb','dinheiro','numerario'].includes(pay)) ? 'fatura-recibo' : 'fatura'; }
+  function getDocType(pay){ return (window.ehFaturaReciboMetodo? window.ehFaturaReciboMetodo(pay) : ['mb','dinheiro','numerario','mbway','cheque'].includes(pay)) ? 'fatura-recibo' : 'fatura'; }
 
   // Reutilizar recibo já existente da OS (ex.: pendente criado na baixa de Faturado)
   let reuseId=window._agRecEditId;
@@ -20496,7 +20123,7 @@ function rpPrazoLabel(os){
   if(est==='enviado')    return '<span style="color:var(--green);font-size:12px;">✅ Enviado</span>';
   if(est==='a_realizar') return `<span style="color:#0369a1;font-size:11px;">📅 ${fmtDate(os.data)}</span>`;
   const pay = rel?.pagamento?.metodo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(pay);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(pay);
   if(!pay && !os.concluidoEm) return '<span style="color:var(--text3);font-size:11px;">— aguarda pagamento</span>';
   const dias = rpDiasParaEnvio(os);
   if(dias===null){
@@ -20899,7 +20526,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   const cfg = window._emailCfg||{};
   if(!cfg.brevoApiKey){ if(!auto) toast('Configure a API Key do Brevo em Configurações → Email.','⚠️'); return; }
   const emp = window._empCfg||{};
-  const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+  const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
   const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
 
   // Estado do relatório por OS: "a_realizar", "enviado", ou em elaboração (o resto)
@@ -22006,7 +21633,7 @@ async function rpSalvarRelatorio(){
 // ── Criar recibo automático quando pagamento imediato ────────
 async function rpCriarRecibimentoAutomatico(os, rel){
   const pagMet = rel.pagamento?.metodo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(pagMet);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(pagMet);
   if(!imediato || !pagMet) return;
 
   // Delegar à função central com lock para evitar duplicação
@@ -22674,6 +22301,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
       <div><span style="opacity:.55;">Data: </span><strong>${dataServico}</strong></div>
       <div><span style="opacity:.55;">Horário: </span><strong>${ini||'—'}&nbsp;→&nbsp;${fim||'—'}</strong></div>
       <div><span style="opacity:.55;">Duração: </span><strong>${horasLabel}</strong></div>
+      <div><span style="opacity:.55;">Pagamento: </span><strong style="color:${pagMet?(imediato?'#86efac':'#fde047'):'#fca5a5'};">${pagMet?pagLabel:'Por confirmar'}</strong></div>
       <div style="margin-left:auto;background:${estadoBadge.bg};color:${estadoBadge.c};padding:3px 12px;border-radius:8px;font-weight:700;font-size:10px;white-space:nowrap;">${estadoBadge.txt}</div>
     </div>
 
@@ -23478,7 +23106,7 @@ async function brevoEnviarRelatorio(osId){
   if(!rel.campos){ toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
 
   const empNome  = cfg.empresa  || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
-  const empEmail = cfg.remetente|| 'localizafugas@gmail.com';
+  const empEmail = cfg.remetenteRelatorio|| 'localizafugas@gmail.com';
   const empTel   = cfg.tel      || '253 000 000';
   const tecs     = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
   const [a,m,d]  = (os.data||'').split('-');
@@ -23552,6 +23180,7 @@ async function brevoEnviarRelatorio(osId){
   ];
   const payload = {
     sender:  {name:empNome, email:empEmail},
+    replyTo: {email: cfg.replyTo||'localizafugas@gmail.com', name:empNome},
     to:      [{email:cli.email, name:cli.nome||''}],
     subject: assunto,
     htmlContent: corpoHtmlFinal,
@@ -23815,7 +23444,7 @@ function rpAbrirPagamento(osId){
 
 function rpPagMetodoChange(){
   const met = document.getElementById('rp-pag-metodo')?.value||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met);
   const aviso = document.getElementById('rp-pag-aviso');
   const refWrap = document.getElementById('rp-pag-ref-wrap');
   if(refWrap) refWrap.style.display=['transferencia','cheque'].includes(met)?'block':'none';
@@ -23938,7 +23567,7 @@ function osPagMetodoChange(){
   const sel = document.getElementById('os-pag-metodo');
   const selOpt = sel?.options[sel.selectedIndex];
   const tipoExtra = selOpt?.dataset?.tipo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const refWrap = document.getElementById('os-pag-ref-wrap');
   const ind = document.getElementById('os-pag-indicador');
   const luz = document.getElementById('os-pag-luz');
@@ -23970,7 +23599,7 @@ async function osConfirmarPagamentoOS(){
   const sel = document.getElementById('os-pag-metodo');
   const selOpt = sel?.options[sel?.selectedIndex];
   const tipoExtra = selOpt?.dataset?.tipo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const data = document.getElementById('os-pag-data-os')?.value||today();
   const ref  = document.getElementById('os-pag-ref')?.value||'';
   const obs  = document.getElementById('os-pag-obs')?.value||'';
@@ -24040,7 +23669,7 @@ async function osCriarReciboAutomatico(os, statusArg){
     const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
     const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
     const pagMet = os.pagamento?.metodo || os.metodoPagamento || '';
-    const docType = ['mb','mbway','dinheiro','cheque'].includes(pagMet)?'fatura-recibo':pagMet==='entidade'?'recibo':pagMet?'fatura':'fatura-recibo';
+    const docType = ['mb','mbway','dinheiro','cheque'].includes(pagMet)?'fatura-recibo':pagMet?'fatura':'fatura-recibo';
     const recibo={
       id:recId, client:cli.nome||'—', nif:cli.nif||'',
       service:srv.nome||'', date:os.pagamento?.data||os.data||today(),
@@ -24373,7 +24002,7 @@ function osCalcHorasConc(){
   const sel=document.getElementById('os-conc-pag-met');
   const selOpt=sel?.options[sel?.selectedIndex];
   const tipoExtra=selOpt?.dataset?.tipo||'';
-  const imediato=['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const resEl=document.getElementById('os-conc-horas-res');
   const finEl=document.getElementById('os-conc-financeiro');
   const refWrap=document.getElementById('os-conc-pag-ref-wrap');
@@ -24526,7 +24155,7 @@ async function osConcluirComAssinaturas(){
   const sel=document.getElementById('os-conc-pag-met');
   const selOpt=sel?.options[sel?.selectedIndex];
   const tipoExtra=selOpt?.dataset?.tipo||'';
-  const imediato=['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência Bancária',cheque:'Cheque',entidade:'Entidade Pagadora'}[met]||selOpt?.textContent||met;
   let netCalc=parseFloat(os.net||0), ivaCalcV=parseFloat(os.ivaVal||0), totalCalc=parseFloat(os.total||0), hAddCalc=parseFloat(os.haddN||0);
   if(ini&&fim){
@@ -29014,8 +28643,9 @@ async function propostaEnviarLivre(){
 
   if(cfg.brevoApiKey){
     const emp=window._empCfg||{};
-    const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+    const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
     const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
+    const replyToEmail = cfg.replyTo||'localizafugas@gmail.com';
     // Cópia interna por BCC para o email da empresa (oculta ao cliente)
     const bccList = (emailCopiaEmpresa && emailCopiaEmpresa!==emailDest)
       ? [{email:emailCopiaEmpresa, name:'Localiza Fugas'}] : [];
@@ -29024,6 +28654,7 @@ async function propostaEnviarLivre(){
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
           sender:{name:nomeRem, email:remetente},
+          replyTo:{email:replyToEmail, name:nomeRem},
           to:[{email:emailDest,name:nome}],
           ...(bccList.length ? {bcc:bccList} : {}),
           subject:assunto,
@@ -29136,7 +28767,7 @@ async function propostaEnviarRascunho(propId){
   const ivaVal=net*iva/100; const total=net+ivaVal;
   const empresa2=emp.nome||cfg.empresa||'Localiza Fugas';
   const tel2=emp.tel||cfg.tel||'931 747 199';
-  const emailEmp2=emp.email||cfg.remetente||'localizafugas@gmail.com';
+  const emailEmp2=cfg.remetente||emp.email||'localizafugas@gmail.com';
   const assinatura=cfg.assinatura||`Com os melhores cumprimentos,\n${empresa2}\nTel: ${tel2}\n${emailEmp2}`;
   const valStr=p.validade?new Date(p.validade+'T00:00').toLocaleDateString('pt-PT',{day:'2-digit',month:'long',year:'numeric'}):'30 dias';
   const _tabR=propostaLinhasPreco(p.tipoCobranca||'hora',h1,hadd,horas,iva,p.corteMetros||0);
@@ -29158,11 +28789,12 @@ async function propostaEnviarRascunho(propId){
       }
   }catch(e){ console.warn('PDF err:',e); }
   if(cfg.brevoApiKey){
-    const remetente=emp.email||cfg.remetente||'localizafugas@gmail.com';
+    const remetente=cfg.remetente||emp.email||'localizafugas@gmail.com';
     const nomeRem=emp.nome||cfg.empresa||'Localiza Fugas';
+    const replyToEmail=cfg.replyTo||'localizafugas@gmail.com';
     const _bccEmp = (p.email!=='localizafugas@gmail.com') ? [{email:'localizafugas@gmail.com',name:'Localiza Fugas'}] : [];
     try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
+      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},replyTo:{email:replyToEmail,name:nomeRem},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
       if(r.ok||r.status===201){
         toast('Proposta enviada ✅'+(pdfAnexo?' + PDF em anexo':''),'📋');
         await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});

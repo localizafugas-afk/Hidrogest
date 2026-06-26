@@ -1813,7 +1813,6 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <button class="tec-fchip" data-f="em_curso"  onclick="tecSetFiltro('em_curso',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">🔧 Em curso</button>
     <button class="tec-fchip" data-f="fechadas"  onclick="tecSetFiltro('fechadas',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">✅ Concluídas</button>
     <button class="tec-fchip" data-f="falta_rel" onclick="tecSetFiltro('falta_rel',this)" style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #fecaca;background:#fff;color:#b91c1c;font-weight:700;font-size:13px;cursor:pointer;">📄 Falta relatório</button>
-    <button class="tec-fchip" data-f="nao_realizada" onclick="tecSetFiltro('nao_realizada',this)" style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">❌ Não realizadas</button>
   </div>
   <input class="fi" id="tec-search" placeholder="🔍 Procurar OS por cliente ou nº…" oninput="osRenderMinhas()" style="width:100%;font-size:13px;">
   <input type="hidden" id="tec-filter-estado" value="hoje">
@@ -12067,12 +12066,22 @@ function osAbrirDetalhe(id){
           <div style="font-weight:700;font-size:14px;color:${o.horaFimReal?'#15803d':o.horaIniReal?'#92400e':'#1e293b'};">Terminar trabalho e calcular valor</div>
           ${o.horaFimReal?`<span style="margin-left:auto;font-size:12px;color:#16a34a;font-weight:600;">Terminado às ${o.horaFimReal}</span>`:''}
         </div>
-        ${o.estado!=='concluida'?`
+        ${o.estado!=='concluida' && window.currentUser?.role==='tecnico' ? (
+          o.horaIniReal && !o.horaFimReal ? `
+        <div style="padding:14px;text-align:center;">
+          <div id="os-live-timer" class="os-timer-display" style="font-size:30px;">00:00:00</div>
+          <div style="font-size:11px;color:#92400e;margin:4px 0 12px;">⏱ A contar desde as ${o.horaIniReal} — continua até decidires terminar</div>
+          <button class="btn btn-primary" style="width:100%;background:#dc2626;" onclick="osTerminarTrabalhoDecidir('${id}')">⏹ Terminar trabalho</button>
+        </div>` : `
+        <div style="padding:12px 14px;">
+          <span style="color:var(--text3);font-size:12px;">Inicia o trabalho no Passo 1 para começar a contar o tempo.</span>
+        </div>`
+        ) : o.estado!=='concluida'?`
         <div style="padding:12px 14px;">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
             <label style="font-size:12px;color:#64748b;min-width:80px;">Hora fim</label>
-            <input type="time" id="os-hora-fim-real" class="fi" value="${o.horaFimReal||o.horaFim||''}" style="width:110px;font-size:15px;font-weight:700;" oninput="osCalcPreview('${id}')"${window.currentUser?.role==='tecnico'?' readonly':''}>
-            ${window.currentUser?.role==='tecnico'?'':`<button onclick="document.getElementById('os-hora-fim-real').value=new Date().toTimeString().slice(0,5);osCalcPreview('${id}')" class="btn btn-ghost btn-sm">🕐 Agora</button>`}
+            <input type="time" id="os-hora-fim-real" class="fi" value="${o.horaFimReal||o.horaFim||''}" style="width:110px;font-size:15px;font-weight:700;" oninput="osCalcPreview('${id}')">
+            <button onclick="document.getElementById('os-hora-fim-real').value=new Date().toTimeString().slice(0,5);osCalcPreview('${id}')" class="btn btn-ghost btn-sm">🕐 Agora</button>
           </div>
           <div id="os-calc-preview" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;min-height:36px;">
             ${(()=>{
@@ -12198,6 +12207,22 @@ function osAbrirDetalhe(id){
     `}
   `;
   openMo('mo-os-tec');
+  // Temporizador ao vivo (Passo 3) — só corre quando o trabalho está em curso
+  // e ainda não há hora de fim registada (ainda não decidiu "agora"/"depois").
+  if(window._osLiveTimerInterval){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; }
+  if(o.estado==='em_curso' && o.horaIniReal && !o.horaFimReal){
+    const _tick=()=>{
+      const el=document.getElementById('os-live-timer');
+      if(!el){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; return; }
+      const [ih,im]=o.horaIniReal.split(':').map(Number);
+      const ini=new Date(); ini.setHours(ih,im,0,0);
+      let s=Math.floor((Date.now()-ini.getTime())/1000); if(s<0) s=0;
+      const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
+      el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
+    };
+    _tick();
+    window._osLiveTimerInterval=setInterval(_tick,1000);
+  }
   // Footer com botão de proposta
   const footer=document.getElementById('mo-os-tec-footer');
   const _osCli=(window.DB.ordens||[]).find(x=>x.id===id)?.clienteId||null;
@@ -13178,8 +13203,12 @@ function osRenderMinhas(){
   try{ tecRenderMinhasDespesas(); }catch(e){ console.warn('tecRenderMinhasDespesas falhou:', e); }
 
   // Base: todas as OS do técnico (exceto canceladas)
+  // OS agendadas cuja data já passou e nunca foram atendidas saem da agenda do
+  // técnico — a remarcação passa a ser responsabilidade do comercial (visível
+  // normalmente na agenda do admin, que não tem este filtro).
   let minhas=(window.DB.ordens||[])
     .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada')
+    .filter(o=>!(o.estado==='agendada' && o.data && o.data<hoje))
     .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
 
   if(q){
@@ -13209,15 +13238,15 @@ function osRenderMinhas(){
     minhas = minhas.filter(o=>o.estado==='concluida');
   } else if(filtro==='agendada'){
     // Agendadas — agrupadas por dia (a ordenação ascendente já garante por dia)
-    // Só mostra os próximos 3 dias; as agendadas com data já passada (que
-    // nunca foram atendidas) saem daqui e só aparecem em "❌ Não realizadas".
-    const limite3d = new Date(); limite3d.setDate(limite3d.getDate()+3);
-    const limite3dStr = limite3d.toISOString().slice(0,10);
-    minhas = minhas.filter(o=>o.estado==='agendada' && o.data>=hoje && o.data<=limite3dStr);
+    // Mostra os próximos 7 dias (uma semana). As agendadas com data já passada
+    // já saíram da base (ver acima) — são remarcadas pelo comercial.
+    const limite7d = new Date(); limite7d.setDate(limite7d.getDate()+7);
+    const limite7dStr = limite7d.toISOString().slice(0,10);
+    minhas = minhas.filter(o=>o.estado==='agendada' && o.data>=hoje && o.data<=limite7dStr);
   } else if(filtro==='nao_realizada'){
-    // OS que ficaram agendadas para uma data já passada e nunca foram
-    // marcadas como em curso/concluídas — provavelmente não foram atendidas.
-    minhas = minhas.filter(o=>o.estado==='agendada' && o.data && o.data<hoje);
+    // Já não há OS não realizadas na agenda do técnico (saem da base) — filtro mantido
+    // apenas por compatibilidade, fica sempre vazio.
+    minhas = minhas.filter(o=>false);
   } else if(filtro==='em_curso'){
     minhas = minhas.filter(o=>o.estado==='em_curso');
   } else if(filtro==='hoje'){
@@ -17830,7 +17859,7 @@ function openMo(id){
     el.scrollTop=0;
   },30);
 }
-function closeMo(id){document.getElementById(id).classList.remove('open');}
+function closeMo(id){document.getElementById(id).classList.remove('open'); if(id==='mo-os-tec' && window._osLiveTimerInterval){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; }}
 function showToast(msg,ico='✅'){toast(msg,ico);}
 function toast(msg,ico='✅'){
   const t=document.getElementById('toast');
@@ -21875,7 +21904,6 @@ async function rpSalvarRelatorio(){
   if(_alteracaoTecnico){ rpNotificarAlteracaoTecnico(os, rel).catch(()=>{}); }
 
   if(isNew){
-    try{ await rpCriarRecibimentoAutomatico(os, rel); }catch(e){ console.warn('recibo auto falhou:',e); }
     try{ rpNotificarEquipa(os, rel); }catch(e){}
     try{ await rpNotificarSupervisoresRelatorio(os, rel); }catch(e){ console.warn('notif supervisores falhou:',e); }
   }
@@ -24165,6 +24193,21 @@ async function osGuardarHoras(osId){
   osAbrirDetalhe(osId);
 }
 
+// ── Terminar trabalho: decidir se o relatório é feito AGORA ou DEPOIS ──
+// AGORA: o tempo continua a contar (a OS fica em_curso) até o técnico
+// concluir o relatório e fechar a OS com assinaturas — a hora de fim real
+// só é fixada nesse momento (ver osConcluirComAssinaturas).
+// DEPOIS: fixa-se a hora de fim JÁ e a OS fecha sem relatório (5 dias para entregar).
+function osTerminarTrabalhoDecidir(id){
+  const agora = confirm('Vais fazer o relatório AGORA?\n\nOK — Sim, agora (o tempo continua a contar até concluíres o relatório e fechares a OS)\nCancelar — Não, mais tarde (a OS fecha já com o tempo até este momento; tens 5 dias para entregar o relatório)');
+  if(agora){
+    toast('⏱ A continuar a contar — preenche o relatório e depois recolhe as assinaturas para fechar a OS.','✅',6000);
+    osAbrirDetalhe(id);
+  } else {
+    osFecharSemRelatorio(id);
+  }
+}
+
 // ── Abrir modal concluir OS ──────────────────────────────────
 // Fechar OS sem fechar o relatório — fica cinza na agenda, relatório pode ser completado depois
 async function osFecharSemRelatorio(osId){
@@ -24489,7 +24532,9 @@ async function osConcluirComAssinaturas(){
   // A correção de horas é exclusiva do admin/gerente/supervisor.
   const _ehTecnico = window.currentUser?.role==='tecnico';
   const ini=_ehTecnico ? (os.horaIniReal||os.horaIni||'') : (document.getElementById('os-conc-hora-ini')?.value||os.horaIni||'');
-  const fim=_ehTecnico ? (os.horaFimReal||os.horaFim||'') : (document.getElementById('os-conc-hora-fim')?.value||os.horaFim||'');
+  // Se o técnico escolheu fazer o relatório AGORA, a hora de fim real ainda não
+  // foi fixada (o cronómetro continuou a contar) — fixa-se neste preciso momento.
+  const fim=_ehTecnico ? (os.horaFimReal||new Date().toTimeString().slice(0,5)) : (document.getElementById('os-conc-hora-fim')?.value||os.horaFim||'');
   const met=document.getElementById('os-conc-pag-met')?.value||'';
   const ref=document.getElementById('os-conc-pag-ref')?.value||'';
   const sel=document.getElementById('os-conc-pag-met');
@@ -24512,6 +24557,13 @@ async function osConcluirComAssinaturas(){
   }
 
   const naoFat = osServicoNaoFaturavel(os);
+  // ── Modalidade de pagamento é obrigatória para fechar (serviços faturáveis) ──
+  if(!naoFat && !met){
+    toast('⚠️ Selecione a modalidade de pagamento antes de concluir a OS.','⚠️',6000);
+    document.getElementById('os-conc-pag-met')?.scrollIntoView({behavior:'smooth',block:'center'});
+    document.getElementById('os-conc-pag-met')?.focus();
+    return;
+  }
   const pagamento = (met && !naoFat) ?{ metodo:met, ref, imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id }:(naoFat?null:(os.pagamento||null));
 
   const updated={

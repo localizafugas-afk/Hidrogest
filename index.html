@@ -77,7 +77,7 @@ window.DB = {
   administradoras: [],
   nextRec: 1, nextDesp: 1, nextUser: 6, nextFunc: 6,
   nextOS: 1, nextCli: 1,
-  ordens_compra: [], produtos: [], fornecedores: [], _pedidosAut: [], emailConfig: null, empresaConfig: null, arquivo_morto: [], ferias: [], propostas: []
+  ordens_compra: [], produtos: [], fornecedores: [], _pedidosAut: [], emailConfig: null, empresaConfig: null, arquivo_morto: [], ferias: [], propostas: [], propostaModelosCustom: {}
 };
 
 // ─── Helper: ler contadores ───────────────────────────────────
@@ -313,7 +313,6 @@ function onDataChange() {
     if(id==='faturas-desp')  fdRender();
     if(id==='funcionarios')  renderFuncionarios();
     if(id==='comissoes')     renderComissoes();
-    if(id==='minha-comissao') tecRenderMinhaComissao();
     if(id==='relatorios')    renderReports();
     if(id==='utilizadores')  renderUsers();
     if(id==='agenda-os')     { osRenderAgenda(); agRenderRecebimentos(); }
@@ -402,6 +401,7 @@ async function boot() {
   try {
     document.getElementById('loading-screen').style.display='flex';
     await loadMeta();
+    propostaAplicarCustomizacoes();
     await seedIfEmpty();
     attachListeners();
     // Aguardar que os listeners carreguem os dados (máx 5s)
@@ -1292,12 +1292,6 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <div id="comm-list"></div>
     </div>
 
-    <!-- MINHA COMISSÃO (técnico) -->
-    <div class="page" id="page-minha-comissao">
-      <div class="sh"><div class="sh-title">💎 Minha Comissão</div></div>
-      <div id="minha-comm-card"></div>
-    </div>
-
     <!-- RELATÓRIOS -->
     <div class="page" id="page-relatorios">
       <div class="sh">
@@ -1841,14 +1835,6 @@ tr:hover td{background:rgba(37,99,235,.03);}
   </div>
   <!-- Resumo rápido do dia -->
   <div id="tec-resumo-dia" style="padding:0 0 8px;"></div>
-  <!-- Botão para o ecrã das Despesas (a lista foi movida para um ecrã próprio) -->
-  <button id="tec-despesas-btn" onclick="navigate('tec-despesas')"
-    style="width:100%;margin-bottom:14px;padding:12px 14px;background:#faf5ff;border:1.5px solid #c4b5fd;border-radius:12px;display:flex;align-items:center;gap:10px;cursor:pointer;font-family:inherit;">
-    <span style="font-size:18px;">🧾</span>
-    <span style="font-weight:700;font-size:14px;color:#6d28d9;">Minhas despesas</span>
-    <span id="tec-desp-badge" style="margin-left:auto;display:flex;gap:6px;align-items:center;"></span>
-    <span style="color:#a78bfa;font-size:18px;font-weight:700;">›</span>
-  </button>
   <div id="os-minhas-list"></div>
 </div>
 
@@ -2082,14 +2068,13 @@ tr:hover td{background:rgba(37,99,235,.03);}
   <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px;flex-wrap:wrap;min-width:600px;">
     <button class="cfg-tab active" onclick="cfgTab('utilizadores',this)">👤 Utilizadores</button>
     <button class="cfg-tab" onclick="cfgTab('funcionarios',this)">👷 Funcionários</button>
-    <button class="cfg-tab" onclick="cfgTab('servicos',this)">🔧 Serviços</button>
     <button class="cfg-tab" onclick="cfgTab('email',this)">📧 Email</button>
     <button class="cfg-tab" onclick="cfgTab('empresa',this)">🏢 Empresa Peritagem</button>
     <button class="cfg-tab" onclick="cfgTab('metodos-pag',this)">💳 Métodos Pagamento</button>
     <button class="cfg-tab" onclick="cfgTab('tipos-despesa',this)">🧾 Tipos de Despesa</button>
     <button class="cfg-tab" onclick="cfgTab('testes-relatorio',this)">🔬 Testes Relatório</button>
     <button class="cfg-tab" onclick="cfgTab('equipamentos-relatorio',this)">🛠️ Equipamentos</button>
-    <button class="cfg-tab" onclick="cfgTab('moloni',this)">🧾 Moloni</button>
+    <button class="cfg-tab" onclick="cfgTab('modelos-proposta',this)">📝 Modelos de Proposta</button>
     <button class="cfg-tab" id="cfg-tab-btn-manutencao" onclick="cfgTab('manutencao',this)" style="display:none;">🗑 Manutenção</button>
   </div>
 
@@ -2113,17 +2098,6 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="tw"><table><thead><tr>
       <th>Nome</th><th>Email</th><th>Telefone</th><th>Morada</th><th>Função</th><th>Salário Bruto</th><th>Acções</th>
     </tr></thead><tbody id="cfg-func-tbody"></tbody></table></div>
-  </div>
-
-  <!-- TAB: SERVIÇOS -->
-  <div id="cfg-tab-servicos" style="display:none;min-width:600px;">
-    <div class="sh">
-      <div class="sh-title">Serviços e Preços</div>
-      <button class="btn btn-primary btn-sm" onclick="cfgOpenSrv()">+ Novo Serviço</button>
-    </div>
-    <div class="tw"><table><thead><tr>
-      <th>Serviço</th><th>Unidade</th><th>1ª Hora (€ s/IVA)</th><th>Hora adicional (€ s/IVA)</th><th>IVA</th><th>Total 1h c/IVA</th><th>Tempo</th><th>Acções</th>
-    </tr></thead><tbody id="cfg-srv-tbody"></tbody></table></div>
   </div>
 
   <!-- TAB: EMAIL -->
@@ -2260,19 +2234,27 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <!-- Dados empresa para emails -->
     <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;">
       <div style="font-size:13px;font-weight:800;color:#1e3a5f;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">🏢 Dados da empresa nos emails</div>
-      <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#065f46;">
-        ✅ <strong>Remetente fixo:</strong> todos os emails são enviados sempre como <strong>localizafugas@gmail.com</strong>, independentemente de quem fez o agendamento.
+      <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;">
+        ⚠️ <strong>Importante:</strong> enviar emails "como" localizafugas@gmail.com através de um serviço externo (Brevo) faz com que o Gmail/Outlook dos clientes mostrem um aviso de "email perigoso" — porque só os servidores do próprio Gmail estão autorizados a enviar como @gmail.com. A solução é configurar um endereço de um domínio que controles (ex: propostas@hidrogest.net) como remetente verificado no Brevo. As respostas continuam a chegar ao teu Gmail (ver "Responder para" abaixo). Podes usar remetentes diferentes para Propostas e para Relatórios, se preferires.
       </div>
       <div class="fgrid">
-        <div class="fg"><label>Email remetente <span style="font-size:10px;color:var(--text3);">(aparece nos emails)</span></label>
-          <input class="fi" type="email" id="cfg-email-remetente" placeholder="localizafugas@gmail.com" value="localizafugas@gmail.com" readonly style="background:var(--s2);color:var(--text2);">
-          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Fixo — configurado via EmailJS ou Gmail web</div>
+        <div class="fg"><label>Email remetente — Propostas <span style="font-size:10px;color:var(--text3);">(precisa de estar verificado no Brevo)</span></label>
+          <input class="fi" type="email" id="cfg-email-remetente" placeholder="propostas@hidrogest.net">
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Domínio próprio recomendado — evita o aviso de "email perigoso"</div>
+        </div>
+        <div class="fg"><label>Email remetente — Relatórios <span style="font-size:10px;color:var(--text3);">(precisa de estar verificado no Brevo)</span></label>
+          <input class="fi" type="email" id="cfg-email-remetente-relatorio" placeholder="relatorios@hidrogest.net">
+          <div style="font-size:10px;color:var(--text3);margin-top:3px;">Pode ser diferente do remetente das Propostas</div>
+        </div>
+        <div class="fg"><label>Responder para <span style="font-size:10px;color:var(--text3);">(onde chegam as respostas, para ambos)</span></label>
+          <input class="fi" type="email" id="cfg-email-replyto" placeholder="localizafugas@gmail.com">
         </div>
         <div class="fg"><label>Telefone</label>
           <input class="fi" id="cfg-email-tel" placeholder="253 000 000">
         </div>
         <div class="fg"><label>Nome empresa</label>
           <input class="fi" id="cfg-email-empresa" placeholder="Localiza Fugas — Valentim Fialho Unip. Lda.">
+        </div>
         </div>
         <div class="fg"><label>Website</label>
           <input class="fi" id="cfg-email-website" placeholder="www.localizafugas.com">
@@ -2567,86 +2549,49 @@ Localiza Fugas
   </div>
 
 
-  <!-- ABA: MOLONI FATURAÇÃO -->
-  <div id="cfg-tab-moloni" style="display:none;min-width:600px;">
+  <!-- ABA: MODELOS DE PROPOSTA -->
+  <div id="cfg-tab-modelos-proposta" style="display:none;min-width:600px;">
     <div class="sh">
-      <div class="sh-title">🧾 Integração Moloni</div>
+      <div class="sh-title">📝 Modelos de Proposta</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="moloniTestarLigacao()">🔗 Testar ligação</button>
-        <button class="btn btn-primary btn-sm" onclick="cfgSalvarMoloni()">💾 Guardar</button>
+        <button class="btn btn-ghost btn-sm" onclick="cfgRestaurarModeloProposta()">↺ Restaurar original</button>
+        <button class="btn btn-primary btn-sm" onclick="cfgGuardarModeloProposta()">💾 Guardar</button>
       </div>
     </div>
-
-    <!-- Guia de credenciais -->
-    <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:10px;padding:16px 18px;margin-bottom:20px;">
-      <div style="font-size:13px;font-weight:800;color:#1e40af;margin-bottom:8px;">📋 Como obter as credenciais Moloni</div>
-      <ol style="font-size:12px;color:#1e40af;margin:0;padding-left:18px;line-height:2;">
-        <li>Aceda ao <strong>Moloni</strong> → <strong>Configurações</strong> → <strong>API</strong></li>
-        <li>Clique em <strong>"Criar nova aplicação"</strong></li>
-        <li>Copie o <strong>Client ID</strong> e <strong>Client Secret</strong></li>
-        <li>O <strong>Username</strong> e <strong>Password</strong> são os mesmos do login Moloni</li>
-        <li>O <strong>Company ID</strong> encontra-se em <strong>Configurações → Empresa</strong></li>
-      </ol>
-      <div style="margin-top:10px;font-size:11px;color:#3b82f6;">
-        🔗 <a href="https://www.moloni.pt/dev/api/" target="_blank" style="color:#1d4ed8;">Documentação oficial da API Moloni</a>
-      </div>
+    <div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--text2);line-height:1.6;">
+      ℹ️ Estes textos são usados automaticamente ao gerar uma proposta para o serviço selecionado (introdução, descrição do serviço, procedimento e condições gerais). Alterações ficam guardadas no sistema — não é necessário tocar no código.
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-      <div class="fg">
-        <label>Client ID <span style="font-size:10px;color:var(--text3);">da aplicação API</span></label>
-        <input class="fi" id="moloni-client-id" type="text" placeholder="Ex: 12345" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Client Secret <span style="font-size:10px;color:var(--text3);">da aplicação API</span></label>
-        <input class="fi" id="moloni-client-secret" type="password" placeholder="Ex: abc123xyz..." autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Username <span style="font-size:10px;color:var(--text3);">email de login</span></label>
-        <input class="fi" id="moloni-username" type="text" placeholder="Ex: geral@localizafugas.pt" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Password <span style="font-size:10px;color:var(--text3);">senha de login</span></label>
-        <input class="fi" id="moloni-password" type="password" placeholder="Senha do Moloni" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Company ID / Slug <span style="font-size:10px;color:var(--text3);">ID numérico (272330) ou slug</span></label>
-        <input class="fi" id="moloni-company-id" type="text" placeholder="Ex: valentimfialhouniplda ou 272330" value="272330" autocomplete="off">
-      </div>
-      <div class="fg">
-        <label>Série de documentos <span style="font-size:10px;color:var(--text3);">ex: FR, FT, FS</span></label>
-        <input class="fi" id="moloni-serie" type="text" placeholder="Ex: 2026" value="2026">
-      </div>
+    <div class="fg" style="max-width:480px;">
+      <label>Serviço</label>
+      <select class="fs" id="mp-select" onchange="cfgCarregarModeloProposta(this.value)"></select>
+      <div id="mp-aliases" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
     </div>
 
-    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:16px;">
-      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:12px;">⚙️ Comportamento automático</div>
-      <div style="display:flex;flex-direction:column;gap:10px;">
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-auto-fatura" style="width:16px;height:16px;accent-color:var(--accent);">
-          <div>
-            <div style="font-weight:600;">Criar fatura automaticamente quando OS é fechada</div>
-            <div style="font-size:11px;color:var(--text3);">Cria rascunho de fatura no Moloni assim que o técnico fecha a OS</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-auto-cliente" style="width:16px;height:16px;accent-color:var(--accent);">
-          <div>
-            <div style="font-weight:600;">Criar/sincronizar cliente no Moloni</div>
-            <div style="font-size:11px;color:var(--text3);">Se o cliente ainda não existir no Moloni, cria automaticamente</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:center;gap:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="moloni-notif-baixa" style="width:16px;height:16px;accent-color:var(--accent);" checked>
-          <div>
-            <div style="font-weight:600;">Mostrar botão "Criar no Moloni" no painel de faturação</div>
-            <div style="font-size:11px;color:var(--text3);">Botão manual para criar a fatura quando desejar</div>
-          </div>
-        </label>
-      </div>
+    <div class="fg">
+      <label>Introdução</label>
+      <textarea class="fi" id="mp-intro" rows="4" style="font-family:inherit;resize:vertical;"></textarea>
     </div>
 
-    <div id="moloni-status" style="font-size:13px;color:var(--text3);padding:8px 0;min-height:24px;"></div>
+    <div class="fg">
+      <label>Procedimento <span style="font-size:10px;color:var(--text3);">(passo a passo — opcional, alguns serviços não usam este campo)</span></label>
+      <textarea class="fi" id="mp-procedimento" rows="5" style="font-family:inherit;resize:vertical;"></textarea>
+    </div>
+
+    <div class="fg">
+      <label>Descrição do Serviço</label>
+      <textarea class="fi" id="mp-descritivo" rows="10" style="font-family:inherit;resize:vertical;"></textarea>
+    </div>
+
+    <div class="fg">
+      <label>Condições Gerais</label>
+      <textarea class="fi" id="mp-obs" rows="10" style="font-family:inherit;resize:vertical;"></textarea>
+    </div>
+
+    <div class="fg">
+      <label>Condições (resumo — lista curta) <span style="font-size:10px;color:var(--text3);">uma condição por linha</span></label>
+      <textarea class="fi" id="mp-condicoes" rows="5" style="font-family:inherit;resize:vertical;"></textarea>
+    </div>
   </div>
 
 </div><!-- end cfg-inner -->
@@ -2834,7 +2779,7 @@ Localiza Fugas
             <label>Nome / Empresa *</label>
             <input class="fi" id="nc-nome" placeholder="Nome completo ou razão social">
           </div>
-          <div class="fg"><label>NIF</label><input class="fi" id="nc-nif" placeholder="000 000 000" inputmode="numeric"></div>
+          <div class="fg"><label>NIF</label><input class="fi" id="nc-nif" placeholder="000 000 000" inputmode="numeric" oninput="osDetectarCondominioPorNif('nc')"></div>
           <div class="fg"><label>Telefone *</label><input class="fi" id="nc-tel" placeholder="+351 900 000 000" inputmode="tel"></div>
           <div class="fg"><label>Email</label><input class="fi" type="email" id="nc-email" placeholder="cliente@email.pt"></div>
           <div class="fg"><label>Cód. Postal</label><input class="fi" id="nc-cp" placeholder="0000-000"></div>
@@ -3206,7 +3151,7 @@ Localiza Fugas
       <div class="fsec">👤 Cliente (quem solicitou o serviço)</div>
       <div class="fgrid">
         <div class="fg"><label>Nome completo / Empresa *</label><input class="fi" id="cli-nome" placeholder="Nome ou empresa"></div>
-        <div class="fg"><label>NIF / Contribuinte</label><input class="fi" id="cli-nif" placeholder="000 000 000"></div>
+        <div class="fg"><label>NIF / Contribuinte</label><input class="fi" id="cli-nif" placeholder="000 000 000" oninput="osDetectarCondominioPorNif('cli')"></div>
         <div class="fg"><label>Email *</label><input class="fi" type="email" id="cli-email" placeholder="cliente@email.com"></div>
         <div class="fg"><label>Telefone</label><input class="fi" id="cli-tel" placeholder="+351 900 000 000"></div>
       </div>
@@ -4410,7 +4355,7 @@ function rpPendentesCount(){
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
       if(rel?.estado==='enviado') return false;
       const pay=rel?.pagamento?.metodo||'';
-      const imediato=['mb','mbway','dinheiro'].includes(pay);
+      const imediato=['mb','mbway','dinheiro','cheque'].includes(pay);
       let dataBase=null;
       if(imediato||!pay) dataBase=os.concluidoEm?os.concluidoEm.slice(0,10):os.data;
       else dataBase=rel?.pagamento?.data||null;
@@ -4431,11 +4376,12 @@ function renderSidebar(){
   // Técnico — só vê as suas OS
   if(r==='tecnico'){
     nav+=`<div class="nav-group">Trabalho</div>`;
-    nav+=`<div class="ni" data-page="minhas-os" onclick="navigate('minhas-os',this)"><span class="ico">🔧</span> Minhas OS${osPend>0?`<span class="nb">${osPend}</span>`:''}</div>`;
+    const osPendTec=(window.DB.ordens||[]).filter(o=>o.estado==='agendada' && (o.tecnicos||[]).includes(window.currentUser.id)).length;
+    nav+=`<div class="ni" data-page="minhas-os" onclick="navigate('minhas-os',this)"><span class="ico">🔧</span> Minhas OS${osPendTec>0?`<span class="nb">${osPendTec}</span>`:''}</div>`;
     const relPendTec=rpPendentesCount();
     nav+=`<div class="ni" data-page="relat-pesquisa" onclick="navigate('relat-pesquisa',this)"><span class="ico">📄</span> Relatórios OS${relPendTec>0?`<span class="nb">${relPendTec}</span>`:''}</div>`;
-    nav+=`<div class="ni" data-page="tec-despesas" onclick="navigate('tec-despesas',this)"><span class="ico">🧾</span> Despesas</div>`;
-    nav+=`<div class="ni" data-page="minha-comissao" onclick="navigate('minha-comissao',this)"><span class="ico">💎</span> Minha Comissão</div>`;
+    const despPendTec=getVisibleDespesas().filter(d=>!d._eliminado && d.status!=='eliminado' && !d._arquivado && !d.adminVerificado).length;
+    nav+=`<div class="ni" data-page="tec-despesas" onclick="navigate('tec-despesas',this)"><span class="ico">🧾</span> Despesas${despPendTec>0?`<span class="nb">${despPendTec}</span>`:''}</div>`;
   }
   // Comercial, gerente, admin
   if(r==='comercial'||r==='gerente'||r==='admin'||r==='supervisor'){
@@ -4580,7 +4526,7 @@ function navigate(page,el){
   else { const ni=document.querySelector(`[data-page="${page}"]`); if(ni) ni.classList.add('active'); }
   const titles={
     dashboard:'Dashboard',recebimentos:'Recebimentos',despesas:'Despesas',
-    funcionarios:'Funcionários',comissoes:'Comissões','minha-comissao':'Minha Comissão',relatorios:'Relatórios',utilizadores:'Utilizadores',
+    funcionarios:'Funcionários',comissoes:'Comissões',relatorios:'Relatórios',utilizadores:'Utilizadores',
     'agenda-os':'Agenda de OS','lista-os':'Lista de OS','clientes-os':'Clientes','prop-calendario':'Propostas',
     'minhas-os':'Minhas Ordens','servicos-cfg':'Serviços e Preços',
     'tec-despesas':'Minhas Despesas',
@@ -4597,7 +4543,6 @@ function navigate(page,el){
   if(page==='faturas-desp') fdRender();
   if(page==='funcionarios') renderFuncionarios();
   if(page==='comissoes')    renderComissoes();
-  if(page==='minha-comissao') tecRenderMinhaComissao();
   if(page==='relatorios'){
     _repDiasEspecificos = []; // reset dias específicos
     repPeriodoRapido('mes'); // iniciar com mês actual
@@ -4680,7 +4625,6 @@ function dashRenderPainelRelatorios(container){
   const pendentes = ordens
     .filter(o=>{
       const r = rels.find(x=>x.id===o.id);
-      if(r?.relatorioEstado==='definitivo') return false; // fechado pelo admin — não conta como pendente
       const est = r ? (r.estado||'rascunho') : 'a_realizar';
       return est !== 'enviado';
     })
@@ -4764,12 +4708,8 @@ function tecRenderBriefingRelatorios(){
   const pendentes = ordens
     .filter(o=>{
       const r = rels.find(x=>x.id===o.id);
-      if(r?.relatorioEstado==='definitivo') return false; // fechado pelo admin — não conta como pendente
       const est = r ? (r.estado||'rascunho') : 'a_realizar';
-      // 'pronto' = o técnico já preencheu e entregou o seu lado; o que falta
-      // a partir daqui (enviar ao cliente) é responsabilidade do escritório,
-      // não deve continuar a aparecer como "atraso" para o técnico.
-      return est !== 'enviado' && est !== 'pronto';
+      return est !== 'enviado';
     })
     .map(o=>{
       const r = rels.find(x=>x.id===o.id);
@@ -4894,7 +4834,7 @@ function renderDashboard(){
   const totNet=paid.reduce((a,r)=>a+r.net,0);
   const totIVA=paid.reduce((a,r)=>a+r.iva,0);
   const totGross=paid.reduce((a,r)=>a+r.total,0);
-  const despTotal=window.DB.despesas.reduce((a,d)=>a+(_fN(d.gross)),0);
+  const despTotal=getVisibleDespesas().reduce((a,d)=>a+(_fN(d.gross)),0);
   const pendBanner=pend.length>0?`<div style="background:var(--yellow-g);border:1px solid var(--yellow);border-radius:var(--r);padding:13px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;"><div style="display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">⏳</span><div><div style="font-weight:700;color:var(--yellow);font-size:13px;">${pend.length} recebimento${pend.length>1?'s':''} pendente${pend.length>1?'s':''}</div><div style="font-size:11px;color:var(--text3);">Total em espera: €${fmt(pend.reduce((a,r)=>a+(parseFloat(String(r.total||0).replace(',','.'))||0),0))}</div></div></div><button class="btn btn-sm" style="background:var(--yellow);color:#000;" onclick="navigate('recebimentos');setTimeout(()=>recAbrirLista('pending'),100)">Ver pendentes →</button></div>`:'';
   // Botão compacto de relatórios pendentes (sem painel grande)
   let _rpBtn = document.getElementById('dash-rp-btn');
@@ -4905,7 +4845,7 @@ function renderDashboard(){
     dashStats.parentNode.insertBefore(_rpBtn, dashStats);
   }
   // Contar pendentes
-  const _rpOrdens = (window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
+  const _rpOrdens = getVisibleOrdens().filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   const _rpRels   = window.DB.relatorios_pesquisa||[];
   const _rpPend   = _rpOrdens.filter(o=>{ const r=_rpRels.find(x=>x.id===o.id); return !r||(r.estado||'')!=='enviado'; });
   const _rpVerm   = _rpPend.filter(o=>{ const d=rpDiasDesdeConc(o); return d!==null&&d>=5; }).length;
@@ -4934,9 +4874,9 @@ function renderDashboard(){
     dashStats.parentNode.insertBefore(_thBtn, dashStats);
   }
   const _hojeTH = new Date().toISOString().slice(0,10);
-  const _concHojeTH = (window.DB.ordens||[]).filter(o=> _trabFeitoHoje(o, _hojeTH));
+  const _concHojeTH = getVisibleOrdens().filter(o=> _trabFeitoHoje(o, _hojeTH));
   const _idsConcTH  = new Set(_concHojeTH.map(o=>o.id));
-  const _agendHojeTH = (window.DB.ordens||[]).filter(o=> o.data===_hojeTH && o.estado!=='cancelada' && !_idsConcTH.has(o.id));
+  const _agendHojeTH = getVisibleOrdens().filter(o=> o.data===_hojeTH && o.estado!=='cancelada' && !_idsConcTH.has(o.id));
   const _totConcTH = _concHojeTH.reduce((s,o)=>s+(_fN(o.total)||_fN((window.DB.recibos||[]).find(r=>r.osId===o.id)?.total)),0);
   _thBtn.innerHTML = `<button onclick="dashAbrirTrabalhosHoje()" style="width:100%;padding:12px 16px;background:linear-gradient(135deg,#1e3a5f,#2c5282);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;">
       <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">🛠️</span><span style="font-weight:800;">Trabalhos de hoje</span></span>
@@ -4960,7 +4900,7 @@ function renderDashboard(){
   const monthData=Array.from({length:6},(_,i)=>{
     const d=new Date(now.getFullYear(),now.getMonth()-5+i,1);
     const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const mRecs=window.DB.recibos.filter(r=>r.status==='paid'&&(r.pagoEm||r.date||'').startsWith(key));
+    const mRecs=recs.filter(r=>r.status==='paid'&&(r.pagoEm||r.date||'').startsWith(key));
     return{label:months[d.getMonth()],net:mRecs.reduce((a,r)=>a+(parseFloat(String(r.net||0).replace(',','.'))||0),0)};
   });
   const maxV=Math.max(...monthData.map(m=>m.net),1);
@@ -4972,21 +4912,21 @@ function renderDashboard(){
         <div class="mchart-label">${m.label}</div>
       </div>`).join('')}
     </div>`;
-  const recent=[...window.DB.recibos].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const recent=[...recs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   dashTable.innerHTML=recent.map(r=>recRow(r,true)).join('')||`<tr><td colspan="9" class="empty">Sem recebimentos</td></tr>`;
 }
 
-// ── Lista dos trabalhos de hoje: agendados + concluídos (todos os técnicos) ──
+// ── Lista dos trabalhos de hoje: agendados + concluídos (filtrado por técnico quando aplicável) ──
 function dashAbrirTrabalhosHoje(){
   const hoje = new Date().toISOString().slice(0,10);
   const _fN = v=>parseFloat(String(v||0).replace(',','.'))||0;
-  const recibos = window.DB.recibos||[];
+  const recibos = getVisibleRecs();
   const pagLabels={mb:'💳 Multibanco',mbway:'📱 MBWay',dinheiro:'💵 Numerário',numerario:'💵 Numerário',transferencia:'🏦 Transferência',cheque:'📝 Cheque',entidade:'🏢 Entidade'};
 
-  const concHoje = (window.DB.ordens||[]).filter(o=> _trabFeitoHoje(o, hoje))
+  const concHoje = getVisibleOrdens().filter(o=> _trabFeitoHoje(o, hoje))
     .sort((a,b)=>String(a.horaIni||'').localeCompare(String(b.horaIni||'')));
   const idsConc = new Set(concHoje.map(o=>o.id));
-  const agendHoje = (window.DB.ordens||[]).filter(o=> o.data===hoje && o.estado!=='cancelada' && !idsConc.has(o.id))
+  const agendHoje = getVisibleOrdens().filter(o=> o.data===hoje && o.estado!=='cancelada' && !idsConc.has(o.id))
     .sort((a,b)=>String(a.horaIni||'').localeCompare(String(b.horaIni||'')));
 
   const linha = (o)=>{
@@ -5000,7 +4940,7 @@ function dashAbrirTrabalhosHoje(){
     const valor=_fN(o.total)||_fN(recibo?.total);
     let info;
     if(concl){
-      const metBadge=met?`<span style="font-size:12px;font-weight:700;color:${['mb','mbway','dinheiro','numerario'].includes(met)?'#15803d':'#92400e'};">${pagLabels[met]||met}</span>`:'<span style="color:#94a3b8;font-size:12px;">— por definir</span>';
+      const metBadge=met?`<span style="font-size:12px;font-weight:700;color:${['mb','mbway','dinheiro','numerario','cheque'].includes(met)?'#15803d':'#92400e'};">${pagLabels[met]||met}</span>`:'<span style="color:#94a3b8;font-size:12px;">— por definir</span>';
       const pagoBadge=pago?'<span style="font-size:10px;font-weight:800;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px;">✅ Recebido</span>':'<span style="font-size:10px;font-weight:700;background:#fef9c3;color:#854d0e;padding:1px 7px;border-radius:10px;">⏳ Por receber</span>';
       info=`${metBadge}<br>${pagoBadge}`;
     } else {
@@ -5047,8 +4987,26 @@ function dashAbrirTrabalhosHoje(){
 // ──────────────────────────────────────────────────────────────
 function getVisibleRecs(){
   if(!window.currentUser) return [];
-  if(window.currentUser.role==='tecnico') return (window.DB.recibos||[]).filter(r=>r.tech===window.currentUser.name);
+  if(window.currentUser.role==='tecnico'){
+    const nome=window.currentUser.name, id=window.currentUser.id;
+    return (window.DB.recibos||[]).filter(r=>
+      r.techId===id ||
+      r.tech===nome ||
+      String(r.tech||'').split(',').map(s=>s.trim()).includes(nome)
+    );
+  }
   return window.DB.recibos||[];
+}
+// ── Ordens/Despesas visíveis no Dashboard: para o técnico, só as suas ──
+function getVisibleOrdens(){
+  if(!window.currentUser) return [];
+  if(window.currentUser.role==='tecnico') return (window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(window.currentUser.id));
+  return window.DB.ordens||[];
+}
+function getVisibleDespesas(){
+  if(!window.currentUser) return [];
+  if(window.currentUser.role==='tecnico') return (window.DB.despesas||[]).filter(d=>d.tecnicoId===window.currentUser.id);
+  return window.DB.despesas||[];
 }
 // ── Home Recebimentos ─────────────────────────────────────────
 function recVoltarHome(){
@@ -5335,17 +5293,17 @@ function onPayChange(){
   document.getElementById('bank-sel').style.display=pay==='mb'?'block':'none';
   const docInfo=document.getElementById('doc-info');
   if(['mb','dinheiro','mbway','cheque'].includes(pay)){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--green-g);border:1px solid var(--green);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--green);">📄 <strong>Emitir Fatura-Recibo</strong> — Pagamento imediato confirmado</div>`;}
-  else if(pay==='entidade'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--yellow-g);border:1px solid var(--yellow);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--yellow);">📄 <strong>Emitir Recibo</strong> — Aguarda pagamento por entidade/referência</div>`;}
+  else if(pay==='entidade'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--accent-g);border:1px solid var(--accent);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--accent);">📄 <strong>Emitir Fatura</strong> — Aguarda confirmação de pagamento por entidade/referência</div>`;}
   else if(pay==='transferencia'){docInfo.style.display='block';docInfo.innerHTML=`<div style="background:var(--accent-g);border:1px solid var(--accent);border-radius:var(--r2);padding:12px 14px;font-size:12px;color:var(--accent);">📄 <strong>Emitir Fatura</strong> — Aguarda confirmação de transferência</div>`;}
   else docInfo.style.display='none';
 }
 function selectBank(b){selectedBank=b;clearBankSelection();document.getElementById('bk-'+b).classList.add('selected');}
 function clearBankSelection(){document.querySelectorAll('.bank-card').forEach(c=>c.classList.remove('selected'));}
 // ── Regra única do tipo de documento ───────────────────────────
-// Só MULTIBANCO ou DINHEIRO/NUMERÁRIO geram Fatura-Recibo (recebimento imediato confirmado).
-// Todos os outros meios (MBWay, transferência, cheque, entidade/referência) → Fatura.
+// MULTIBANCO, NUMERÁRIO/DINHEIRO, MBWAY ou CHEQUE → Fatura-Recibo (recebimento imediato).
+// TRANSFERÊNCIA ou ENTIDADE/REFERÊNCIA → Fatura (recebimento diferido, aguarda confirmação).
 function ehFaturaReciboMetodo(m){
-  return ['mb','dinheiro','numerario'].includes(String(m||'').toLowerCase());
+  return ['mb','dinheiro','numerario','mbway','cheque'].includes(String(m||'').toLowerCase());
 }
 function docTipoLabelMetodo(m){ return ehFaturaReciboMetodo(m) ? 'Fatura-Recibo' : 'Fatura'; }
 window.ehFaturaReciboMetodo = ehFaturaReciboMetodo;
@@ -6322,22 +6280,14 @@ function _commRelAtrasado(uid, periodo){
     if(String(o.concluidoEm||o.data||'').slice(0,7)!==periodo) return;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
     const rel=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
-    const entregue = rel && (rel.estado==='pronto' || rel.estado==='enviado' || rel.relatorioEstado==='definitivo');
+    const entregue = rel && (rel.estado==='preenchido' || rel.estado==='enviado');
     if(entregue) return;
     const base=o.concluidoEm||o.data; if(!base) return;
     if(new Date() > _commAddDiasUteis(base,5)) offenders.push(o.id);
   });
   return offenders;
 }
-// Tiers de redução da comissão consoante nº de relatórios atrasados no mês
-// 0 atrasados: taxas cheias · 1-5: -1 ponto percentual · 6-8: -2 pontos · >8: sem comissão
-function _commTaxasPorAtraso(n){
-  if(n>8)  return {normal:0,    cipp:0,    imperm:0};
-  if(n>=6) return {normal:0.03, cipp:0.03, imperm:0.01};
-  if(n>=1) return {normal:0.04, cipp:0.04, imperm:0.02};
-  return     {normal:0.05, cipp:0.05, imperm:0.03};
-}
-// Atraso no 1º trabalho do dia (hora real de início vs agendada, tolerância em min) — já não anula comissão, mantido apenas como histórico/diagnóstico
+// Atraso no 1º trabalho do dia (hora real de início vs agendada, tolerância em min)
 function _commAtrasoPrimeiro(uid, periodo, tol){
   const ords=(window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(uid) && String(o.data||'').slice(0,7)===periodo && o.horaIni && o.horaIniReal);
   const byDay={};
@@ -6364,8 +6314,9 @@ function _commToggleFalta(techId){
 function renderComissoes(){
   const container = document.getElementById('comm-list');
 
-  // ── Comissões de Técnicos (período + CIPP/Imperm + tiers por relatório atrasado) ──
+  // ── Comissões de Técnicos (período + CIPP/Imperm + condicionantes) ──
   const _periodoC = _commPeriodo;
+  const _faltasP = ((window.DB.comissoesFaltas||{})[_periodoC])||{};
   const tecnicos = window.DB.funcionarios.filter(f=>f.role==='tecnico');
   const secTec = tecnicos.map(t=>{
     const u = (window.DB.users||[]).find(x=>x.name===t.name); const uid=u?.id;
@@ -6376,38 +6327,46 @@ function renderComissoes(){
     const netOut  = recOut.reduce((a,r)=>a+(+r.net||0),0);
     const netCipp = recCipp.reduce((a,r)=>a+(+r.net||0),0);
     const netImp  = recImp.reduce((a,r)=>a+(+r.net||0),0);
-    const limiar  = (+t.salary||0)*10;
-    // Nº de relatórios atrasados no mês define o tier de redução das 3 bolsas
-    const relAtras  = uid?_commRelAtrasado(uid,_periodoC):[];
-    const nAtraso   = relAtras.length;
-    const taxas     = _commTaxasPorAtraso(nAtraso);
-    const comNormal = Math.max(0,(netOut-limiar))*taxas.normal;
-    const comCipp   = netCipp*taxas.cipp;
-    const comImp    = netImp*taxas.imperm;
-    const totalFinal= comNormal+comCipp+comImp;
-    const semComissao = nAtraso>8;
-    const reduzida     = nAtraso>=1 && nAtraso<=8;
-    return `<div class="comm-card"${semComissao?' style="border-left:4px solid var(--red);"':reduzida?' style="border-left:4px solid var(--yellow);"':''}>
+    const limiar  = (+t.salary||0)*8;
+    const comNormal = Math.max(0,(netOut-limiar))*0.05;
+    const comCipp   = netCipp*0.05;
+    const comImp    = netImp*0.03;
+    const totalBruto= comNormal+comCipp+comImp;
+    // Condicionantes (qualquer uma anula TODAS as comissões do período)
+    const relAtras = uid?_commRelAtrasado(uid,_periodoC):[];
+    const atrasos  = uid?_commAtrasoPrimeiro(uid,_periodoC,15):[];
+    const temFalta = !!_faltasP[t.id];
+    const desq = relAtras.length>0 || atrasos.length>0 || temFalta;
+    const totalFinal = desq?0:totalBruto;
+    const motivos=[];
+    if(relAtras.length) motivos.push(`⚠️ Relatório atrasado (OS ${relAtras.join(', ')})`);
+    if(atrasos.length)  motivos.push(`⏰ Atraso no 1º trabalho — ${atrasos.join(' · ')}`);
+    if(temFalta)        motivos.push('🚫 Falta marcada');
+    return `<div class="comm-card"${desq?' style="border-left:4px solid var(--red);"':''}>
       <div class="comm-header">
         <div class="av tecnico">${t.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
         <div>
           <div style="font-weight:700;font-size:15px;">${t.name}</div>
           <div style="font-size:11px;color:var(--text3);">${roleName(t.role)} · Salário bruto: €${fmt(t.salary)}</div>
         </div>
-        <div style="margin-left:auto;">${semComissao
+        <div style="margin-left:auto;">${desq
           ?`<span class="badge badge-red">Sem comissão</span>`
           :`<span class="badge badge-green">💎 €${fmt(totalFinal)}</span>`}
         </div>
       </div>
       <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×${(taxas.normal*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
-        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×${(taxas.cipp*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×${(taxas.imperm*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(limiar)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Relatórios atrasados</div><div class="cm-val" style="color:${nAtraso>0?'var(--red)':'var(--text3)'}">${nAtraso}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${semComissao?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×5%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×5%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×3%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Limiar (Sal×8)</div><div class="cm-val">€${fmt(limiar)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Subtotal</div><div class="cm-val">€${fmt(totalBruto)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${desq?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
       </div>
-      ${nAtraso>0?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${nAtraso} relatório${nAtraso>1?'s':''} atrasado${nAtraso>1?'s':''} este mês (OS ${relAtras.join(', ')}) → taxas reduzidas para ${(taxas.normal*100).toFixed(0)}%/${(taxas.cipp*100).toFixed(0)}%/${(taxas.imperm*100).toFixed(0)}%${semComissao?' — acima de 8 → sem comissão':''}</div>`:''}
+      ${motivos.length?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">Comissão anulada: ${motivos.join(' · ')}</div>`:''}
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="_commToggleFalta('${t.id}')">${temFalta?'☑ Falta marcada (clicar p/ remover)':'☐ Marcar falta'}</button>
+        <span style="font-size:10px;color:var(--text3);">Relatório e atraso (≥15min) automáticos · falta manual</span>
+      </div>
     </div>`;
   }).join('') || `<div class="empty">Sem técnicos registados</div>`;
 
@@ -6497,7 +6456,7 @@ function renderComissoes(){
     <!-- Técnicos -->
     <div style="margin-bottom:24px;">
       <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;display:flex;align-items:center;gap:8px;">
-        👷 Comissões de Técnicos <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Fórmula: Sal. × 10 vs Receita Líquida → diferença × 5% (reduz com relatórios atrasados)</span>
+        👷 Comissões de Técnicos <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Fórmula: Sal. × 8 vs Receita Líquida → diferença × 5%</span>
       </div>
       ${secTec}
     </div>
@@ -6509,75 +6468,6 @@ function renderComissoes(){
       ${secCom}
     </div>
   `;
-}
-
-// ── "Minha Comissão" — vista pessoal do técnico no mobile ──
-// Reutiliza exatamente a mesma fórmula/condicionantes da página de admin
-// "Cálculo de Comissões", mas mostra só o próprio técnico autenticado.
-let _commPeriodoTec = new Date().toISOString().slice(0,7);
-function _commSetPeriodoTec(v){ if(v){ _commPeriodoTec=v; tecRenderMinhaComissao(); } }
-function tecRenderMinhaComissao(){
-  const container = document.getElementById('minha-comm-card');
-  if(!container || !window.currentUser) return;
-
-  const periodo = _commPeriodoTec;
-  const t = (window.DB.funcionarios||[]).find(f=>f.name===window.currentUser.name && f.role==='tecnico');
-  const uid = window.currentUser.id;
-
-  const headerSel = `
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
-      <span style="font-size:13px;font-weight:700;color:var(--text2);">📅 Período:</span>
-      <input type="month" value="${periodo}" onchange="_commSetPeriodoTec(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--text);">
-      <span style="font-size:11px;color:var(--text3);">Calculada sobre os recibos pagos deste mês.</span>
-    </div>`;
-
-  if(!t){
-    container.innerHTML = headerSel + `<div class="empty">Não foi encontrado o teu registo de funcionário — fala com o escritório.</div>`;
-    return;
-  }
-
-  const recs = (window.DB.recibos||[]).filter(r=>r.tech===t.name && r.status==='paid' && String(r.date||'').slice(0,7)===periodo);
-  const recCipp = recs.filter(r=>_commIsCipp(r.service));
-  const recImp  = recs.filter(r=>_commIsImperm(r.service));
-  const recOut  = recs.filter(r=>!_commIsCipp(r.service)&&!_commIsImperm(r.service));
-  const netOut  = recOut.reduce((a,r)=>a+(+r.net||0),0);
-  const netCipp = recCipp.reduce((a,r)=>a+(+r.net||0),0);
-  const netImp  = recImp.reduce((a,r)=>a+(+r.net||0),0);
-  const limiar  = (+t.salary||0)*10;
-  // Nº de relatórios atrasados no mês define o tier de redução das 3 bolsas
-  const relAtras  = uid?_commRelAtrasado(uid,periodo):[];
-  const nAtraso   = relAtras.length;
-  const taxas     = _commTaxasPorAtraso(nAtraso);
-  const comNormal = Math.max(0,(netOut-limiar))*taxas.normal;
-  const comCipp   = netCipp*taxas.cipp;
-  const comImp    = netImp*taxas.imperm;
-  const totalFinal= comNormal+comCipp+comImp;
-  const semComissao = nAtraso>8;
-  const reduzida     = nAtraso>=1 && nAtraso<=8;
-
-  container.innerHTML = headerSel + `
-    <div class="comm-card"${semComissao?' style="border-left:4px solid var(--red);"':reduzida?' style="border-left:4px solid var(--yellow);"':''}>
-      <div class="comm-header">
-        <div class="av tecnico">${t.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
-        <div>
-          <div style="font-weight:700;font-size:15px;">${t.name}</div>
-          <div style="font-size:11px;color:var(--text3);">Salário bruto: €${fmt(t.salary)}</div>
-        </div>
-        <div style="margin-left:auto;">${semComissao
-          ?`<span class="badge badge-red">Sem comissão</span>`
-          :`<span class="badge badge-green">💎 €${fmt(totalFinal)}</span>`}
-        </div>
-      </div>
-      <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×${(taxas.normal*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
-        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×${(taxas.cipp*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×${(taxas.imperm*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(limiar)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Relatórios atrasados</div><div class="cm-val" style="color:${nAtraso>0?'var(--red)':'var(--text3)'}">${nAtraso}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${semComissao?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
-      </div>
-      ${nAtraso>0?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${nAtraso} relatório${nAtraso>1?'s':''} atrasado${nAtraso>1?'s':''} este mês (OS ${relAtras.join(', ')}) → taxas reduzidas para ${(taxas.normal*100).toFixed(0)}%/${(taxas.cipp*100).toFixed(0)}%/${(taxas.imperm*100).toFixed(0)}%${semComissao?' — acima de 8 → sem comissão':''}</div>`:''}
-    </div>`;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -8418,7 +8308,7 @@ function osPopularHoras(valorIni='', valorFim=''){
 
   // Se o valor actual é anterior à hora mínima (hoje), usar a hora mínima
   const iniVal = valorIni && valorIni >= horaMin ? valorIni : (valorIni && valorIni < horaMin ? horaMin : valorIni);
-  osGerarOpcoesHora('os-hora-ini', horaMin, iniVal||'09:00');
+  osGerarOpcoesHora('os-hora-ini', horaMin, iniVal||(OS_SLOTS_PADRAO[0]>=horaMin?OS_SLOTS_PADRAO[0]:horaMin));
 
   // Hora fim: a partir da hora de início
   const iniActual = document.getElementById('os-hora-ini')?.value || iniVal || '09:00';
@@ -8427,9 +8317,9 @@ function osPopularHoras(valorIni='', valorFim=''){
 
 
 // ── Sugerir próximo slot disponível ─────────────────────────
-// Slots padrão para Lisboa: 09:00 / 11:10 / 14:20 / 16:15
-// Baseado em: 1h30 trabalho + 40min deslocamento + 1h almoço + 40min deslocamento
-const OS_SLOTS_PADRAO = ['09:00','11:10','14:20','16:30']; // Grade optimizada: 1h30 trabalho + 40min deslocamento
+// Horário fixo de trabalho definido pela empresa:
+//   1º: 08:30–10:00 · 2º: 10:45–12:15 · Almoço: 12:30–13:30 · 3º: 14:15–15:45 · 4º: 16:30–18:00
+const OS_SLOTS_PADRAO = ['08:30','10:45','14:15','16:30'];
 
 function osSugerirProximoSlot(){
   const data = document.getElementById('os-data')?.value;
@@ -8523,26 +8413,14 @@ function osGrelhaEhLisboa(cp){
 }
 
 function osGerarBlocosGrelha(deslocMin){
-  const ini0  = toMin(OS_GRELHA_INICIO);
-  const fimDia= toMin(OS_GRELHA_FIM_DIA);
-  const almocoLimite = toMin(OS_GRELHA_ALMOCO_LIMITE);
-  const blocos = [];
-  let atual = ini0;
-  let almocoFeito = false;
-
-  while(atual + OS_GRELHA_DUR_TRAB <= fimDia){
-    // Se ainda não almoçou e este trabalho começaria às 12h30 ou depois,
-    // insere o almoço (1h) + deslocação antes de continuar
-    if(!almocoFeito && atual >= almocoLimite){
-      atual += OS_GRELHA_ALMOCO_DUR + deslocMin;
-      almocoFeito = true;
-      if(atual + OS_GRELHA_DUR_TRAB > fimDia) break;
-    }
-    const fim = atual + OS_GRELHA_DUR_TRAB;
-    blocos.push({ ini: minToHora(atual), fim: minToHora(fim) });
-    atual = fim + deslocMin;
-  }
-  return blocos;
+  // Horário fixo de trabalho (substitui o cálculo por fórmula):
+  //   1º: 08:30–10:00 · 2º: 10:45–12:15 · Almoço: 12:30–13:30 · 3º: 14:15–15:45 · 4º: 16:30–18:00
+  return [
+    { ini:'08:30', fim:'10:00' },
+    { ini:'10:45', fim:'12:15' },
+    { ini:'14:15', fim:'15:45' },
+    { ini:'16:30', fim:'18:00' },
+  ];
 }
 
 async function osGerarGrelhaDia(){
@@ -8589,19 +8467,32 @@ async function osGerarGrelhaDia(){
   };
 
   painel.style.display = 'block';
-  nota.innerHTML = `👷 <strong>${tec?.name||'Técnico'}</strong> · ${ehLisboa?'📍 Região de Lisboa — 30 min de deslocação':'📍 Fora de Lisboa — 40 min de deslocação'} · Início 08h30 · Almoço a partir das 12h30 · Trabalhos de 1h30`;
+  nota.innerHTML = `👷 <strong>${tec?.name||'Técnico'}</strong> · Horário fixo: 08h30–10h00 · 10h45–12h15 · Almoço 12h30–13h30 · 14h15–15h45 · 16h30–18h00`;
+
+  // ── Não sugerir horários que já passaram (ou que não dão tempo de chegar) ──
+  const _agora = new Date();
+  const _hojeStr = _agora.toISOString().slice(0,10);
+  const _ehHoje = data === _hojeStr;
+  const _minimoIni = _ehHoje ? (_agora.getHours()*60 + _agora.getMinutes() + deslocMin) : -1;
 
   lista.innerHTML = blocosTeoricos.map((b, i)=>{
-    const conflito = ocupar(b.ini, b.fim);
-    const livre = !conflito;
-    const bg = livre ? '#f0fdf4' : '#fef2f2';
-    const border = livre ? '#86efac' : '#fecaca';
+    const jaPassou = _ehHoje && toMin(b.ini) < _minimoIni;
+    const conflito = !jaPassou && ocupar(b.ini, b.fim);
+    const livre = !jaPassou && !conflito;
+    const bg = jaPassou ? '#f3f4f6' : livre ? '#f0fdf4' : '#fef2f2';
+    const border = jaPassou ? '#d1d5db' : livre ? '#86efac' : '#fecaca';
+    const corTxt = jaPassou ? '#6b7280' : livre ? '#15803d' : '#b91c1c';
     const cliConf = conflito ? (window.DB.clientes||[]).find(c=>c.id===conflito.clienteId) : null;
     const onclickAttr = livre ? `onclick="osGrelhaSeleccionarSlot('${b.ini}','${b.fim}')"` : '';
+    const statusTxt = jaPassou
+      ? '🕐 Hora já passada / sem tempo para chegar'
+      : livre
+        ? '✅ Disponível — clique para usar este horário'
+        : `❌ Ocupado — OS ${conflito.id}${cliConf?' · '+cliConf.nome:''}`;
     return `<div style="border:1px solid ${border};background:${bg};border-radius:8px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:${livre?'pointer':'default'};" ${onclickAttr}>
       <div>
-        <div style="font-weight:700;font-size:13px;color:${livre?'#15803d':'#b91c1c'};">${b.ini} – ${b.fim}</div>
-        <div style="font-size:11px;color:#6b7280;">${livre?'✅ Disponível — clique para usar este horário':`❌ Ocupado — OS ${conflito.id}${cliConf?' · '+cliConf.nome:''}`}</div>
+        <div style="font-weight:700;font-size:13px;color:${corTxt};">${b.ini} – ${b.fim}</div>
+        <div style="font-size:11px;color:#6b7280;">${statusTxt}</div>
       </div>
       ${livre?`<button type="button" class="btn btn-primary btn-sm" onclick="osGrelhaSeleccionarSlot('${b.ini}','${b.fim}')">Usar</button>`:''}
     </div>`;
@@ -8844,30 +8735,34 @@ function osAutoFillServico(){
   const ivaEl = document.getElementById('os-iva');
   if(ivaEl){ ivaEl.value = String(srv.iva||23); ivaEl.disabled=false; }
 
-  // ── Detectar se é serviço por medida ────────────────────────
-  const nome = (srv.nome||'').toLowerCase();
-  const ehM2 = nome.includes('impermeabil');
-  const ehMl = nome.includes('cipp') || nome.includes('ep') && nome.includes('xi') || nome.includes('recupera');
-  const ehMedida = ehM2 || ehMl;
+  // ── Detectar se é serviço por medida (usa o campo "Unidade" do serviço) ──
+  const UNIDADE_LABELS = { m2:{lbl:'m²', titulo:'metros quadrados (m²)'},
+                            ml:{lbl:'ml', titulo:'metros lineares (ml)'},
+                            un:{lbl:'unidade(s)', titulo:'unidades'},
+                            vb:{lbl:'verba', titulo:'verba (valor fixo)'} };
+  const undInfo  = UNIDADE_LABELS[srv.unidade];
+  const ehMedida = !!undInfo;
   const medGrp   = document.getElementById('os-medida-group');
   const haddGrp  = document.getElementById('os-hadd-group');
   if(medGrp){
     if(ehMedida){
       medGrp.style.display = 'block';
-      const unidade  = ehM2 ? 'm²' : 'ml';
-      const titulo   = ehM2 ? 'metros quadrados (m²) de impermeabilização' : 'metros lineares (ml) de tubagem';
-      document.getElementById('os-medida-titulo').textContent   = titulo;
-      document.getElementById('os-medida-unidade').textContent  = unidade;
-      document.getElementById('os-medida-und-label2').textContent = unidade;
-      // Pré-preencher preço unitário com h1 do serviço
+      document.getElementById('os-medida-titulo').textContent   = `${undInfo.titulo} de ${srv.nome||'serviço'}`;
+      document.getElementById('os-medida-unidade').textContent  = undInfo.lbl;
+      document.getElementById('os-medida-und-label2').textContent = undInfo.lbl;
+      // Pré-preencher preço unitário com o preço/unidade configurado no serviço (ou h1 como reserva)
       const precoCampo = document.getElementById('os-medida-preco-und');
-      if(precoCampo && (!precoCampo.value || precoCampo.value === '0')) precoCampo.value = srv.h1||'';
-      // Limpar quantidade
+      if(precoCampo) precoCampo.value = srv.precoUnd || srv.h1 || '';
+      // "Verba" é um valor fixo — quantidade fica sempre 1 e não é editável
       const qtdCampo = document.getElementById('os-medida-qtd');
-      if(qtdCampo) qtdCampo.value = '';
+      if(qtdCampo){
+        if(srv.unidade==='vb'){ qtdCampo.value = 1; qtdCampo.readOnly = true; }
+        else { qtdCampo.value = ''; qtdCampo.readOnly = false; }
+      }
       const preview = document.getElementById('os-medida-preview');
       if(preview) preview.style.display = 'none';
       if(haddGrp) haddGrp.style.display = 'none';
+      osCalcMedida();
     } else {
       medGrp.style.display = 'none';
       if(haddGrp) haddGrp.style.display = '';
@@ -9266,7 +9161,7 @@ function osVerificarSobreposicao(data, horaIni, horaFim, tecnicos, excluirOsId=n
 
   (window.DB.ordens||[]).forEach(o=>{
     if(o.id === excluirOsId) return;                      // a própria OS (edição)
-    if(o.estado === 'cancelada' || o.estado === 'concluida') return; // só activas
+    if(['cancelada','concluida','os_fechada'].includes(o.estado)) return; // só activas
     if(o.data !== data) return;                            // dia diferente
 
     const iniB = toMin(o.horaIni||'00:00');
@@ -9824,6 +9719,11 @@ async function osVerificarDistancia(data, horaIni, novoCliId, tecnicos){
 
 
 // ── Sugestão inteligente de técnico ───────────────────────────────────────
+// ── Técnico de emergência: só sugerido se não houver outro disponível ──
+// E só para trabalhos na região de Braga/Porto.
+function _ehTecnicoEmergencia(tec){ return tec.emergencia===true || /rvfialho/i.test(tec.name||''); }
+function _ehZonaBragaPorto(cp){ return /^4[0-4]\d{2}/.test((cp||'').trim()) || /^4[7-8]\d{2}/.test((cp||'').trim()); }
+
 async function osSugerirTecnico(data, horaIni, horaFim, cliId){
   const tecnicos = (window.DB.users||[]).filter(u=>u.role==='tecnico'&&u.active);
   if(!tecnicos.length) return [];
@@ -9831,6 +9731,7 @@ async function osSugerirTecnico(data, horaIni, horaFim, cliId){
   const novoCliente = (window.DB.clientes||[]).find(x=>x.id===cliId);
   const novoCp = novoCliente?.srvCp || novoCliente?.cp || '';
   const novaLocalidade = novoCliente?.srvLocalidade || novoCliente?.localidade || '';
+  const _trabalhoEmBragaPorto = _ehZonaBragaPorto(novoCp);
 
   // Geocodificar a nova OS
   let geoNovaOS = null;
@@ -9846,7 +9747,7 @@ async function osSugerirTecnico(data, horaIni, horaFim, cliId){
     const pontos    = [];
 
     // ── 1. Conflito de horário (eliminatório) ───────────────────
-    const conflito = osVerificarSobreposicao(data, horaIni, horaFim, [tec.id], null);
+    const conflito = osVerificarSobreposicao(data, horaIni, horaFim, [tec.id], window.editingOsId||null);
     if(conflito){ score -= 999; problemas.push('❌ Conflito de horário'); }
 
     // ── 2. Carga do dia ─────────────────────────────────────────
@@ -9882,6 +9783,7 @@ async function osSugerirTecnico(data, horaIni, horaFim, cliId){
             distLabel = isTemp
               ? `🏨 ${Math.round(distKm)} km da estadia (${cidadeActiva})`
               : `🏠 ${Math.round(distKm)} km da base (${cidadeActiva})`;
+            console.log('[DIAG sugestão técnico]', tec.name, '| cpActivo:', cpActivo, '| geoTec:', geoTec, '| novoCp:', novoCp, '| geoNovaOS:', geoNovaOS, '| distKm:', distKm);
           }
         }catch(e){}
       }
@@ -9994,8 +9896,24 @@ async function osSugerirTecnico(data, horaIni, horaFim, cliId){
       }
     }
 
-    scores.push({ tec, score, problemas, pontos, nOS, conflito: !!conflito, distKm, distLabel });
+    scores.push({ tec, score, problemas, pontos, nOS, conflito: !!conflito, distKm, distLabel, ehEmergencia: _ehTecnicoEmergencia(tec) });
   }
+
+  // ── Aplicar a regra do técnico de emergência ──────────────────
+  // Só pode aparecer se: (a) não houver outro técnico disponível, e (b) o trabalho for em Braga/Porto.
+  const haOutroDisponivel = scores.some(s => !s.ehEmergencia && !s.conflito);
+  scores.forEach(s => {
+    if(!s.ehEmergencia) return;
+    if(!_trabalhoEmBragaPorto){
+      s.score = -999;
+      s.problemas.push('🚨 Só atende emergências em Braga/Porto');
+    } else if(haOutroDisponivel){
+      s.score = -500;
+      s.problemas.push('🚨 Reservado para emergências — há outro técnico disponível');
+    } else {
+      s.pontos.push('🚨 Técnico de emergência (sem outro disponível)');
+    }
+  });
 
   // Ordenar por score
   scores.sort((a,b) => b.score - a.score);
@@ -11017,8 +10935,8 @@ function adminMostrarNovasMensagens(msgs){
     const key = m.osId||m.id;
     if(!window._msgsMostradas.has(key)){
       window._msgsMostradas.add(key);
-      const met  = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'}[m.metodoPagamento]||m.metodoPagamento||'—';
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const met  = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'}[m.metodoPagamento]||m.metodoPagamento||'—';
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
 
       if(imediato){
         // Criar recibo automaticamente se não existir
@@ -11059,7 +10977,7 @@ function adminAbrirPainelMensagens(filtro){
   else if(filtro==='emitidos' || filtro==='todas') msgs = emitidos; // baixados → "recebidos"
   else msgs = pendentes; // 'pendentes'
 
-  const metLabel = {numerario:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
+  const metLabel = {numerario:'💵 Numerário',dinheiro:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
 
   let rows = '';
   if(!msgs.length){
@@ -11098,7 +11016,7 @@ function adminAbrirPainelMensagens(filtro){
       }
       const dt      = m.criadoEm ? new Date(m.criadoEm).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
       const metLbl  = metLabel[m.metodoPagamento] || m.metodoPagamento || '—';
-      const imediato= ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato= ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const recibo  = (window.DB.recibos||[]).find(function(r){return r.osId===m.osId;});
       const recPago = recibo && recibo.status==='paid';
       const emitido = !!m.documentoEmitido;
@@ -11152,9 +11070,6 @@ function adminAbrirPainelMensagens(filtro){
         }
         btns += '<button onclick="adminEditarAviso(\''+msgId+'\')" style="background:transparent;border:1px solid var(--accent);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--accent);font-weight:600;">✏️ Editar</button>';
         btns += '<button onclick="adminAbrirDetalheOS(\''+m.osId+'\')" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--text2);">Ver OS</button>';
-        if(window._moloniCfg?.clientId || window.DB?.empresaConfig?.moloni?.clientId){
-          btns += '<button onclick="moloniCriarFaturaDeOS(\''+m.osId+'\',\''+msgId+'\')" style="background:#1a1a2e;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;" title="Criar fatura no Moloni">🧾 Moloni</button>';
-        }
         btns += '<button onclick="adminArquivarAviso(\''+msgId+'\')" style="background:transparent;border:1px solid #d97706;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:#d97706;font-weight:600;" title="Mover para arquivo — não interfere no sistema">📦 Arquivar</button>';
         btns += '<button onclick="adminExcluirAviso(\''+msgId+'\')" style="background:transparent;border:1px solid var(--red);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--red);">🗑 Excluir</button>';
       }
@@ -11256,7 +11171,7 @@ async function adminImprimirAvisos(filtro){
   const empNif  = emp.nif  || '517551543';
   const fmtE = v => '€'+(parseFloat(v)||0).toFixed(2).replace('.',',');
   const hoje = new Date().toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const metLabel = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
+  const metLabel = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
 
   let totalSemIva=0, totalIva=0, totalCom=0;
 
@@ -11266,7 +11181,7 @@ async function adminImprimirAvisos(filtro){
     const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
     const srv = (window.DB.servicos||[]).find(s=>s.id===os.servicoId)||{};
     const srvNome = srv.nome || os.servicoNome || m.servicoNome || '—';
-    const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+    const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
     const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento).toUpperCase();
     const metPag   = metLabel[m.metodoPagamento] || m.metodoPagamento || '—';
     const tecNome  = m.tecnicoNome || '—';
@@ -11508,7 +11423,7 @@ async function adminEditarAviso(msgId){
   const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
   const valorAtual=os.valorTotal||os.total||m.valorTotal||'';
   const valorFmt=valorAtual?parseFloat(valorAtual).toFixed(2):'';
-  const metLabel={numerario:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
+  const metLabel={numerario:'💵 Numerário',dinheiro:'💵 Numerário',mb:'🏧 Multibanco',mbway:'📱 MBWay',transferencia:'🏦 Transferência',cheque:'📄 Cheque'};
   const metLbl=metLabel[m.metodoPagamento]||m.metodoPagamento||'—';
   const existing=document.getElementById('mo-editar-aviso'); if(existing) existing.remove();
   const mo=document.createElement('div'); mo.id='mo-editar-aviso';
@@ -11521,7 +11436,7 @@ async function adminEditarAviso(msgId){
     +'<input class="fi" id="edit-aviso-valor" type="number" step="0.01" min="0" placeholder="Ex: 123.45" value="'+valorFmt+'"></div>'
     +'<div class="fg"><label>Método de pagamento</label>'
     +'<select class="fi" id="edit-aviso-metodo">'
-    +'<option value="numerario"'+(m.metodoPagamento==='numerario'?' selected':'')+'>💵 Numerário</option>'
+    +'<option value="dinheiro"'+((m.metodoPagamento==='dinheiro'||m.metodoPagamento==='numerario')?' selected':'')+'>💵 Numerário</option>'
     +'<option value="mb"'+(m.metodoPagamento==='mb'?' selected':'')+'>🏧 Multibanco</option>'
     +'<option value="mbway"'+(m.metodoPagamento==='mbway'?' selected':'')+'>📱 MBWay</option>'
     +'<option value="transferencia"'+(m.metodoPagamento==='transferencia'?' selected':'')+'>🏦 Transferência</option>'
@@ -11553,7 +11468,7 @@ async function adminSalvarEdicaoAviso(msgId){
     await window.fsSetMerge('mensagens_internas',msgId,update);
     const m=(window.DB.mensagens_internas||[]).find(x=>x._firebaseId===msgId||(x.id||x.osId)===msgId)||{};
     if(m.osId&&!isNaN(valorNum)&&valorNum>0)
-      await window.fsSetMerge('ordens',m.osId,{valorTotal:valorNum.toFixed(2),metodoPagamento:metodo});
+      await window.fsSetMerge('ordens',m.osId,{valorTotal:valorNum.toFixed(2),pagamento:{metodo:metodo}});
     toast('✅ Aviso actualizado','✏️');
     if(typeof auditLog==='function') auditLog('aviso_editado','Aviso '+msgId+' editado'+(valorNum?' — €'+valorNum.toFixed(2):''));
     adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
@@ -12026,7 +11941,7 @@ function osAbrirDetalhe(id){
         <div style="padding:12px 14px;">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
             <label style="font-size:12px;color:#64748b;min-width:80px;">Hora início</label>
-            <input type="time" id="os-hora-ini-real" class="fi" value="${o.horaIni||''}" style="width:110px;font-size:15px;font-weight:700;"${window.currentUser?.role==='tecnico'?' readonly':''}>
+            <input type="time" id="os-hora-ini-real" class="fi" value="${window.currentUser?.role==='tecnico'?new Date().toTimeString().slice(0,5):(o.horaIni||'')}" style="width:110px;font-size:15px;font-weight:700;"${window.currentUser?.role==='tecnico'?' readonly':''}>
             ${window.currentUser?.role==='tecnico'?'':`<button onclick="document.getElementById('os-hora-ini-real').value=new Date().toTimeString().slice(0,5)" class="btn btn-ghost btn-sm">🕐 Agora</button>`}
           </div>
           <button class="btn btn-primary" style="width:100%;background:#16a34a;" onclick="osIniciarTrabalho('${id}')">▶ Iniciar agora</button>
@@ -12066,22 +11981,12 @@ function osAbrirDetalhe(id){
           <div style="font-weight:700;font-size:14px;color:${o.horaFimReal?'#15803d':o.horaIniReal?'#92400e':'#1e293b'};">Terminar trabalho e calcular valor</div>
           ${o.horaFimReal?`<span style="margin-left:auto;font-size:12px;color:#16a34a;font-weight:600;">Terminado às ${o.horaFimReal}</span>`:''}
         </div>
-        ${o.estado!=='concluida' && window.currentUser?.role==='tecnico' ? (
-          o.horaIniReal && !o.horaFimReal ? `
-        <div style="padding:14px;text-align:center;">
-          <div id="os-live-timer" class="os-timer-display" style="font-size:30px;">00:00:00</div>
-          <div style="font-size:11px;color:#92400e;margin:4px 0 12px;">⏱ A contar desde as ${o.horaIniReal} — continua até decidires terminar</div>
-          <button class="btn btn-primary" style="width:100%;background:#dc2626;" onclick="osTerminarTrabalhoDecidir('${id}')">⏹ Terminar trabalho</button>
-        </div>` : `
-        <div style="padding:12px 14px;">
-          <span style="color:var(--text3);font-size:12px;">Inicia o trabalho no Passo 1 para começar a contar o tempo.</span>
-        </div>`
-        ) : o.estado!=='concluida'?`
+        ${o.estado!=='concluida'?`
         <div style="padding:12px 14px;">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
             <label style="font-size:12px;color:#64748b;min-width:80px;">Hora fim</label>
-            <input type="time" id="os-hora-fim-real" class="fi" value="${o.horaFimReal||o.horaFim||''}" style="width:110px;font-size:15px;font-weight:700;" oninput="osCalcPreview('${id}')">
-            <button onclick="document.getElementById('os-hora-fim-real').value=new Date().toTimeString().slice(0,5);osCalcPreview('${id}')" class="btn btn-ghost btn-sm">🕐 Agora</button>
+            <input type="time" id="os-hora-fim-real" class="fi" value="${o.horaFimReal||(window.currentUser?.role==='tecnico'?new Date().toTimeString().slice(0,5):o.horaFim)||''}" style="width:110px;font-size:15px;font-weight:700;" oninput="osCalcPreview('${id}')"${window.currentUser?.role==='tecnico'?' readonly':''}>
+            ${window.currentUser?.role==='tecnico'?'':`<button onclick="document.getElementById('os-hora-fim-real').value=new Date().toTimeString().slice(0,5);osCalcPreview('${id}')" class="btn btn-ghost btn-sm">🕐 Agora</button>`}
           </div>
           <div id="os-calc-preview" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;min-height:36px;">
             ${(()=>{
@@ -12207,22 +12112,6 @@ function osAbrirDetalhe(id){
     `}
   `;
   openMo('mo-os-tec');
-  // Temporizador ao vivo (Passo 3) — só corre quando o trabalho está em curso
-  // e ainda não há hora de fim registada (ainda não decidiu "agora"/"depois").
-  if(window._osLiveTimerInterval){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; }
-  if(o.estado==='em_curso' && o.horaIniReal && !o.horaFimReal){
-    const _tick=()=>{
-      const el=document.getElementById('os-live-timer');
-      if(!el){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; return; }
-      const [ih,im]=o.horaIniReal.split(':').map(Number);
-      const ini=new Date(); ini.setHours(ih,im,0,0);
-      let s=Math.floor((Date.now()-ini.getTime())/1000); if(s<0) s=0;
-      const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
-      el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
-    };
-    _tick();
-    window._osLiveTimerInterval=setInterval(_tick,1000);
-  }
   // Footer com botão de proposta
   const footer=document.getElementById('mo-os-tec-footer');
   const _osCli=(window.DB.ordens||[]).find(x=>x.id===id)?.clienteId||null;
@@ -12269,7 +12158,7 @@ function osCalcPreview(id){
 // ── Registar pagamento rápido (botões directos) ──────────────
 async function osRegistarPagamentoRapido(id, met){
   const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
-  const imediato=['mb','mbway','dinheiro'].includes(met);
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met);
   const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência',cheque:'Cheque'}[met]||met;
   const updated={...os, pagamento:{ metodo:met, data:today(), imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id }};
   if(imediato){
@@ -12932,8 +12821,17 @@ async function osSalvarCliente(){
       return;
     }
   }
-  const tipo=document.querySelector('input[name="cli-tipo"]:checked')?.value||'particular';
+  const tipoSel=document.querySelector('input[name="cli-tipo"]:checked')?.value||'particular';
+  const tipo = (tipoSel==='condominio' || _nifEhCondominio(nifInput)) ? 'condominio' : tipoSel;
   const outraMorada=document.getElementById('cli-outra-morada')?.checked;
+  if(tipo==='condominio'){
+    const admNomeChk=(document.getElementById('cli-adm-nome')?.value||'').trim();
+    if(!admNomeChk){
+      toast('⚠️ Para condomínios é obrigatório indicar a Administradora','⚠️');
+      document.getElementById('cli-adm-nome')?.focus();
+      return;
+    }
+  }
   if(!editingCliId && !window.DB._metaCarregado){
     toast('Aguarda: os dados ainda estão a carregar.','⏳');
     return;
@@ -13203,12 +13101,8 @@ function osRenderMinhas(){
   try{ tecRenderMinhasDespesas(); }catch(e){ console.warn('tecRenderMinhasDespesas falhou:', e); }
 
   // Base: todas as OS do técnico (exceto canceladas)
-  // OS agendadas cuja data já passou e nunca foram atendidas saem da agenda do
-  // técnico — a remarcação passa a ser responsabilidade do comercial (visível
-  // normalmente na agenda do admin, que não tem este filtro).
   let minhas=(window.DB.ordens||[])
     .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada')
-    .filter(o=>!(o.estado==='agendada' && o.data && o.data<hoje))
     .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
 
   if(q){
@@ -13231,22 +13125,14 @@ function osRenderMinhas(){
       if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return false; // orçamento/garantia não precisam
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
       const est=rel?.estado||'';
-      // "feito" = relatório pronto a enviar, já enviado, OU fechado como definitivo pelo admin
-      return !(est==='pronto' || est==='enviado' || rel?.relatorioEstado==='definitivo');
+      // "feito" = relatório pronto a enviar ou já enviado; o resto falta
+      return !(est==='pronto' || est==='enviado');
     });
   } else if(filtro==='concluida'){
     minhas = minhas.filter(o=>o.estado==='concluida');
   } else if(filtro==='agendada'){
     // Agendadas — agrupadas por dia (a ordenação ascendente já garante por dia)
-    // Mostra os próximos 7 dias (uma semana). As agendadas com data já passada
-    // já saíram da base (ver acima) — são remarcadas pelo comercial.
-    const limite7d = new Date(); limite7d.setDate(limite7d.getDate()+7);
-    const limite7dStr = limite7d.toISOString().slice(0,10);
-    minhas = minhas.filter(o=>o.estado==='agendada' && o.data>=hoje && o.data<=limite7dStr);
-  } else if(filtro==='nao_realizada'){
-    // Já não há OS não realizadas na agenda do técnico (saem da base) — filtro mantido
-    // apenas por compatibilidade, fica sempre vazio.
-    minhas = minhas.filter(o=>false);
+    minhas = minhas.filter(o=>o.estado==='agendada' && o.estado!=='os_fechada');
   } else if(filtro==='em_curso'){
     minhas = minhas.filter(o=>o.estado==='em_curso');
   } else if(filtro==='hoje'){
@@ -13258,7 +13144,7 @@ function osRenderMinhas(){
       if(o.data!==hoje) return false;
       if(o.estado!=='agendada' && o.estado!=='em_curso') return false;
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-      if(rel && (rel.estado==='enviado' || rel.estado==='pronto' || rel.relatorioEstado==='definitivo')) return false;
+      if(rel && (rel.estado==='enviado' || rel.estado==='pronto')) return false;
       return true;
     });
   } else {
@@ -13316,8 +13202,7 @@ function osRenderMinhas(){
     const vazioTitulo = q ? 'Nenhuma OS encontrada'
       : filtro==='hoje' ? 'Sem OS por fazer hoje'
       : filtro==='' ? 'Sem OS para hoje'
-      : filtro==='agendada' ? 'Sem OS agendadas nos próximos 3 dias'
-      : filtro==='nao_realizada' ? 'Sem OS não realizadas'
+      : filtro==='agendada' ? 'Sem OS agendadas'
       : filtro==='fechadas' ? 'Sem OS concluídas'
       : filtro==='falta_rel' ? 'Sem relatórios em falta'
       : filtro==='concluida' ? 'Sem OS concluídas'
@@ -13327,7 +13212,6 @@ function osRenderMinhas(){
     const vazioSub = q ? `Nada corresponde a "${q}". Tente o nome do cliente ou o nº da OS.`
       : filtro==='hoje' ? 'Tudo o que estava agendado para hoje já está tratado. Veja "🗓️ Agendadas" ou "✅ Concluídas".'
       : filtro==='falta_rel' ? '🎉 Não há OS concluídas à espera de relatório.'
-      : filtro==='nao_realizada' ? '🎉 Não há OS agendadas no passado por atender.'
       : filtro==='' ? 'Veja "🗓️ Agendadas" para os próximos dias, ou use a pesquisa.'
       : 'Experimente outro filtro ou a pesquisa.';
     list.innerHTML=`<div style="padding:3rem 1rem;text-align:center;color:var(--text3);">
@@ -13364,7 +13248,7 @@ function osRenderMinhas(){
       const prazoBadge=o.fechadaSemRelatorio?rpPrazoBadge(o):'';
       // ⚠️ OS concluída/fechada (faturável) sem relatório feito
       const _naoFatCard=(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o));
-      const faltaRel=concluida && !_naoFatCard && !(relEst==='pronto'||relEst==='enviado'||rel?.relatorioEstado==='definitivo');
+      const faltaRel=concluida && !_naoFatCard && !(relEst==='pronto'||relEst==='enviado');
       const faltaRelBadge=faltaRel?'<span style="font-size:10px;font-weight:800;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:2px 7px;border-radius:10px;">⚠️ Falta relatório</span>':'';
 
       // Borda do card conforme estado
@@ -13438,7 +13322,7 @@ function osRenderMinhas(){
       // Pagamento badge
       const pagMet=o.pagamento?.metodo||'';
       const pagLabels={mb:'💳 MB',mbway:'📱 MBWay',dinheiro:'💵 Numerário',transferencia:'🏦 Transf.',cheque:'📝 Cheque',entidade:'🏢 Entidade'};
-      const pagBadge=pagMet?`<span style="font-size:11px;font-weight:700;color:${['mb','mbway','dinheiro'].includes(pagMet)?'#15803d':'#92400e'};background:${['mb','mbway','dinheiro'].includes(pagMet)?'#f0fdf4':'#fffbeb'};padding:2px 8px;border-radius:6px;">${pagLabels[pagMet]||pagMet}</span>`:'';
+      const pagBadge=pagMet?`<span style="font-size:11px;font-weight:700;color:${['mb','mbway','dinheiro','cheque'].includes(pagMet)?'#15803d':'#92400e'};background:${['mb','mbway','dinheiro','cheque'].includes(pagMet)?'#f0fdf4':'#fffbeb'};padding:2px 8px;border-radius:6px;">${pagLabels[pagMet]||pagMet}</span>`:'';
 
       return `
       <div class="${cardClass}" onclick="osAbrirDetalhe('${o.id}')">
@@ -14264,7 +14148,7 @@ async function relDiarioEnviarGestao(dataStr){
     if(o.estado!=='concluida'&&o.estado!=='os_fechada') return false;
     if(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o)) return false;
     const rel = rels.find(r=>r.id===o.id);
-    if(rel&&(rel.estado==='enviado'||rel.estado==='pronto'||rel.relatorioEstado==='definitivo')) return false;
+    if(rel&&(rel.estado==='enviado'||rel.estado==='preenchido')) return false;
     const dataFecho = o.concluidoEm||o.data;
     if(!dataFecho) return false;
     const dFecho = new Date(dataFecho.slice(0,10)+'T12:00:00');
@@ -14330,13 +14214,13 @@ async function relDiarioEnviarGestao(dataStr){
 
   // Secção 2 — Faturas por emitir
   let s2 = '';
-  const metLabel = {numerario:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
+  const metLabel = {numerario:'Numerário',dinheiro:'Numerário',mb:'Multibanco',mbway:'MBWay',transferencia:'Transferência',cheque:'Cheque'};
   if(fatPorEmitir.length){
     let totalFat=0;
     const linhas = fatPorEmitir.map((m,i)=>{
       const os  = ordens.find(o=>o.id===m.osId)||{};
       const cli = clientes.find(c=>c.id===os.clienteId)||{};
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento);
       const valor    = parseFloat(os.valorTotal||os.total||m.valorTotal||0)||0;
       totalFat += valor;
@@ -14369,7 +14253,7 @@ async function relDiarioEnviarGestao(dataStr){
     const linhas = fatEmitidas.map((m,i)=>{
       const os  = ordens.find(o=>o.id===m.osId)||{};
       const cli = clientes.find(c=>c.id===os.clienteId)||{};
-      const imediato = ['numerario','mb','mbway','cheque'].includes(m.metodoPagamento);
+      const imediato = ['numerario','dinheiro','mb','mbway','cheque'].includes(m.metodoPagamento);
       const tipoDoc  = docTipoLabelMetodo(m.metodoPagamento);
       const valor    = parseFloat(os.valorTotal||os.total||m.valorTotal||0)||0;
       totalEmit += valor;
@@ -14716,303 +14600,10 @@ async function relDiarioEnviarFaturamento(dataStr){
 }
 
 
-// ══════════════════════════════════════════════════════════════
-// MÓDULO: INTEGRAÇÃO MOLONI
-// API: https://api.moloni.pt/v1/
-// Fluxo: 1) grant → access_token  2) companies/getAll → company_id
-//         3) customers/getByVat ou insert  4) invoices/insert
-// ══════════════════════════════════════════════════════════════
-
-window._moloniCfg       = null;
-window._moloniToken     = null;
-window._moloniTokenExp  = null;
-window._moloniCompanyId = null; // obtido automaticamente após login
-
-// ── Carregar/guardar configuração ────────────────────────────
-function cfgCarregarMoloni(){
-  const cfg = window.DB?.empresaConfig?.moloni || {};
-  window._moloniCfg = cfg;
-  window._moloniCompanyId = null; // forçar nova pesquisa de company_id
-  const set = (id,v) => { const el=document.getElementById(id); if(el) el.value=v||''; };
-  const chk = (id,v) => { const el=document.getElementById(id); if(el) el.checked=!!v; };
-  set('moloni-client-id',     cfg.clientId);
-  set('moloni-client-secret', cfg.clientSecret);
-  set('moloni-username',      cfg.username);
-  set('moloni-password',      cfg.password);
-  set('moloni-company-id',    cfg.companySlug||cfg.companyId||'valentimfialhouniplda');
-  set('moloni-serie',         cfg.serie||'2026');
-  chk('moloni-auto-fatura',   cfg.autoFatura);
-  chk('moloni-auto-cliente',  cfg.autoCliente);
-  chk('moloni-notif-baixa',   cfg.notifBaixa!==false);
-  const st = document.getElementById('moloni-status');
-  if(st) st.innerHTML = cfg.clientId
-    ? '<span style="color:#16a34a;">✅ Credenciais configuradas</span>'
-    : '<span style="color:#94a3b8;">Sem credenciais — preencha os campos acima</span>';
-}
-
-async function cfgSalvarMoloni(){
-  const g = id => document.getElementById(id)?.value?.trim()||'';
-  const c = id => document.getElementById(id)?.checked||false;
-  const cfg = {
-    clientId:     g('moloni-client-id'),
-    clientSecret: g('moloni-client-secret'),
-    username:     g('moloni-username'),
-    password:     g('moloni-password'),
-    companyId:    g('moloni-company-id'),
-    serie:        g('moloni-serie')||'2026',
-    autoFatura:   c('moloni-auto-fatura'),
-    autoCliente:  c('moloni-auto-cliente'),
-    notifBaixa:   c('moloni-notif-baixa'),
-  };
-  window._moloniCfg = cfg;
-  // Guardar dentro de empresaConfig.moloni
-  const empCfg = window.DB?.empresaConfig || {};
-  const updated = { ...empCfg, moloni: cfg };
-  await window.fsMeta('empresaConfig', updated);
-  if(!window.DB) window.DB={};
-  window.DB.empresaConfig = updated;
-  window._empCfg = updated;
-  toast('✅ Configuração Moloni guardada!','🧾');
-  cfgCarregarMoloni();
-}
-
-// ── Autenticação Moloni — passo 1: obter access_token ────────
-async function moloniAutenticar(){
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  if(!cfg.clientId || !cfg.clientSecret || !cfg.username || !cfg.password){
-    throw new Error('Credenciais Moloni não configuradas. Vá a Configurações → Moloni.');
-  }
-
-  // Reutilizar token se ainda válido (margem de 2 min)
-  if(window._moloniToken && window._moloniTokenExp && Date.now() < window._moloniTokenExp - 120000){
-    return window._moloniToken;
-  }
-
-  // Autenticação via GET conforme documentação Moloni
-  const url = `https://moloni-proxy.localizafugas.workers.dev/grant/?grant_type=password`
-    + `&client_id=${encodeURIComponent(cfg.clientId)}`
-    + `&client_secret=${encodeURIComponent(cfg.clientSecret)}`
-    + `&username=${encodeURIComponent(cfg.username)}`
-    + `&password=${encodeURIComponent(cfg.password)}`
-    + `&json=1`;
-
-  const r = await fetch(url);
-  if(!r.ok) throw new Error(`Moloni auth HTTP ${r.status}`);
-  const data = await r.json();
-  if(data.errors) throw new Error('Moloni auth erro: ' + JSON.stringify(data.errors));
-  if(!data.access_token) throw new Error('Sem access_token — verifique Client ID, Client Secret, username e password');
-
-  window._moloniToken    = data.access_token;
-  window._moloniTokenExp = Date.now() + (data.expires_in||3600)*1000;
-  console.log('[Moloni] ✅ Token obtido, expira em', new Date(window._moloniTokenExp).toLocaleTimeString());
-
-  // Passo 2: obter Company ID numérico automaticamente
-  await moloniObterCompanyId(data.access_token);
-
-  return window._moloniToken;
-}
-
-// ── Passo 2: obter Company ID numérico via companies/getAll ──
-async function moloniObterCompanyId(token){
-  if(window._moloniCompanyId) return window._moloniCompanyId;
-  const r = await fetch(`https://moloni-proxy.localizafugas.workers.dev/companies/getAll/?access_token=${token}&json=1`);
-  if(!r.ok) throw new Error(`companies/getAll HTTP ${r.status}`);
-  const data = await r.json();
-  const empresas = Array.isArray(data) ? data : (data.data||[]);
-  if(!empresas.length) throw new Error('Nenhuma empresa encontrada na conta Moloni');
-  console.log('[Moloni] Empresas disponíveis:', empresas.map(e=>e.company_id+' — '+e.name));
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  // Estratégia de selecção (por ordem de prioridade):
-  // 1. Se companyId numérico configurado → usar directamente
-  // 2. Excluir empresa de demonstração (nome contém "demonstra" ou id <= 10)
-  // 3. Usar a que tiver maior company_id (a conta real é sempre maior que a demo)
-  let match;
-  const companyIdNum = parseInt(cfg.companySlug);
-  if(!isNaN(companyIdNum) && companyIdNum > 10){
-    match = empresas.find(e=>e.company_id===companyIdNum);
-  }
-  if(!match){
-    const reais = empresas.filter(e=>
-      e.company_id > 10 &&
-      !(e.name||'').toLowerCase().includes('demonstra')
-    );
-    match = reais.sort((a,b)=>b.company_id-a.company_id)[0];
-  }
-  if(!match) match = empresas[0];
-  window._moloniCompanyId = match.company_id || match.id;
-  console.log('[Moloni] ✅ Company ID:', window._moloniCompanyId, '—', match.name);
-  return window._moloniCompanyId;
-}
-
-// ── Testar ligação ───────────────────────────────────────────
-async function moloniTestarLigacao(){
-  const st = document.getElementById('moloni-status');
-  if(st) st.innerHTML = '⏳ A testar...';
-  try{
-    await cfgSalvarMoloni();
-    const token = await moloniAutenticar();
-    const cfg = window._moloniCfg;
-    // Verificar empresa
-    // Company ID foi obtido automaticamente em moloniAutenticar → moloniObterCompanyId
-    const compId = window._moloniCompanyId;
-    const r2 = await fetch(`https://moloni-proxy.localizafugas.workers.dev/companies/getAll/?access_token=${token}&json=1`);
-    const d2 = await r2.json();
-    const empresas = Array.isArray(d2) ? d2 : (d2.data||[]);
-    const emp = empresas.find(e=>e.company_id===compId)||empresas[0]||{};
-    const empNome = emp.name||emp.slug||'—';
-    if(st) st.innerHTML = `<span style="color:#16a34a;">✅ Ligado — <strong>${empNome}</strong> (Company ID: ${compId})</span>`;
-    toast(`✅ Moloni — ${empNome} (ID: ${compId})`, '🧾');
-  }catch(e){
-    if(st) st.innerHTML = `<span style="color:#dc2626;">❌ Erro: ${e.message}</span>`;
-    toast(`❌ Moloni: ${e.message}`, '❌');
-  }
-}
-
-// ── Obter customer_id do Moloni ──────────────────────────────
-// Estratégia: usar consumidor final (NIF 999999990)
-// Não requer permissões especiais de clientes
-async function moloniObterCliente(token, cli){
-  const companyId = window._moloniCompanyId;
-  if(!companyId) throw new Error('Company ID não obtido — autentique primeiro');
-
-  // Usar consumidor final genérico (999999990)
-  // Os dados reais do cliente ficam nas notas/referência da fatura
-  // Procurar o customer_id do consumidor final na empresa
-  const r = await fetch(
-    `https://moloni-proxy.localizafugas.workers.dev/customers/getByVat/?access_token=${token}&company_id=${companyId}&vat=999999990&json=1`
-  );
-  const data = await r.json();
-  const lista = Array.isArray(data) ? data : (data.data||[]);
-  if(lista.length){
-    console.log('[Moloni] Consumidor final encontrado, ID:', lista[0].customer_id);
-    return lista[0].customer_id;
-  }
-
-  // Se não encontrar, devolver 0 — o Moloni aceita customer_id=0 para consumidor final
-  console.log('[Moloni] Usando customer_id=0 (consumidor final)');
-  return 0;
-}
-
-// ── Criar fatura no Moloni a partir de uma OS ────────────────
-async function moloniCriarFaturaDeOS(osId, msgId){
-  if(!osId){ toast('OS não encontrada','⚠️'); return; }
-  const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
-  if(!os){ toast('OS '+osId+' não encontrada','⚠️'); return; }
-  const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
-  const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
-
-  toast('⏳ A criar fatura no Moloni...','🧾');
-  try{
-    const cfg   = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-    const token = await moloniAutenticar(); // também obtém _moloniCompanyId
-    const companyId = window._moloniCompanyId;
-
-    // 1. Obter/criar cliente
-    const customerId = await moloniObterCliente(token, cli);
-
-    // 2. Calcular valores (sem IVA)
-    const ivaPct   = parseInt(srv?.iva||os.iva||23);
-    const total    = parseFloat(os.valorTotal||os.total||0);
-    const semIva   = parseFloat((total / (1 + ivaPct/100)).toFixed(4));
-
-    // 3. Data do documento
-    const dataDoc = (os.concluidoEm||os.fechadaEm||os.data||new Date().toISOString()).slice(0,10);
-
-    // 4. Criar fatura (status 0 = rascunho para revisão antes de emitir)
-    const payload = new URLSearchParams({
-      company_id:          companyId,   // também no body para garantir
-      access_token:        token,       // também no body para garantir
-      date:                dataDoc,
-      expiration_date:     dataDoc,
-      document_set_name:   cfg.serie||'2026',
-      customer_id:         customerId,
-      status:              0,
-      our_reference:       osId,
-      financial_discount:  0,
-      special_discount:    0,
-      salesman_id:         0,
-      salesman_commission: 0,
-      payment_method_id:   0,
-      delivery_method_id:  0,
-      notes: `Cliente: ${cli.nome||'—'} | NIF: ${cli.nif||'—'} | ${[cli.srvRua||cli.rua, cli.srvLocalidade||cli.localidade].filter(Boolean).join(', ')} | OS: ${osId}${os.obs?' | '+os.obs.slice(0,80):''}`,
-      'products[0][product_id]':  0,
-      'products[0][name]':        srv.nome||'Serviço de Peritagem Hidráulica',
-      'products[0][summary]':     `${srv.nome||'Serviço'} — OS ${osId}`,
-      'products[0][qty]':         1,
-      'products[0][price]':       semIva,
-      'products[0][discount]':    0,
-      'products[0][order]':       1,
-      'products[0][taxes][0][tax_id]':    0,
-      'products[0][taxes][0][value]':     ivaPct,
-      'products[0][taxes][0][order]':     1,
-      'products[0][taxes][0][cumulative]':0,
-    });
-
-    // access_token e company_id vão no URL, restantes dados no BODY
-    const r = await fetch(`https://moloni-proxy.localizafugas.workers.dev/invoices/insert/?access_token=${token}&company_id=${companyId}&json=1`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: payload,
-    });
-    const rawText = await r.text();
-    console.log('[Moloni] Resposta raw:', rawText.slice(0,300));
-    let data = null;
-    try{ data = JSON.parse(rawText); } catch(e){ data = rawText; }
-
-    // Moloni pode devolver vários formatos de sucesso:
-    // {document_id: X} ou {valid:1, document_id:X} ou [docId] ou apenas o ID
-    const docId = data?.document_id || data?.id ||
-                  (Array.isArray(data) && data[0]?.document_id) ||
-                  (typeof data === 'number' ? data : null);
-
-    if(docId || data?.valid === 1){
-      const finalDocId = docId || 'N/A';
-      const docNum = data?.document_set_number
-        ? `${cfg.serie||'2026'}/${data.document_set_number}`
-        : String(finalDocId);
-
-      // Actualizar aviso de faturação com nº do documento
-      if(msgId){
-        await window.fsSetMerge('mensagens_internas', msgId, {
-          documentoEmitido:   true,
-          documentoNumero:    docNum,
-          documentoEmitidoEm: new Date().toISOString(),
-          documentoEmitidoPor:'Moloni (automático)',
-          documentoObs:       `Fatura criada no Moloni — ID: ${docId}`,
-        });
-      }
-      // Guardar referência na OS
-      await window.fsSetMerge('ordens', osId, { moloniDocId: docId, moloniDocNum: docNum });
-      if(typeof auditLog==='function') auditLog('moloni_fatura_criada', `OS ${osId} — Fatura ${docNum} criada no Moloni (ID: ${finalDocId})`);
-
-      toast(`✅ Fatura ${docNum} criada no Moloni!`, '🧾');
-      console.log('[Moloni] ✅ Sucesso:', data);
-      if(typeof adminAbrirPainelMensagens==='function') adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
-    } else {
-      console.error('[Moloni] Resposta inesperada:', data);
-      throw new Error(data?.message || data?.errors?.[0]?.message || JSON.stringify(data).slice(0,120));
-    }
-  }catch(e){
-    console.error('[Moloni] Erro:', e);
-    toast(`❌ Moloni: ${e.message}`, '❌');
-  }
-}
-
-// ── Auto-criar fatura quando OS é fechada (se activado) ──────
-async function moloniAutoFaturaOsFechada(osId){
-  const cfg = window._moloniCfg || window.DB?.empresaConfig?.moloni || {};
-  if(!cfg.autoFatura || !cfg.clientId) return;
-  const msg = (window.DB.mensagens_internas||[]).find(m=>m.osId===osId&&m.tipo==='pedido_fatura');
-  const msgId = msg?._firebaseId || msg?.id || null;
-  await moloniCriarFaturaDeOS(osId, msgId).catch(e=>console.warn('[Moloni auto]',e));
-}
-
-
-// ── Badge de prazo de relatório ─────────────────────────────
 function rpPrazoBadge(os){
   if(!os.fechadaSemRelatorio) return '';
   const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
-  if(rel?.estado==='enviado' || rel?.estado==='pronto' || rel?.relatorioEstado==='definitivo') return ''; // já resolvido
+  if(rel?.estado==='enviado') return ''; // já resolvido
   const dias = rpDiasParaEnvio(os);
   if(dias === null) return '';
   if(dias > 3)  return `<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;">📋 Relatório — ${dias}d restantes</span>`;
@@ -15036,8 +14627,6 @@ function tecNotificarRelatoriosPendentes(){
   // Filtrar só as que ainda não têm relatório enviado
   const pendentes = ordens.filter(o=>{
     const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    if(rel?.relatorioEstado==='definitivo') return false; // fechado pelo admin — não conta como pendente
-    if(rel?.estado==='pronto') return false; // o técnico já entregou o seu lado
     return !rel || rel.estado!=='enviado';
   });
   if(!pendentes.length) return;
@@ -15132,7 +14721,7 @@ async function tecReabrirParaRelatorio(osId){
       const cfg=window._emailCfg||{}, emp=window._empCfg||{};
       if(cfg.brevoApiKey){
         const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
-        const dest=emp.email||cfg.remetente||'localizafugas@gmail.com';
+        const dest=cfg.remetente||emp.email||'localizafugas@gmail.com';
         await fetch('https://api.brevo.com/v3/smtp/email',{
           method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
           body:JSON.stringify({
@@ -15172,7 +14761,7 @@ async function osReconciliarImediatos(){
   const limite=new Date(); limite.setDate(limite.getDate()-60);
   const cands=(window.DB.ordens||[]).filter(o=>{
     if(o.estado!=='concluida' && o.estado!=='os_fechada') return false;
-    const met=(o.metodoPagamento||o.pagamento?.metodo||'').toLowerCase();
+    const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
     if(!imed.includes(met)) return false;
     if(o.pago===true) return false;
     if(_osImediatosFeitos.has(o.id)) return false;
@@ -15186,7 +14775,7 @@ async function osReconciliarImediatos(){
     for(const o of cands){
       _osImediatosFeitos.add(o.id);
       try{
-        const met=(o.metodoPagamento||o.pagamento?.metodo||'').toLowerCase();
+        const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
         const dataRec=(o.pagamento?.data||o.concluidoEm||o.data||today());
         const now=new Date().toISOString();
         const patch={faturaEmitida:true, faturaEmitidaEm:now, pago:true, pagoEm:now, pagoPor:'auto-imediato'};
@@ -16139,6 +15728,22 @@ function ncFechar(){
   document.querySelectorAll('input[name="nc-tipo"]').forEach(r=>{ r.checked = r.value==='particular'; });
 }
 
+// ── Em Portugal, NIF a começar por 9 = condomínio / entidade sem personalidade jurídica ──
+function _nifEhCondominio(nif){
+  return /^9/.test((nif||'').replace(/\D/g,''));
+}
+// Deteta automaticamente "Condomínio" quando o NIF começa por 9, e mostra o bloco respectivo.
+// prefixo: 'nc' (formulário rápido) ou 'cli' (ficha completa de cliente)
+function osDetectarCondominioPorNif(prefixo){
+  const nifEl = document.getElementById(prefixo+'-nif');
+  if(!nifEl || !_nifEhCondominio(nifEl.value)) return;
+  const radioCond = document.querySelector(`input[name="${prefixo}-tipo"][value="condominio"]`);
+  if(radioCond && !radioCond.checked){
+    radioCond.checked = true;
+    if(prefixo==='nc') osToggleNcTipo(); else osToggleTipo();
+  }
+}
+
 function osToggleNcTipo(){
   const tipo = document.querySelector('input[name="nc-tipo"]:checked')?.value || 'particular';
   const cond = document.getElementById('nc-cond-bloco');
@@ -16159,9 +15764,20 @@ async function ncGuardar(){
   if(!nome){ toast('Nome é obrigatório','⚠️'); document.getElementById('nc-nome')?.focus(); return; }
   if(!tel){  toast('Telefone é obrigatório','⚠️'); document.getElementById('nc-tel')?.focus(); return; }
 
-  const tipo = document.querySelector('input[name="nc-tipo"]:checked')?.value || 'particular';
+  const tipoSel = document.querySelector('input[name="nc-tipo"]:checked')?.value || 'particular';
   const outraMorada = document.getElementById('nc-outra-morada')?.checked || false;
   const g = id => (document.getElementById(id)?.value || '').trim();
+  const tipo = (tipoSel==='condominio' || _nifEhCondominio(g('nc-nif'))) ? 'condominio' : tipoSel;
+
+  if(tipo==='condominio'){
+    const admIdChk = g('nc-adm-id');
+    const admNomeChk = g('nc-adm-nome');
+    if(!admIdChk && !admNomeChk){
+      toast('⚠️ Para condomínios é obrigatório indicar a Administradora','⚠️');
+      document.getElementById('nc-adm-id')?.focus();
+      return;
+    }
+  }
 
   if(!window.DB._metaCarregado){
     toast('Aguarda: os dados ainda estão a carregar.','⏳');
@@ -17724,9 +17340,20 @@ async function osSugerirTecnicoPainel(){
       score, cor:u.cor||'#039be5',
       // ícone "casa" só quando a partida foi mesmo da residência/estadia,
       // não apenas "sem OS antes" (que ignorava OS futuras no mesmo dia)
-      primeiraOS: !osAntes.length && !osDepois.length
+      primeiraOS: !osAntes.length && !osDepois.length,
+      ehEmergencia: _ehTecnicoEmergencia(u)
     };
   }));
+
+  // ── Aplicar a regra do técnico de emergência (mesmo critério do outro painel) ──
+  const _trabalhoEmBragaPorto2 = _ehZonaBragaPorto(cli?.cp);
+  const _haOutroDisponivel2 = analise.some(a => !a.ehEmergencia && !a.conflito);
+  console.log('[DIAG painel Sugerir] cli?.cp:', cli?.cp, '| emBragaPorto:', _trabalhoEmBragaPorto2, '| haOutroDisponivel:', _haOutroDisponivel2, '| analise antes do score:', analise.map(a=>({nome:a.u.name, ehEmergencia:a.ehEmergencia, score:a.score, dist:a.distUsar})));
+  analise.forEach(a => {
+    if(!a.ehEmergencia) return;
+    if(!_trabalhoEmBragaPorto2){ a.score = 999; }
+    else if(_haOutroDisponivel2){ a.score = 900; }
+  });
 
   // Ordenar: sem conflito primeiro, depois por score
   analise.sort((a,b)=>a.score-b.score);
@@ -17859,7 +17486,7 @@ function openMo(id){
     el.scrollTop=0;
   },30);
 }
-function closeMo(id){document.getElementById(id).classList.remove('open'); if(id==='mo-os-tec' && window._osLiveTimerInterval){ clearInterval(window._osLiveTimerInterval); window._osLiveTimerInterval=null; }}
+function closeMo(id){document.getElementById(id).classList.remove('open');}
 function showToast(msg,ico='✅'){toast(msg,ico);}
 function toast(msg,ico='✅'){
   const t=document.getElementById('toast');
@@ -18346,7 +17973,7 @@ const _origCfgRender = typeof cfgRender === 'function' ? cfgRender : null;
 // (será chamado via cfgTab quando navegado)
 
 function cfgTab(tab, el){
-  ['utilizadores','funcionarios','servicos','email','empresa','metodos-pag','tipos-despesa','testes-relatorio','equipamentos-relatorio','moloni','manutencao'].forEach(t=>{
+  ['utilizadores','funcionarios','servicos','email','empresa','metodos-pag','tipos-despesa','testes-relatorio','equipamentos-relatorio','modelos-proposta','manutencao'].forEach(t=>{
     const el2=document.getElementById('cfg-tab-'+t);
     if(el2) el2.style.display = t===tab ? 'block' : 'none';
   });
@@ -18358,7 +17985,7 @@ function cfgTab(tab, el){
   if(tab==='tipos-despesa')          cfgRenderTiposDesp();
   if(tab==='testes-relatorio')       cfgRenderTestes();
   if(tab==='equipamentos-relatorio') cfgRenderEquipamentos();
-  if(tab==='moloni')                 cfgCarregarMoloni();
+  if(tab==='modelos-proposta')       cfgRenderModelosProposta();
   if(tab==='manutencao')             limpezaAtualizarInfo();
 }
 
@@ -18368,6 +17995,8 @@ function cfgCarregarEmail(){
   const set = (id,v)=>{ const el=document.getElementById(id); if(el&&v!==undefined) el.value=v; };
   set('cfg-email-empresa',    cfg.empresa    || 'Localiza Fugas — Valentim Fialho Unip. Lda.');
   set('cfg-email-remetente',  cfg.remetente  || 'localizafugas@gmail.com');
+  set('cfg-email-replyto',    cfg.replyTo    || 'localizafugas@gmail.com');
+  set('cfg-email-remetente-relatorio', cfg.remetenteRelatorio || 'localizafugas@gmail.com');
   set('cfg-email-tel',        cfg.tel        || '253 000 000');
   set('cfg-email-website',    cfg.website    || 'www.localizafugas.com');
   set('cfg-email-assinatura', cfg.assinatura || 'Com os melhores cumprimentos,\nLocaliza Fugas — Valentim Fialho Unip. Lda.\nTel: 253 000 000\nlocalizafugas@gmail.com');
@@ -18416,6 +18045,8 @@ async function cfgSalvarEmail(){
   const cfg = {
     empresa:           g('cfg-email-empresa'),
     remetente:         g('cfg-email-remetente'),
+    replyTo:           g('cfg-email-replyto'),
+    remetenteRelatorio: g('cfg-email-remetente-relatorio'),
     tel:               g('cfg-email-tel'),
     website:           g('cfg-email-website'),
     assinatura:        g('cfg-email-assinatura'),
@@ -18731,9 +18362,9 @@ async function rpNotificarAlteracaoTecnico(os, rel){
     const cfg = window._emailCfg||{};
     const emp = window._empCfg||{};
     if(cfg.brevoApiKey){
-      const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+      const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
       const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
-      const destino   = emp.email||cfg.remetente||'localizafugas@gmail.com';
+      const destino   = cfg.remetente||emp.email||'localizafugas@gmail.com';
       const assunto   = `✏️ Relatório alterado pelo técnico — OS ${os.id}`;
       const corpo     =
         `O técnico ${tec} alterou o relatório de uma OS já finalizada.\n\n`+
@@ -19966,7 +19597,7 @@ async function agRecSalvar(){
   const nif=document.getElementById('ag-rec-nif').value.trim();
   const srv=(window.DB.servicos||[]).find(x=>x.id===o?.servicoId);
 
-  function getDocType(pay){ return (window.ehFaturaReciboMetodo? window.ehFaturaReciboMetodo(pay) : ['mb','dinheiro','numerario'].includes(pay)) ? 'fatura-recibo' : 'fatura'; }
+  function getDocType(pay){ return (window.ehFaturaReciboMetodo? window.ehFaturaReciboMetodo(pay) : ['mb','dinheiro','numerario','mbway','cheque'].includes(pay)) ? 'fatura-recibo' : 'fatura'; }
 
   // Reutilizar recibo já existente da OS (ex.: pendente criado na baixa de Faturado)
   let reuseId=window._agRecEditId;
@@ -20468,10 +20099,6 @@ function rpEstadoRelatorio(os){
   }
   // OS já concluídas sem relatório → "pendente" (problema real)
   if(!rel) return 'pendente';
-  // [CORRIGIDO] Relatório fechado como DEFINITIVO pelo admin (fluxo "Concluir OS
-  // com assinaturas") conta como concluído, mesmo que o campo 'estado' nunca
-  // tenha passado por 'pronto'/'enviado' (são dois fluxos de fecho diferentes).
-  if(rel.relatorioEstado==='definitivo') return 'enviado';
   return rel.estado||'rascunho';
 }
 
@@ -20496,7 +20123,7 @@ function rpPrazoLabel(os){
   if(est==='enviado')    return '<span style="color:var(--green);font-size:12px;">✅ Enviado</span>';
   if(est==='a_realizar') return `<span style="color:#0369a1;font-size:11px;">📅 ${fmtDate(os.data)}</span>`;
   const pay = rel?.pagamento?.metodo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(pay);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(pay);
   if(!pay && !os.concluidoEm) return '<span style="color:var(--text3);font-size:11px;">— aguarda pagamento</span>';
   const dias = rpDiasParaEnvio(os);
   if(dias===null){
@@ -20899,7 +20526,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   const cfg = window._emailCfg||{};
   if(!cfg.brevoApiKey){ if(!auto) toast('Configure a API Key do Brevo em Configurações → Email.','⚠️'); return; }
   const emp = window._empCfg||{};
-  const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+  const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
   const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
 
   // Estado do relatório por OS: "a_realizar", "enviado", ou em elaboração (o resto)
@@ -21438,7 +21065,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;">
         ${['Casa de Banho','Cozinha','Telhado / Cobertura','Terraço','Varanda','Área Externa','Garagem','Cave','Piscina','Área Comum'].map(z=>{
           const sel=(c.divisoes||[]).includes(z)||(c.testesBanho||[]).length>0&&z==='Casa de Banho'||(c.testesCozinha||[]).length>0&&z==='Cozinha';
-          return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:'+(sel?'#eff6ff':'#f8fafc')+';border:1.5px solid '+(sel?'#2563eb':'#e2e8f0')+';border-radius:7px;cursor:pointer;font-size:12px;font-weight:'+(sel?'700':'400')+';user-select:none;" onclick="this.querySelector(\'input\').click();const i=this.querySelector(\'input\');setTimeout(()=>{this.style.background=i.checked?\'#eff6ff\':\'#f8fafc\';this.style.borderColor=i.checked?\'#2563eb\':\'#e2e8f0\';this.style.fontWeight=i.checked?\'700\':\'400\';},0);"><input type="checkbox" name="rp-zona" value="'+z+'" '+(sel?'checked':'')+' style="display:none;"> <span>'+z+'</span>'+(sel?'<span style="color:#2563eb;margin-left:auto;">✓</span>':'')+'</label>';
+          return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:'+(sel?'#eff6ff':'#f8fafc')+';border:1.5px solid '+(sel?'#2563eb':'#e2e8f0')+';border-radius:7px;cursor:pointer;font-size:12px;font-weight:'+(sel?'700':'400')+';user-select:none;" onclick="event.preventDefault();const i=this.querySelector(\'input\');i.checked=!i.checked;this.style.background=i.checked?\'#eff6ff\':\'#f8fafc\';this.style.borderColor=i.checked?\'#2563eb\':\'#e2e8f0\';this.style.fontWeight=i.checked?\'700\':\'400\';"><input type="checkbox" name="rp-zona" value="'+z+'" '+(sel?'checked':'')+' style="display:none;"> <span>'+z+'</span>'+(sel?'<span style="color:#2563eb;margin-left:auto;">✓</span>':'')+'</label>';
         }).join('')}
       </div>
     </div>
@@ -21904,6 +21531,7 @@ async function rpSalvarRelatorio(){
   if(_alteracaoTecnico){ rpNotificarAlteracaoTecnico(os, rel).catch(()=>{}); }
 
   if(isNew){
+    try{ await rpCriarRecibimentoAutomatico(os, rel); }catch(e){ console.warn('recibo auto falhou:',e); }
     try{ rpNotificarEquipa(os, rel); }catch(e){}
     try{ await rpNotificarSupervisoresRelatorio(os, rel); }catch(e){ console.warn('notif supervisores falhou:',e); }
   }
@@ -22005,7 +21633,7 @@ async function rpSalvarRelatorio(){
 // ── Criar recibo automático quando pagamento imediato ────────
 async function rpCriarRecibimentoAutomatico(os, rel){
   const pagMet = rel.pagamento?.metodo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(pagMet);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(pagMet);
   if(!imediato || !pagMet) return;
 
   // Delegar à função central com lock para evitar duplicação
@@ -22673,6 +22301,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
       <div><span style="opacity:.55;">Data: </span><strong>${dataServico}</strong></div>
       <div><span style="opacity:.55;">Horário: </span><strong>${ini||'—'}&nbsp;→&nbsp;${fim||'—'}</strong></div>
       <div><span style="opacity:.55;">Duração: </span><strong>${horasLabel}</strong></div>
+      <div><span style="opacity:.55;">Pagamento: </span><strong style="color:${pagMet?(imediato?'#86efac':'#fde047'):'#fca5a5'};">${pagMet?pagLabel:'Por confirmar'}</strong></div>
       <div style="margin-left:auto;background:${estadoBadge.bg};color:${estadoBadge.c};padding:3px 12px;border-radius:8px;font-weight:700;font-size:10px;white-space:nowrap;">${estadoBadge.txt}</div>
     </div>
 
@@ -22699,6 +22328,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
             ${row('Tipo de instalação',local||'—')}
             ${row('Contacto',cli.tel||'—')}
             ${row('Email',cli.email||'—')}
+            ${cli.tipo==='condominio'&&cli.admNome?row('Administradora', cli.admNome+(cli.admTel?' · '+cli.admTel:'')+(cli.admEmail?' · '+cli.admEmail:'')):''}
           </div>
         </div>
         <div style="margin-top:14px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
@@ -23181,6 +22811,7 @@ async function rpGerarDocxBase64(osId){
           rows:[
             linhaEtiqueta('Empresa / Cliente:',       nomeCli),
             linhaEtiqueta('Endereço do Imóvel:',      moradaCli),
+            ...(cli.tipo==='condominio'&&cli.admNome ? [linhaEtiqueta('Administradora:', cli.admNome+(cli.admTel?'  ·  '+cli.admTel:'')+(cli.admEmail?'  ·  '+cli.admEmail:''))] : []),
             linhaEtiqueta('Responsável Técnico:',     `${empResp}  ·  Cert. ITC Nº ${empItc}`),
             linhaEtiqueta('Técnico(s) no local:',     tecs),
             linhaEtiqueta('Data da Inspeção:',        dataFmt),
@@ -23475,7 +23106,7 @@ async function brevoEnviarRelatorio(osId){
   if(!rel.campos){ toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
 
   const empNome  = cfg.empresa  || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
-  const empEmail = cfg.remetente|| 'localizafugas@gmail.com';
+  const empEmail = cfg.remetenteRelatorio|| 'localizafugas@gmail.com';
   const empTel   = cfg.tel      || '253 000 000';
   const tecs     = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
   const [a,m,d]  = (os.data||'').split('-');
@@ -23549,6 +23180,7 @@ async function brevoEnviarRelatorio(osId){
   ];
   const payload = {
     sender:  {name:empNome, email:empEmail},
+    replyTo: {email: cfg.replyTo||'localizafugas@gmail.com', name:empNome},
     to:      [{email:cli.email, name:cli.nome||''}],
     subject: assunto,
     htmlContent: corpoHtmlFinal,
@@ -23651,7 +23283,7 @@ ${empNome}`;
       toast('✅ Email enviado com sucesso para '+cli.email+'!');
       rpRender();
       if(typeof osRenderAgenda==='function') osRenderAgenda();
-      return {ok:true};
+      return;
     }
   }catch(e){ console.warn('EmailJS falhou, abrindo Gmail:', e); }
 
@@ -23659,7 +23291,6 @@ ${empNome}`;
   const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
   window.open(mailto,'_blank');
   toast('📧 Gmail aberto — adicione o PDF como anexo e envie!', 5000);
-  return {ok:false, motivo:'fallback-gmail'};
 };
 
 // ── Helper: pagamento confirmado pelo admin? ────────────────────
@@ -23813,7 +23444,7 @@ function rpAbrirPagamento(osId){
 
 function rpPagMetodoChange(){
   const met = document.getElementById('rp-pag-metodo')?.value||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met);
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met);
   const aviso = document.getElementById('rp-pag-aviso');
   const refWrap = document.getElementById('rp-pag-ref-wrap');
   if(refWrap) refWrap.style.display=['transferencia','cheque'].includes(met)?'block':'none';
@@ -23936,7 +23567,7 @@ function osPagMetodoChange(){
   const sel = document.getElementById('os-pag-metodo');
   const selOpt = sel?.options[sel.selectedIndex];
   const tipoExtra = selOpt?.dataset?.tipo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const refWrap = document.getElementById('os-pag-ref-wrap');
   const ind = document.getElementById('os-pag-indicador');
   const luz = document.getElementById('os-pag-luz');
@@ -23968,7 +23599,7 @@ async function osConfirmarPagamentoOS(){
   const sel = document.getElementById('os-pag-metodo');
   const selOpt = sel?.options[sel?.selectedIndex];
   const tipoExtra = selOpt?.dataset?.tipo||'';
-  const imediato = ['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato = ['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const data = document.getElementById('os-pag-data-os')?.value||today();
   const ref  = document.getElementById('os-pag-ref')?.value||'';
   const obs  = document.getElementById('os-pag-obs')?.value||'';
@@ -24038,7 +23669,7 @@ async function osCriarReciboAutomatico(os, statusArg){
     const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
     const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
     const pagMet = os.pagamento?.metodo || os.metodoPagamento || '';
-    const docType = ['mb','mbway','dinheiro','cheque'].includes(pagMet)?'fatura-recibo':pagMet==='entidade'?'recibo':pagMet?'fatura':'fatura-recibo';
+    const docType = ['mb','mbway','dinheiro','cheque'].includes(pagMet)?'fatura-recibo':pagMet?'fatura':'fatura-recibo';
     const recibo={
       id:recId, client:cli.nome||'—', nif:cli.nif||'',
       service:srv.nome||'', date:os.pagamento?.data||os.data||today(),
@@ -24192,21 +23823,6 @@ async function osGuardarHoras(osId){
   toast('Horas guardadas e valores recalculados!','✅');
   auditLog('horas_registadas',`OS ${osId} — ${ini}–${fim||'?'} — Total €${total}`);
   osAbrirDetalhe(osId);
-}
-
-// ── Terminar trabalho: decidir se o relatório é feito AGORA ou DEPOIS ──
-// AGORA: o tempo continua a contar (a OS fica em_curso) até o técnico
-// concluir o relatório e fechar a OS com assinaturas — a hora de fim real
-// só é fixada nesse momento (ver osConcluirComAssinaturas).
-// DEPOIS: fixa-se a hora de fim JÁ e a OS fecha sem relatório (5 dias para entregar).
-function osTerminarTrabalhoDecidir(id){
-  const agora = confirm('Vais fazer o relatório AGORA?\n\nOK — Sim, agora (o tempo continua a contar até concluíres o relatório e fechares a OS)\nCancelar — Não, mais tarde (a OS fecha já com o tempo até este momento; tens 5 dias para entregar o relatório)');
-  if(agora){
-    toast('⏱ A continuar a contar — preenche o relatório e depois recolhe as assinaturas para fechar a OS.','✅',6000);
-    osAbrirDetalhe(id);
-  } else {
-    osFecharSemRelatorio(id);
-  }
 }
 
 // ── Abrir modal concluir OS ──────────────────────────────────
@@ -24386,7 +24002,7 @@ function osCalcHorasConc(){
   const sel=document.getElementById('os-conc-pag-met');
   const selOpt=sel?.options[sel?.selectedIndex];
   const tipoExtra=selOpt?.dataset?.tipo||'';
-  const imediato=['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const resEl=document.getElementById('os-conc-horas-res');
   const finEl=document.getElementById('os-conc-financeiro');
   const refWrap=document.getElementById('os-conc-pag-ref-wrap');
@@ -24533,15 +24149,13 @@ async function osConcluirComAssinaturas(){
   // A correção de horas é exclusiva do admin/gerente/supervisor.
   const _ehTecnico = window.currentUser?.role==='tecnico';
   const ini=_ehTecnico ? (os.horaIniReal||os.horaIni||'') : (document.getElementById('os-conc-hora-ini')?.value||os.horaIni||'');
-  // Se o técnico escolheu fazer o relatório AGORA, a hora de fim real ainda não
-  // foi fixada (o cronómetro continuou a contar) — fixa-se neste preciso momento.
-  const fim=_ehTecnico ? (os.horaFimReal||new Date().toTimeString().slice(0,5)) : (document.getElementById('os-conc-hora-fim')?.value||os.horaFim||'');
+  const fim=_ehTecnico ? (os.horaFimReal||os.horaFim||'') : (document.getElementById('os-conc-hora-fim')?.value||os.horaFim||'');
   const met=document.getElementById('os-conc-pag-met')?.value||'';
   const ref=document.getElementById('os-conc-pag-ref')?.value||'';
   const sel=document.getElementById('os-conc-pag-met');
   const selOpt=sel?.options[sel?.selectedIndex];
   const tipoExtra=selOpt?.dataset?.tipo||'';
-  const imediato=['mb','mbway','dinheiro'].includes(met)||(tipoExtra==='imediato');
+  const imediato=['mb','mbway','dinheiro','cheque'].includes(met)||(tipoExtra==='imediato');
   const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência Bancária',cheque:'Cheque',entidade:'Entidade Pagadora'}[met]||selOpt?.textContent||met;
   let netCalc=parseFloat(os.net||0), ivaCalcV=parseFloat(os.ivaVal||0), totalCalc=parseFloat(os.total||0), hAddCalc=parseFloat(os.haddN||0);
   if(ini&&fim){
@@ -24558,13 +24172,6 @@ async function osConcluirComAssinaturas(){
   }
 
   const naoFat = osServicoNaoFaturavel(os);
-  // ── Modalidade de pagamento é obrigatória para fechar (serviços faturáveis) ──
-  if(!naoFat && !met){
-    toast('⚠️ Selecione a modalidade de pagamento antes de concluir a OS.','⚠️',6000);
-    document.getElementById('os-conc-pag-met')?.scrollIntoView({behavior:'smooth',block:'center'});
-    document.getElementById('os-conc-pag-met')?.focus();
-    return;
-  }
   const pagamento = (met && !naoFat) ?{ metodo:met, ref, imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id }:(naoFat?null:(os.pagamento||null));
 
   const updated={
@@ -27679,15 +27286,15 @@ const PROPOSTA_MODELOS = {
   'Vídeo inspecção de tubagens': {
     intro: 'Apresentamos proposta para realização de Vídeo Inspeção de Tubagens, permitindo diagnosticar o estado interno da canalização sem obras.\n\nO serviço permite identificar fissuras, obstruções, raízes, corrosão e desalinhamentos com registo em vídeo de alta resolução.',
     procedimento: '',
-    descritivo: `Diagnóstico completo com recurso às seguintes metodologias combinadas, aplicadas conforme as necessidades identificadas no local:\n\n• Termografia de infravermelhos (FLIR): Detecção de anomalias térmicas em paredes, tetos e pavimentos, revelando zonas húmidas e percursos de água invisíveis a olho nu.\n• Higrómetro e medição de humidade: Quantificação dos níveis de humidade nos materiais de construção para confirmação e localização precisa das zonas afectadas.\n• Endoscopia / vídeo-inspeção: Inspeção visual interior de cavidades, paredes e canalizações com câmara de alta resolução, sem necessidade de obras.\n• Gás traçador (azoto/hidrogénio): Localização precisa de fugas em canalizações enterradas ou embutidas, sem escavação.\n• Pressurização e teste de estanqueidade: Verificação da integridade de tubagens e redes, com detecção de perdas de pressão.\n• Eletroacústica: A tecnologia eletroacústica permite detectar a fuga de água através do som. É muito utilizada em grandes fugas, em redes de incêndio e em redes onde sabemos o caminho da tubulação. Para o uso desta metodologia temos de levar em conta a pressão, o material do tubo, o diâmetro, a profundidade, o tipo de enchimento, a compactação, a saturação da água na área e o ruído ambiente.\n• Rastreador químico: Técnica utilizada para a detecção de infiltrações de água em tubagens, terraços e paredes. Aplicamos em tubagens não pressurizadas (descida de esgoto sanitário, gordura e águas pluviais) e estruturalmente em lajes, pisos e piscinas. O produto não é tóxico, não mancha e não prejudica o meio ambiente. A detecção é feita com lâmpada ultravioleta que identifica o corante mesmo em baixas concentrações.`,
-    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. Os valores indicados incluem deslocamento.\n8. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n9. Relatório técnico somente é entregue após confirmação do pagamento.`,
+    descritivo: `O processo é essencialmente tecnológico e dividido em etapas claras:\n\n• Preparação e Limpeza (Opcional, mas recomendada): Muitas vezes, realiza-se um hidrojateamento prévio da tubulação para desobstruir o caminho e garantir que a câmera tenha total visibilidade das paredes internas.\n\n• Introdução dos Equipamentos: Dependendo do diâmetro da tubulação, utilizam-se dois tipos principais de sistemas:\n   - Câmeras de Empurre (Sistemas Portáteis): Uma câmera acoplada a uma haste de fibra de vidro semi rígida, ideal para tubulações menores (como ramais prediais, pias e esgotos domésticos de 50 mm a 150 mm).\n   - Robôs Motorizados (Crawlars): Equipamentos controlados remotamente que se movem por tração própria, equipados com cabeças rotativas (PTZ - Pan, Tilt, Zoom), ideais para grandes coletores, redes públicas e águas pluviais.\n\n• Mapeamento e Registro: Conforme a câmera avança, o operador visualiza as imagens em um monitor técnico. Os sistemas mais modernos possuem contadores de metragem digitais, permitindo localizar o ponto exato de qualquer anomalia com precisão de centímetros.\n\n• Emissão de Relatório Técnico (Parecer): O resultado do serviço é consolidado em um relatório detalhado contendo fotos, vídeos em alta definição e a identificação precisa das patologias encontradas.\n\nPrincipais Aplicabilidades do Serviço\n\nA vídeo inspeção é uma ferramenta indispensável em diversas frentes da construção civil e manutenção de ativos:\n\n1. Diagnóstico de Patologias Ocultas\nPermite identificar visualmente e sem quebra-quebra a causa exata de problemas recorrentes, tais como:\n• Fissuras, rachaduras e fraturas estruturais nos tubos.\n• Infiltrações e juntas abertas ou deslocadas.\n• Intrusão de raízes árvores que perfuram a tubulação em busca de água.\n• Deformações ou esmagamentos causados pela acomodação do solo ou excesso de carga superficial.\n\n2. Localização Exata de Obstruções\nAntes de realizar qualquer intervenção física, a câmera identifica o local e a natureza do entupimento (sedimentação de gordura, detritos de obras, objetos rígidos ou colapso do próprio tubo). Isso evita escavações desnecessárias, reduzindo custos e tempo de obra.`,
+    obs: `Termos e Condições para a Prestação dos Serviços\n\n1. Condições de Acesso Técnicas\nPara a realização da vídeo inspeção nos tubos de queda (águas pluviais, esgoto de cozinhas e instalações sanitárias), é indispensável o acesso seguro à cobertura/telhado do edifício.\nResponsabilidade do Condomínio: É de total responsabilidade do cliente (ou da administração do condomínio) garantir e facultar o livre acesso ao telhado, disponibilizando escadas adequadas e seguras que cumpram as normas de segurança no trabalho.\n\n2. Impossibilidade de Acesso e Taxa de Deslocação\nCaso a nossa equipa técnica fique impossibilitada de realizar os trabalhos por motivos alheios à nossa vontade (como falta de chaves, ausência de responsável ou falta de condições de segurança no acesso), aplicar-se-á a seguinte política:\nTempo de Espera: A equipa técnica aguardará no local por um período máximo de 30 minutos, contados a partir da hora agendada/chegada.\nTaxa de Frustração/Deslocação: Findo o tempo de espera sem que o acesso seja garantido, o serviço será cancelado e será cobrado o valor fixo de € 150,00 (cento e cinquenta euros), a título de deslocação, custos logísticos e tempo de espera da equipa.`,
     condicoes: [
       'Válido por 30 dias.',
       'Inclui deslocamento.',
       'Pagamento no ato da conclusão da intervenção.',
       'Relatório entregue após confirmação do pagamento.',
-      'Margens de segurança: 1 m (interior) / 3 m (exterior).',
-      'Acesso a coberturas/espaços técnicos necessário no dia.',
+      'Acesso seguro à cobertura/telhado é responsabilidade do cliente/condomínio.',
+      'Tempo de espera máximo: 30 minutos. Após isso, taxa de €150,00.',
     ]
   },
   'Desentupimento': {
@@ -27962,6 +27569,105 @@ PROPOSTA_MODELOS['Vídeo Inspecção de Tubagens']  = PROPOSTA_MODELOS['Vídeo i
 PROPOSTA_MODELOS['Vídeo Inspeção']               = PROPOSTA_MODELOS['Vídeo inspecção de tubagens'];
 PROPOSTA_MODELOS['Video Inspeção']               = PROPOSTA_MODELOS['Vídeo inspecção de tubagens'];
 PROPOSTA_MODELOS['Desentupimentos']              = PROPOSTA_MODELOS['Desentupimento'];
+
+// ── Modelos de Proposta: edição via Configurações ──────────────
+// Snapshot dos textos originais (para o botão "Restaurar original")
+const PROPOSTA_MODELOS_DEFAULT = JSON.parse(JSON.stringify(PROPOSTA_MODELOS));
+// Lista dos modelos "base" (cada um tem texto próprio; os restantes nomes de serviço são aliases destes)
+const PROPOSTA_MODELOS_LISTA = [
+  'Detecção de fuga',
+  'Deteção de Infiltração',
+  'Vídeo inspecção de tubagens',
+  'Desentupimento',
+  'Impermeabilização',
+  'Substituição de contador',
+  'Reparação de rotura',
+  'Recuperação de Tubagem com CIPP',
+  'Recuperação de Tubagem com Epóxi',
+  'Reabilitação Spray Epóxi / CIPP',
+  'Reabilitação Spray Epóxi',
+];
+// Aliases de cada modelo base (apenas para informação visual na UI)
+const PROPOSTA_MODELOS_ALIASES = {
+  'Detecção de fuga': ['Detecção de fuga de água','Detecção de Fuga','Detecção de Fuga de Água','Deteção de fuga','Deteção de Fuga'],
+  'Deteção de Infiltração': ['Deteção de infiltração','Detecção de Infiltração','Detecção de infiltração','Deteção de Infiltracao','Detecção Infiltração'],
+  'Vídeo inspecção de tubagens': ['Video inspecção de tubagens','Vídeo inspeção de tubagens','Vídeo Inspecção de Tubagens','Vídeo Inspeção','Video Inspeção'],
+  'Desentupimento': ['Desentupimentos'],
+  'Impermeabilização': ['Impermeabilizacao','impermeabilização'],
+  'Substituição de contador': [],
+  'Reparação de rotura': [],
+  'Recuperação de Tubagem com CIPP': [],
+  'Recuperação de Tubagem com Epóxi': ['Recuperacao de Tubagem com Epoxi','Recuperação de Tubagem Epoxi','Reabilitação com Epóxi','Recuperação Epóxi','Reabilitação com Epoxi'],
+  'Reabilitação Spray Epóxi / CIPP': ['Spray Epóxi / CIPP','Reabilitação com Spray Epóxi','Recuperação de Tubagem com Spray Epóxi','Spray Epoxi / CIPP'],
+  'Reabilitação Spray Epóxi': ['Spray Epóxi','Spray Epoxi','Reabilitação Spray Epoxi'],
+};
+// Aplica customizações guardadas no Firestore (meta/propostaModelosCustom) sobre os textos por defeito.
+// Chamado no boot, depois de loadMeta(). Como os aliases apontam para o MESMO objeto, basta
+// alterar o modelo base para que todos os aliases fiquem automaticamente actualizados.
+function propostaAplicarCustomizacoes(){
+  const custom = window.DB.propostaModelosCustom || {};
+  Object.keys(custom).forEach(nome=>{
+    if(PROPOSTA_MODELOS[nome]) Object.assign(PROPOSTA_MODELOS[nome], custom[nome]);
+  });
+}
+
+function cfgRenderModelosProposta(){
+  const sel = document.getElementById('mp-select');
+  if(!sel) return;
+  if(!sel.options.length){
+    sel.innerHTML = PROPOSTA_MODELOS_LISTA.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  }
+  cfgCarregarModeloProposta(sel.value || PROPOSTA_MODELOS_LISTA[0]);
+}
+
+function cfgCarregarModeloProposta(nome){
+  const m = PROPOSTA_MODELOS[nome];
+  if(!m) return;
+  document.getElementById('mp-select').value = nome;
+  document.getElementById('mp-intro').value        = m.intro || '';
+  document.getElementById('mp-procedimento').value = m.procedimento || '';
+  document.getElementById('mp-descritivo').value   = m.descritivo || '';
+  document.getElementById('mp-obs').value          = m.obs || '';
+  document.getElementById('mp-condicoes').value    = (m.condicoes||[]).join('\n');
+  const aliases = PROPOSTA_MODELOS_ALIASES[nome] || [];
+  const aliasEl = document.getElementById('mp-aliases');
+  if(aliasEl) aliasEl.textContent = aliases.length ? `Também usado para: ${aliases.join(', ')}` : '';
+}
+
+async function cfgGuardarModeloProposta(){
+  const nome = document.getElementById('mp-select')?.value;
+  if(!nome) return;
+  const override = {
+    intro:        document.getElementById('mp-intro').value,
+    procedimento: document.getElementById('mp-procedimento').value,
+    descritivo:   document.getElementById('mp-descritivo').value,
+    obs:          document.getElementById('mp-obs').value,
+    condicoes:    document.getElementById('mp-condicoes').value.split('\n').map(s=>s.trim()).filter(Boolean),
+  };
+  // Aplicar imediatamente em memória (afecta também todos os aliases, por partilharem o mesmo objeto)
+  Object.assign(PROPOSTA_MODELOS[nome], override);
+  // Persistir no Firestore
+  const custom = { ...(window.DB.propostaModelosCustom||{}) };
+  custom[nome] = override;
+  window.DB.propostaModelosCustom = custom;
+  await window.fsMeta('propostaModelosCustom', custom);
+  toast('✅ Modelo de proposta guardado!','📝');
+}
+
+async function cfgRestaurarModeloProposta(){
+  const nome = document.getElementById('mp-select')?.value;
+  if(!nome) return;
+  if(!confirm(`Restaurar o texto original de "${nome}"? Esta ação substitui o texto personalizado.`)) return;
+  const def = PROPOSTA_MODELOS_DEFAULT[nome];
+  if(!def) return;
+  Object.assign(PROPOSTA_MODELOS[nome], def);
+  const custom = { ...(window.DB.propostaModelosCustom||{}) };
+  delete custom[nome];
+  window.DB.propostaModelosCustom = custom;
+  await window.fsMeta('propostaModelosCustom', custom);
+  cfgCarregarModeloProposta(nome);
+  toast('↺ Texto original restaurado!','📝');
+}
 
 // ── Abrir modal de proposta ────────────────────────────────────
 function propostaAbrir(clienteId){
@@ -28937,8 +28643,9 @@ async function propostaEnviarLivre(){
 
   if(cfg.brevoApiKey){
     const emp=window._empCfg||{};
-    const remetente = emp.email||cfg.remetente||'localizafugas@gmail.com';
+    const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
     const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
+    const replyToEmail = cfg.replyTo||'localizafugas@gmail.com';
     // Cópia interna por BCC para o email da empresa (oculta ao cliente)
     const bccList = (emailCopiaEmpresa && emailCopiaEmpresa!==emailDest)
       ? [{email:emailCopiaEmpresa, name:'Localiza Fugas'}] : [];
@@ -28947,6 +28654,7 @@ async function propostaEnviarLivre(){
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
           sender:{name:nomeRem, email:remetente},
+          replyTo:{email:replyToEmail, name:nomeRem},
           to:[{email:emailDest,name:nome}],
           ...(bccList.length ? {bcc:bccList} : {}),
           subject:assunto,
@@ -29059,7 +28767,7 @@ async function propostaEnviarRascunho(propId){
   const ivaVal=net*iva/100; const total=net+ivaVal;
   const empresa2=emp.nome||cfg.empresa||'Localiza Fugas';
   const tel2=emp.tel||cfg.tel||'931 747 199';
-  const emailEmp2=emp.email||cfg.remetente||'localizafugas@gmail.com';
+  const emailEmp2=cfg.remetente||emp.email||'localizafugas@gmail.com';
   const assinatura=cfg.assinatura||`Com os melhores cumprimentos,\n${empresa2}\nTel: ${tel2}\n${emailEmp2}`;
   const valStr=p.validade?new Date(p.validade+'T00:00').toLocaleDateString('pt-PT',{day:'2-digit',month:'long',year:'numeric'}):'30 dias';
   const _tabR=propostaLinhasPreco(p.tipoCobranca||'hora',h1,hadd,horas,iva,p.corteMetros||0);
@@ -29081,11 +28789,12 @@ async function propostaEnviarRascunho(propId){
       }
   }catch(e){ console.warn('PDF err:',e); }
   if(cfg.brevoApiKey){
-    const remetente=emp.email||cfg.remetente||'localizafugas@gmail.com';
+    const remetente=cfg.remetente||emp.email||'localizafugas@gmail.com';
     const nomeRem=emp.nome||cfg.empresa||'Localiza Fugas';
+    const replyToEmail=cfg.replyTo||'localizafugas@gmail.com';
     const _bccEmp = (p.email!=='localizafugas@gmail.com') ? [{email:'localizafugas@gmail.com',name:'Localiza Fugas'}] : [];
     try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
+      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},replyTo:{email:replyToEmail,name:nomeRem},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
       if(r.ok||r.status===201){
         toast('Proposta enviada ✅'+(pdfAnexo?' + PDF em anexo':''),'📋');
         await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});

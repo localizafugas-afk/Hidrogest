@@ -23651,7 +23651,7 @@ ${empNome}`;
       toast('✅ Email enviado com sucesso para '+cli.email+'!');
       rpRender();
       if(typeof osRenderAgenda==='function') osRenderAgenda();
-      return;
+      return {ok:true};
     }
   }catch(e){ console.warn('EmailJS falhou, abrindo Gmail:', e); }
 
@@ -23659,6 +23659,7 @@ ${empNome}`;
   const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
   window.open(mailto,'_blank');
   toast('📧 Gmail aberto — adicione o PDF como anexo e envie!', 5000);
+  return {ok:false, motivo:'fallback-gmail'};
 };
 
 // ── Helper: pagamento confirmado pelo admin? ────────────────────

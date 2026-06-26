@@ -6330,7 +6330,15 @@ function _commRelAtrasado(uid, periodo){
   });
   return offenders;
 }
-// Atraso no 1º trabalho do dia (hora real de início vs agendada, tolerância em min)
+// Tiers de redução da comissão consoante nº de relatórios atrasados no mês
+// 0 atrasados: taxas cheias · 1-5: -1 ponto percentual · 6-8: -2 pontos · >8: sem comissão
+function _commTaxasPorAtraso(n){
+  if(n>8)  return {normal:0,    cipp:0,    imperm:0};
+  if(n>=6) return {normal:0.03, cipp:0.03, imperm:0.01};
+  if(n>=1) return {normal:0.04, cipp:0.04, imperm:0.02};
+  return     {normal:0.05, cipp:0.05, imperm:0.03};
+}
+// Atraso no 1º trabalho do dia (hora real de início vs agendada, tolerância em min) — já não anula comissão, mantido apenas como histórico/diagnóstico
 function _commAtrasoPrimeiro(uid, periodo, tol){
   const ords=(window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(uid) && String(o.data||'').slice(0,7)===periodo && o.horaIni && o.horaIniReal);
   const byDay={};
@@ -6357,9 +6365,8 @@ function _commToggleFalta(techId){
 function renderComissoes(){
   const container = document.getElementById('comm-list');
 
-  // ── Comissões de Técnicos (período + CIPP/Imperm + condicionantes) ──
+  // ── Comissões de Técnicos (período + CIPP/Imperm + tiers por relatório atrasado) ──
   const _periodoC = _commPeriodo;
-  const _faltasP = ((window.DB.comissoesFaltas||{})[_periodoC])||{};
   const tecnicos = window.DB.funcionarios.filter(f=>f.role==='tecnico');
   const secTec = tecnicos.map(t=>{
     const u = (window.DB.users||[]).find(x=>x.name===t.name); const uid=u?.id;
@@ -6370,46 +6377,38 @@ function renderComissoes(){
     const netOut  = recOut.reduce((a,r)=>a+(+r.net||0),0);
     const netCipp = recCipp.reduce((a,r)=>a+(+r.net||0),0);
     const netImp  = recImp.reduce((a,r)=>a+(+r.net||0),0);
-    const limiar  = (+t.salary||0)*8;
-    const comNormal = Math.max(0,(netOut-limiar))*0.05;
-    const comCipp   = netCipp*0.05;
-    const comImp    = netImp*0.03;
-    const totalBruto= comNormal+comCipp+comImp;
-    // Condicionantes (qualquer uma anula TODAS as comissões do período)
-    const relAtras = uid?_commRelAtrasado(uid,_periodoC):[];
-    const atrasos  = uid?_commAtrasoPrimeiro(uid,_periodoC,15):[];
-    const temFalta = !!_faltasP[t.id];
-    const desq = relAtras.length>0 || atrasos.length>0 || temFalta;
-    const totalFinal = desq?0:totalBruto;
-    const motivos=[];
-    if(relAtras.length) motivos.push(`⚠️ Relatório atrasado (OS ${relAtras.join(', ')})`);
-    if(atrasos.length)  motivos.push(`⏰ Atraso no 1º trabalho — ${atrasos.join(' · ')}`);
-    if(temFalta)        motivos.push('🚫 Falta marcada');
-    return `<div class="comm-card"${desq?' style="border-left:4px solid var(--red);"':''}>
+    const limiar  = (+t.salary||0)*10;
+    // Nº de relatórios atrasados no mês define o tier de redução das 3 bolsas
+    const relAtras  = uid?_commRelAtrasado(uid,_periodoC):[];
+    const nAtraso   = relAtras.length;
+    const taxas     = _commTaxasPorAtraso(nAtraso);
+    const comNormal = Math.max(0,(netOut-limiar))*taxas.normal;
+    const comCipp   = netCipp*taxas.cipp;
+    const comImp    = netImp*taxas.imperm;
+    const totalFinal= comNormal+comCipp+comImp;
+    const semComissao = nAtraso>8;
+    const reduzida     = nAtraso>=1 && nAtraso<=8;
+    return `<div class="comm-card"${semComissao?' style="border-left:4px solid var(--red);"':reduzida?' style="border-left:4px solid var(--yellow);"':''}>
       <div class="comm-header">
         <div class="av tecnico">${t.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
         <div>
           <div style="font-weight:700;font-size:15px;">${t.name}</div>
           <div style="font-size:11px;color:var(--text3);">${roleName(t.role)} · Salário bruto: €${fmt(t.salary)}</div>
         </div>
-        <div style="margin-left:auto;">${desq
+        <div style="margin-left:auto;">${semComissao
           ?`<span class="badge badge-red">Sem comissão</span>`
           :`<span class="badge badge-green">💎 €${fmt(totalFinal)}</span>`}
         </div>
       </div>
       <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×5%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
-        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×5%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×3%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Limiar (Sal×8)</div><div class="cm-val">€${fmt(limiar)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Subtotal</div><div class="cm-val">€${fmt(totalBruto)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${desq?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×${(taxas.normal*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×${(taxas.cipp*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×${(taxas.imperm*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(limiar)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Relatórios atrasados</div><div class="cm-val" style="color:${nAtraso>0?'var(--red)':'var(--text3)'}">${nAtraso}</div></div>
+        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${semComissao?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
       </div>
-      ${motivos.length?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">Comissão anulada: ${motivos.join(' · ')}</div>`:''}
-      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" onclick="_commToggleFalta('${t.id}')">${temFalta?'☑ Falta marcada (clicar p/ remover)':'☐ Marcar falta'}</button>
-        <span style="font-size:10px;color:var(--text3);">Relatório e atraso (≥15min) automáticos · falta manual</span>
-      </div>
+      ${nAtraso>0?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${nAtraso} relatório${nAtraso>1?'s':''} atrasado${nAtraso>1?'s':''} este mês (OS ${relAtras.join(', ')}) → taxas reduzidas para ${(taxas.normal*100).toFixed(0)}%/${(taxas.cipp*100).toFixed(0)}%/${(taxas.imperm*100).toFixed(0)}%${semComissao?' — acima de 8 → sem comissão':''}</div>`:''}
     </div>`;
   }).join('') || `<div class="empty">Sem técnicos registados</div>`;
 
@@ -6499,7 +6498,7 @@ function renderComissoes(){
     <!-- Técnicos -->
     <div style="margin-bottom:24px;">
       <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;display:flex;align-items:center;gap:8px;">
-        👷 Comissões de Técnicos <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Fórmula: Sal. × 8 vs Receita Líquida → diferença × 5%</span>
+        👷 Comissões de Técnicos <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Fórmula: Sal. × 10 vs Receita Líquida → diferença × 5% (reduz com relatórios atrasados)</span>
       </div>
       ${secTec}
     </div>
@@ -6545,44 +6544,40 @@ function tecRenderMinhaComissao(){
   const netOut  = recOut.reduce((a,r)=>a+(+r.net||0),0);
   const netCipp = recCipp.reduce((a,r)=>a+(+r.net||0),0);
   const netImp  = recImp.reduce((a,r)=>a+(+r.net||0),0);
-  const limiar  = (+t.salary||0)*8;
-  const comNormal = Math.max(0,(netOut-limiar))*0.05;
-  const comCipp   = netCipp*0.05;
-  const comImp    = netImp*0.03;
-  const totalBruto= comNormal+comCipp+comImp;
-  const relAtras = uid?_commRelAtrasado(uid,periodo):[];
-  const atrasos  = uid?_commAtrasoPrimeiro(uid,periodo,15):[];
-  const _faltasP = ((window.DB.comissoesFaltas||{})[periodo])||{};
-  const temFalta = !!_faltasP[t.id];
-  const desq = relAtras.length>0 || atrasos.length>0 || temFalta;
-  const totalFinal = desq?0:totalBruto;
-  const motivos=[];
-  if(relAtras.length) motivos.push(`⚠️ Relatório atrasado (OS ${relAtras.join(', ')})`);
-  if(atrasos.length)  motivos.push(`⏰ Atraso no 1º trabalho — ${atrasos.join(' · ')}`);
-  if(temFalta)        motivos.push('🚫 Falta marcada');
+  const limiar  = (+t.salary||0)*10;
+  // Nº de relatórios atrasados no mês define o tier de redução das 3 bolsas
+  const relAtras  = uid?_commRelAtrasado(uid,periodo):[];
+  const nAtraso   = relAtras.length;
+  const taxas     = _commTaxasPorAtraso(nAtraso);
+  const comNormal = Math.max(0,(netOut-limiar))*taxas.normal;
+  const comCipp   = netCipp*taxas.cipp;
+  const comImp    = netImp*taxas.imperm;
+  const totalFinal= comNormal+comCipp+comImp;
+  const semComissao = nAtraso>8;
+  const reduzida     = nAtraso>=1 && nAtraso<=8;
 
   container.innerHTML = headerSel + `
-    <div class="comm-card"${desq?' style="border-left:4px solid var(--red);"':''}>
+    <div class="comm-card"${semComissao?' style="border-left:4px solid var(--red);"':reduzida?' style="border-left:4px solid var(--yellow);"':''}>
       <div class="comm-header">
         <div class="av tecnico">${t.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
         <div>
           <div style="font-weight:700;font-size:15px;">${t.name}</div>
           <div style="font-size:11px;color:var(--text3);">Salário bruto: €${fmt(t.salary)}</div>
         </div>
-        <div style="margin-left:auto;">${desq
+        <div style="margin-left:auto;">${semComissao
           ?`<span class="badge badge-red">Sem comissão</span>`
           :`<span class="badge badge-green">💎 €${fmt(totalFinal)}</span>`}
         </div>
       </div>
       <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×5%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
-        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×5%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×3%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Limiar (Sal×8)</div><div class="cm-val">€${fmt(limiar)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Subtotal</div><div class="cm-val">€${fmt(totalBruto)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${desq?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(netOut)} − €${fmt(limiar)}) ×${(taxas.normal*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(comNormal)}</div></div>
+        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(netCipp)}) ×${(taxas.cipp*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comCipp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(netImp)}) ×${(taxas.imperm*100).toFixed(0)}%</div><div class="cm-val" style="color:var(--accent)">€${fmt(comImp)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(limiar)}</div></div>
+        <div class="comm-metric"><div class="cm-label">Relatórios atrasados</div><div class="cm-val" style="color:${nAtraso>0?'var(--red)':'var(--text3)'}">${nAtraso}</div></div>
+        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:${semComissao?'var(--red)':'var(--green)'}">€${fmt(totalFinal)}</div></div>
       </div>
-      ${motivos.length?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">Comissão anulada: ${motivos.join(' · ')}</div>`:''}
+      ${nAtraso>0?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${nAtraso} relatório${nAtraso>1?'s':''} atrasado${nAtraso>1?'s':''} este mês (OS ${relAtras.join(', ')}) → taxas reduzidas para ${(taxas.normal*100).toFixed(0)}%/${(taxas.cipp*100).toFixed(0)}%/${(taxas.imperm*100).toFixed(0)}%${semComissao?' — acima de 8 → sem comissão':''}</div>`:''}
     </div>`;
 }
 

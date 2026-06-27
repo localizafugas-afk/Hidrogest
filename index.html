@@ -3496,6 +3496,17 @@ Localiza Fugas
   <div class="md">
     <div class="mh"><div class="mh-title" id="mo-desp-title">Nova Despesa</div><button class="mc" onclick="closeMo('mo-despesa')">×</button></div>
     <div class="mb">
+      <div class="fsec" style="margin-top:0;">📷 Fotografar Fatura</div>
+      <div class="cam-area" onclick="document.getElementById('d-photo-inp').click()">
+        <input type="file" id="d-photo-inp" accept="image/*" capture="environment" onchange="captureInvoice(event)" style="display:none">
+        <div style="font-size:32px;margin-bottom:8px;">📷</div>
+        <div style="font-size:13px;color:var(--text2);">Toque para fotografar a fatura</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Captura automática de dados — os campos abaixo preenchem-se sozinhos</div>
+      </div>
+      <div id="d-photo-preview" style="margin-top:10px;margin-bottom:14px;display:none;">
+        <img id="d-photo-img" style="width:100%;border-radius:var(--r);border:1px solid var(--border);max-height:200px;object-fit:contain;">
+        <div style="font-size:11px;color:var(--green);margin-top:6px;text-align:center;">✅ Fatura capturada</div>
+      </div>
       <div class="fgrid">
         <div class="fg"><label>Data *</label><input class="fi" id="d-date" type="date"></div>
         <div class="fg"><label>Técnico</label>
@@ -3533,17 +3544,6 @@ Localiza Fugas
         <div class="vbox-row total"><span id="dv-total-lbl">Total c/ IVA</span><span id="dv-total" class="mono">€0.00</span></div>
       </div>
       <div class="fg"><label>Descrição</label><textarea class="fta" id="d-desc" rows="2" placeholder="Descrição da despesa..."></textarea></div>
-      <div class="fsec">📷 Fotografar Fatura</div>
-      <div class="cam-area" onclick="document.getElementById('d-photo-inp').click()">
-        <input type="file" id="d-photo-inp" accept="image/*" capture="environment" onchange="captureInvoice(event)" style="display:none">
-        <div style="font-size:32px;margin-bottom:8px;">📷</div>
-        <div style="font-size:13px;color:var(--text2);">Toque para fotografar a fatura</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Captura automática de dados</div>
-      </div>
-      <div id="d-photo-preview" style="margin-top:10px;display:none;">
-        <img id="d-photo-img" style="width:100%;border-radius:var(--r);border:1px solid var(--border);max-height:200px;object-fit:contain;">
-        <div style="font-size:11px;color:var(--green);margin-top:6px;text-align:center;">✅ Fatura capturada</div>
-      </div>
     </div>
     <div class="mf">
       <button class="btn btn-ghost" onclick="closeMo('mo-despesa')">Cancelar</button>

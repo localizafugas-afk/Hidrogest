@@ -417,8 +417,16 @@ async function boot() {
       },100);
     });
     document.getElementById('loading-screen').style.display='none';
-    document.getElementById('login-screen').style.display='flex';
-    renderLogin();
+    // ── Tentar restaurar sessão anterior (sem precisar de login manual) ──
+    const _uidSessao = sessionRecuperar();
+    const _userSessao = _uidSessao && ((window.DB.users||[]).find(u=>u.id===_uidSessao) || (window.USERS_MASTER||[]).find(u=>u.id===_uidSessao));
+    if(_userSessao && _userSessao.active){
+      doLogin(_uidSessao);
+    } else {
+      if(_uidSessao) sessionLimpar(); // conta inexistente/desactivada — não insistir
+      document.getElementById('login-screen').style.display='flex';
+      renderLogin();
+    }
     // Inicializar resize handle da agenda
     setTimeout(osAgendaInitResize, 500);
   } catch(err) {
@@ -3710,6 +3718,17 @@ let selectedBank    = '';
 let recFilter       = 'all';
 
 // ──────────────────────────────────────────────────────────────
+// SESSÃO PERSISTENTE
+// Mantém o utilizador ligado mesmo que saia da app sem tocar em
+// "Sair" (fechar separador, trocar de app no telemóvel, GPS sem
+// rede, etc.). Só termina a sessão quando faz logout explícito.
+// ──────────────────────────────────────────────────────────────
+const HG_SESSION_KEY='hg_session_uid';
+function sessionGuardar(uid){ try{ localStorage.setItem(HG_SESSION_KEY, uid); }catch(e){} }
+function sessionLimpar(){ try{ localStorage.removeItem(HG_SESSION_KEY); }catch(e){} }
+function sessionRecuperar(){ try{ return localStorage.getItem(HG_SESSION_KEY); }catch(e){ return null; } }
+
+// ──────────────────────────────────────────────────────────────
 // LOGIN
 // ──────────────────────────────────────────────────────────────
 let pendingLoginId = null;
@@ -4144,6 +4163,7 @@ function doLogin(uid){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('sidebar').style.display='flex';
   document.getElementById('main-app').style.display='flex';
+  sessionGuardar(uid);
   renderSidebar(); renderUserPill(); setDate();
   // Mostrar botão Nova Proposta na topbar para roles com acesso
   (function(){
@@ -4334,6 +4354,7 @@ function logout(){
   auditLog('logout',`Sessão terminada — ${window.currentUser?.name||''}`);
   if(window._locHeartbeat){ clearInterval(window._locHeartbeat); window._locHeartbeat=null; }
   locStopTracking();
+  sessionLimpar();
   window.currentUser=null;
   document.getElementById('login-username').value='';
   document.getElementById('login-password').value='';
@@ -8009,6 +8030,16 @@ function osWeekLabel(days){
   const f=days[0].dt,l=days[6].dt;
   return `${f.getDate()} ${mo[f.getMonth()]} — ${l.getDate()} ${mo[l.getMonth()]} ${l.getFullYear()}`;
 }
+// ── Gestão confirma que já viu o aviso de auto-encerramento ──
+async function osConfirmarEncerramentoAuto(id){
+  try{
+    await window.fsSetMerge('ordens', id, {encerramentoAutomatico:false});
+    toast('Aviso dispensado.','✓');
+    if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(id);
+    if(typeof osRenderLista==='function') osRenderLista();
+  }catch(e){ console.warn('osConfirmarEncerramentoAuto:', e.message); }
+}
+
 function osBadge(estado, os){
   // Estado visual baseado no ciclo real da OS
   // verde = tempo fechado (horaFimReal preenchida)
@@ -8019,12 +8050,12 @@ function osBadge(estado, os){
     if(os.assinaturaTecnico)
       return `<span class="os-badge" style="background:#fee2e2;color:#991b1b;">🔴 Fechada</span>`;
     if(os.horaFimReal)
-      return `<span class="os-badge" style="background:#d1fae5;color:#065f46;">🟢 Tempo fechado</span>`;
+      return `<span class="os-badge" style="background:#d1fae5;color:#065f46;">🟢 Tempo fechado</span>${os.encerramentoAutomatico?' <span class="os-badge" style="background:#fef2f2;color:#b91c1c;" title="Parado automaticamente — o técnico afastou-se do local sem terminar o relatório">⚠️ Auto (GPS)</span>':''}`;
     return `<span class="os-badge" style="background:#fef3c7;color:#92400e;">🟡 Sem assinatura</span>`;
   }
   if(os && os.estado==='em_curso'){
     if(os.horaFimReal)
-      return `<span class="os-badge" style="background:#d1fae5;color:#065f46;">🟢 Tempo fechado</span>`;
+      return `<span class="os-badge" style="background:#d1fae5;color:#065f46;">🟢 Tempo fechado</span>${os.encerramentoAutomatico?' <span class="os-badge" style="background:#fef2f2;color:#b91c1c;" title="Parado automaticamente — o técnico afastou-se do local sem terminar o relatório">⚠️ Auto (GPS)</span>':''}`;
     return `<span class="os-badge" style="background:#fef3c7;color:#92400e;">🟡 Em curso</span>`;
   }
   const MAP={
@@ -11924,6 +11955,16 @@ function osAbrirDetalhe(id){
       `<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.3);padding:4px 10px;border-radius:6px;display:inline-block;">⚠️ Condições de serviço não confirmadas</div>`}
     </div>
 
+    ${o.encerramentoAutomatico?`
+    <div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r);padding:12px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;">
+      <div style="font-size:20px;">⚠️</div>
+      <div style="flex:1;">
+        <div style="font-weight:700;color:#991b1b;font-size:13px;">Cronómetro parado automaticamente</div>
+        <div style="font-size:12px;color:#7f1d1d;margin-top:2px;">O técnico afastou-se ~${o.encerramentoAutomaticoDistM||300}m do local sem terminar o relatório. Hora de fim registada: <strong>${o.horaFimReal||'—'}</strong>. O relatório continua pendente.</div>
+      </div>
+      <button class="btn btn-sm" onclick="event.stopPropagation();osConfirmarEncerramentoAuto('${o.id}')" style="white-space:nowrap;">✓ Já vi</button>
+    </div>`:''}
+
     ${osFracaoCardHtml(o)}
 
     ${(isMeuTec||isSup)?`
@@ -12130,6 +12171,8 @@ async function osIniciarTrabalho(id){
   const ini=document.getElementById('os-hora-ini-real')?.value||new Date().toTimeString().slice(0,5);
   const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
   await window.fsSetMerge('ordens',id,{...os,estado:'em_curso',horaIniReal:ini,iniciadoEm:new Date().toISOString()});
+  // Guardar posição GPS de partida (para detetar ausência mais tarde)
+  if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(id);
   // Parar deslocamento — chegou ao destino
   if(typeof tecPararDeslocamento==='function') tecPararDeslocamento();
   toast(`▶ Trabalho iniciado às ${ini}!`,'⏱');
@@ -12211,7 +12254,10 @@ function osTimerStart(id){
       osAvisarAtraso(o);
     }
   },1000);
-  if(o&&o.estado==='agendada'){ window.fsSetMerge('ordens',id,{...o,estado:'em_curso',iniciadoEm:new Date().toISOString(),horaIniReal:now}); }
+  if(o&&o.estado==='agendada'){
+    window.fsSetMerge('ordens',id,{...o,estado:'em_curso',iniciadoEm:new Date().toISOString(),horaIniReal:now});
+    if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(id);
+  }
   toast('Temporizador iniciado!','⏱');
 }
 
@@ -13396,12 +13442,45 @@ async function tecIniciarRapido(id){
   if(!confirm(`Iniciar agora o trabalho?\n\nOS ${id}${cli?.nome?(' — '+cli.nome):''}\n\n(Confirma para começar a contar o tempo.)`)) return;
   const ini=new Date().toTimeString().slice(0,5);
   await window.fsSetMerge('ordens',id,{...os,estado:'em_curso',horaIniReal:ini,iniciadoEm:new Date().toISOString()});
+  // Guardar posição GPS de partida (para detetar ausência mais tarde)
+  if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(id);
   // Parar deslocamento — chegou ao destino
   if(typeof tecPararDeslocamento==='function') tecPararDeslocamento();
   toast(`▶ Iniciado às ${ini}!`,'⏱');
   auditLog('os_iniciada',`OS ${id} iniciada às ${ini} (toque rápido)`);
   // Vibração táctil se disponível
   if(navigator.vibrate) navigator.vibrate(80);
+}
+
+// ── Guardar posição GPS de âncora ao iniciar o trabalho ──────
+// Serve para detetar mais tarde se o técnico se afastou do local
+// sem terminar o relatório (ver locEnviar).
+async function osCapturarAnchorGPS(id){
+  try{
+    let lat=null, lng=null;
+    const locAtual=(window.DB.localizacoes||[]).find(l=>l.userId===window.currentUser?.id);
+    const recente = locAtual?.ts && (Date.now()-new Date(locAtual.ts).getTime())<120000;
+    if(recente && isFinite(locAtual.lat) && isFinite(locAtual.lng)){
+      lat=locAtual.lat; lng=locAtual.lng;
+    } else if(navigator.geolocation){
+      await new Promise(resolve=>{
+        navigator.geolocation.getCurrentPosition(
+          pos=>{ lat=pos.coords.latitude; lng=pos.coords.longitude; resolve(); },
+          ()=>resolve(),
+          {timeout:8000, maximumAge:60000}
+        );
+      });
+    }
+    if(isFinite(lat)&&isFinite(lng)){
+      await window.fsSetMerge('ordens', id, {
+        iniLat:lat, iniLng:lng, iniGpsEm:new Date().toISOString(),
+        encerramentoAutomatico:false, encerramentoAutomaticoEm:null,
+      });
+      console.log('[GPS] Âncora guardada para OS', id, lat.toFixed(5), lng.toFixed(5));
+    } else {
+      console.warn('[GPS] Sem posição disponível para âncora da OS', id);
+    }
+  }catch(e){ console.warn('[GPS] osCapturarAnchorGPS falhou:', e.message); }
 }
 
 // ── Rastreamento GPS em tempo real ───────────────────────────
@@ -16458,6 +16537,39 @@ async function locEnviar(pos){
     console.error('[GPS] Erro ao gravar no Firebase:', e.message);
     tecGpsBarSet('erro');
     return;
+  }
+
+  // ── Auto-deteção: técnico afastou-se do local sem terminar o relatório ──
+  // Se ficar >300m da posição inicial durante 5 min seguidos, paramos o
+  // cronómetro automaticamente (horaFimReal) e avisamos a gestão.
+  // Não marcamos a OS como concluída — o relatório continua pendente.
+  const LOC_LIMITE_DIST_M = 300;
+  const LOC_LIMITE_TEMPO_MS = 5*60*1000;
+  if(osActiva && isFinite(osActiva.iniLat) && isFinite(osActiva.iniLng)
+     && !osActiva.horaFimReal && !osActiva.encerramentoAutomatico
+     && accuracy<=150){
+    const distM = rotDistKm(osActiva.iniLat, osActiva.iniLng, latitude, longitude)*1000;
+    if(!window._afastadoDesde) window._afastadoDesde={};
+    if(distM > LOC_LIMITE_DIST_M){
+      if(!window._afastadoDesde[osActiva.id]) window._afastadoDesde[osActiva.id]=Date.now();
+      const decorrido = Date.now()-window._afastadoDesde[osActiva.id];
+      if(decorrido >= LOC_LIMITE_TEMPO_MS){
+        const horaFimAuto = new Date(window._afastadoDesde[osActiva.id]).toTimeString().slice(0,5);
+        delete window._afastadoDesde[osActiva.id];
+        window.fsSetMerge('ordens', osActiva.id, {
+          horaFimReal: horaFimAuto,
+          encerramentoAutomatico: true,
+          encerramentoAutomaticoEm: new Date().toISOString(),
+          encerramentoAutomaticoDistM: Math.round(distM),
+        }).then(()=>{
+          if(typeof auditLog==='function') auditLog('os_auto_encerrada',
+            `OS ${osActiva.id}: cronómetro parado automaticamente às ${horaFimAuto} — técnico afastou-se ${Math.round(distM)}m do local sem terminar o relatório.`);
+        }).catch(e2=>console.warn('[GPS] erro ao auto-encerrar OS:', e2.message));
+        toast('⏱ Cronómetro parado — não te esqueças do relatório!','⚠️');
+      }
+    } else {
+      delete window._afastadoDesde[osActiva.id];
+    }
   }
 
   // Obter endereço em segundo plano (máx. 1x por minuto, não bloqueia)
@@ -22407,7 +22519,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
           <div style="display:grid;grid-template-columns:repeat(${Math.min(_f.length,2)===1?1:2},1fr);gap:12px;">
             ${_f.map((f,i)=>`
               <div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;page-break-inside:avoid;">
-                <img src="${f.dataUrl||f.url||''}" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block;-webkit-print-color-adjust:exact;">
+                <img src="${f.dataUrl||f.url||''}" style="width:100%;aspect-ratio:4/3;object-fit:contain;background:#f1f5f9;display:block;-webkit-print-color-adjust:exact;">
                 <div style="padding:6px 10px;background:#f8fafc;border-top:1px solid #e2e8f0;">
                   <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Fig. ${i+1}</span>
                   ${f.legenda?` — <span style="font-size:10px;color:#475569;">${f.legenda}</span>`:''}

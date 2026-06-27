@@ -1209,6 +1209,16 @@ tr:hover td{background:rgba(37,99,235,.03);}
             <input id="rec-q" class="fi" placeholder="🔍 OS, cliente, serviço, NIF..." style="width:200px;font-size:12px;" oninput="renderRecibos()">
           </div>
           <div style="display:flex;flex-direction:column;gap:2px;">
+            <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Período</label>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <button class="rec-periodo-btn" data-periodo="mes" onclick="recDefinirPeriodo('mes')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;font-weight:600;color:#475569;">Este mês</button>
+              <button class="rec-periodo-btn" data-periodo="mes_passado" onclick="recDefinirPeriodo('mes_passado')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;font-weight:600;color:#475569;">Mês passado</button>
+              <button class="rec-periodo-btn" data-periodo="trimestre" onclick="recDefinirPeriodo('trimestre')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;font-weight:600;color:#475569;">Trimestre</button>
+              <button class="rec-periodo-btn" data-periodo="ano" onclick="recDefinirPeriodo('ano')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;font-weight:600;color:#475569;">Este ano</button>
+              <button class="rec-periodo-btn" data-periodo="tudo" onclick="recDefinirPeriodo('tudo')" style="padding:6px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;font-weight:600;color:#475569;">Tudo</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:2px;">
             <label style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">De</label>
             <input id="rec-de" type="date" class="fi" style="font-size:12px;" onchange="renderRecibos()">
           </div>
@@ -1235,6 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
       </div>
 
       <style>
+        .rec-periodo-btn.active{background:var(--accent) !important;color:#fff !important;border-color:var(--accent) !important;}
         .rec-home-card{background:#fff;border:2px solid #e2e8f0;border-radius:14px;padding:22px 18px;cursor:pointer;transition:all .18s;display:flex;flex-direction:column;gap:6px;}
         .rec-home-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 28px rgba(37,99,235,.13);}
         .rec-home-card .rc-icon{font-size:30px;line-height:1;}
@@ -1895,6 +1906,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
           <option value="rascunho">📝 Rascunho</option>
           <option value="atrasado">🔴 Atrasado</option>
           <option value="enviado">✅ Enviado</option>
+          <option value="nao_faturavel">🛡️ Garantia / Orçamento</option>
         </select>
         <select class="fs" id="rp-filter-tec" onchange="rpRender()" style="font-size:12px;min-width:140px;"><option value="">👷 Todos os técnicos</option></select>
         <input type="date" class="fi" id="rp-filter-de" title="Período: início" style="font-size:12px;" onchange="rpRender()">
@@ -5128,11 +5140,30 @@ function renderRecibos(){
   }
 }
 function recSetStatus(v){ recFilter=v||'all'; renderRecibos(); }
+// ── Atalhos de período para análise de recebimentos ──────────
+function recDefinirPeriodo(tipo){
+  const hoje=new Date();
+  const ano=hoje.getFullYear(), mes=hoje.getMonth();
+  let de=null, ate=null;
+  if(tipo==='mes'){ de=new Date(ano,mes,1); ate=new Date(ano,mes+1,0); }
+  else if(tipo==='mes_passado'){ de=new Date(ano,mes-1,1); ate=new Date(ano,mes,0); }
+  else if(tipo==='trimestre'){ const tm=Math.floor(mes/3)*3; de=new Date(ano,tm,1); ate=new Date(ano,tm+3,0); }
+  else if(tipo==='ano'){ de=new Date(ano,0,1); ate=new Date(ano,11,31); }
+  // 'tudo' deixa de/ate a null → sem filtro de data
+  const f=(d)=>{ if(!d) return ''; const m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${m}-${dd}`; };
+  const deEl=document.getElementById('rec-de'), ateEl=document.getElementById('rec-ate');
+  if(deEl) deEl.value=f(de);
+  if(ateEl) ateEl.value=f(ate);
+  document.querySelectorAll('.rec-periodo-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector(`.rec-periodo-btn[data-periodo="${tipo}"]`)?.classList.add('active');
+  renderRecibos();
+}
 function recLimparFiltros(){
   ['rec-q','rec-de','rec-ate','rec-nif'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   const t=document.getElementById('rec-tec'); if(t) t.value='';
   const s=document.getElementById('rec-status'); if(s) s.value='all';
   recFilter='all';
+  document.querySelectorAll('.rec-periodo-btn').forEach(b=>b.classList.remove('active'));
   renderRecibos();
 }
 function recRow(r,short){
@@ -5146,7 +5177,7 @@ function recRow(r,short){
       </select>`
     : docBadge;
   if(short) return `<tr><td>${fmtDate(r.date)}</td><td><strong>${r.client}</strong></td><td>${r.service}</td><td>${r.tech}</td><td class="mono" style="color:var(--green)">€${fmt(r.net)}</td><td class="mono" style="color:var(--yellow)">€${fmt(r.iva)}</td><td class="mono">€${fmt(r.total)}</td><td>${payLabel}</td><td><div class="ab"><button class="ib v" onclick="viewRec('${r.id}')">👁</button></div></td></tr>`;
-  return `<tr><td class="mono" style="color:var(--text3)">${r.id}</td><td>${fmtDate(r.date)}</td><td><strong>${r.client}</strong></td><td>${r.service}</td><td class="mono">${r.hours}h</td><td>${r.tech}</td><td class="mono" style="color:var(--green)">€${fmt(r.net)}</td><td class="mono" style="color:var(--yellow)">€${fmt(r.iva)}</td><td class="mono">€${fmt(r.total)}</td><td>${payLabel}</td><td>${docCell}</td><td><div class="ab"><button class="ib v" onclick="viewRec('${r.id}')">👁</button>${canEdit()?`<button class="ib e" onclick="editRec('${r.id}')">✏</button><button class="ib d" onclick="delRec('${r.id}')">🗑</button>`:''}${r.status==='pending'?`<button class="ib" style="color:var(--green)" onclick="markPaid('${r.id}')" title="Marcar pago">✔</button>`:''}</div></td></tr>`;
+  return `<tr><td class="mono" style="color:var(--text3)">${r.id}</td><td>${fmtDate(r.date)}</td><td><strong>${r.client}</strong></td><td>${r.service}</td><td class="mono">${r.hours}h</td><td>${r.tech}</td><td class="mono" style="color:var(--green)">€${fmt(r.net)}</td><td class="mono" style="color:var(--yellow)">€${fmt(r.iva)}</td><td class="mono">€${fmt(r.total)}</td><td>${payLabel}</td><td>${docCell}</td><td><div class="ab"><button class="ib v" onclick="viewRec('${r.id}')">👁</button>${canEdit()?`<button class="ib e" onclick="editRec('${r.id}')">✏</button><button class="ib d" onclick="delRec('${r.id}')">🗑</button>`:''}${r.status==='pending'?`<button class="ib" style="color:var(--green)" onclick="recAbrirDarBaixa('${r.id}')" title="Dar baixa — confirmar recebimento">✔</button>`:canEdit()?`<button class="ib" style="color:var(--text3)" onclick="recAnularBaixa('${r.id}')" title="Anular recebimento — volta a pendente">↩</button>`:''}</div></td></tr>`;
 }
 function filterRec(f,btn){
   recFilter=f;
@@ -5155,6 +5186,54 @@ function filterRec(f,btn){
   renderRecibos();
 }
 function canEdit(){const r=window.currentUser.role; return r==='admin'||r==='supervisor'||r==='gerente';}
+// ── Dar baixa de recebimento (melhorado) ─────────────────────
+// Antes: 1 clique marcava pago instantaneamente, sem confirmação,
+// sem registo de quem/quando, sem hipótese de corrigir a data real
+// do pagamento, e sem forma de desfazer um clique por engano.
+function recAbrirDarBaixa(id){
+  const r=(window.DB.recibos||[]).find(x=>x.id===id); if(!r) return;
+  window._recBaixaId=id;
+  const info=document.getElementById('rec-baixa-info');
+  if(info) info.innerHTML=`<strong>${r.client||'—'}</strong> · ${r.service||'—'}<br>Recibo ${r.id} · Total: €${fmt(r.total)}`;
+  const dataEl=document.getElementById('rec-baixa-data');
+  if(dataEl) dataEl.value=r.pagoEm||today();
+  openMo('mo-rec-baixa');
+}
+async function recConfirmarBaixa(){
+  const id=window._recBaixaId; if(!id) return;
+  const r=(window.DB.recibos||[]).find(x=>x.id===id); if(!r) return;
+  const data=document.getElementById('rec-baixa-data')?.value||today();
+  const btn=document.getElementById('rec-baixa-confirmar-btn');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ A confirmar...'; }
+  try{
+    await window.fsSetMerge('recibos', id, {status:'paid', pagoEm:data, pagoPor:window.currentUser?.id, pagoPorNome:window.currentUser?.name});
+    const idx=(window.DB.recibos||[]).findIndex(x=>x.id===id);
+    if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'paid', pagoEm:data, pagoPor:window.currentUser?.id, pagoPorNome:window.currentUser?.name};
+    if(typeof auditLog==='function') auditLog('recibo_pago',`Recibo ${id} (${r.client||'—'}) marcado como pago em ${data} por ${window.currentUser?.name||''}`);
+    closeMo('mo-rec-baixa');
+    toast('✅ Recebimento confirmado!','✔');
+    renderRecibos();
+  }catch(e){
+    toast('Erro ao confirmar: '+e.message,'❌');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='✅ Confirmar recebimento'; }
+  }
+}
+async function recAnularBaixa(id){
+  const r=(window.DB.recibos||[]).find(x=>x.id===id); if(!r) return;
+  if(!confirm(`Anular o recebimento do recibo ${id} (${r.client||'—'})?\n\nVolta ao estado "Pendente".`)) return;
+  try{
+    await window.fsSetMerge('recibos', id, {status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null});
+    const idx=(window.DB.recibos||[]).findIndex(x=>x.id===id);
+    if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null};
+    if(typeof auditLog==='function') auditLog('recibo_pago_anulado',`Recibo ${id} (${r.client||'—'}) — recebimento anulado por ${window.currentUser?.name||''}`);
+    toast('↩ Recebimento anulado — voltou a pendente.','↩');
+    renderRecibos();
+  }catch(e){
+    toast('Erro ao anular: '+e.message,'❌');
+  }
+}
+// Mantido por compatibilidade (não usado directamente nos botões novos)
 async function markPaid(id){
   const r=window.DB.recibos.find(x=>x.id===id);
   await window.fsSet('recibos', id, {...r, status:'paid', pagoEm:(r?.pagoEm||today())});
@@ -5790,7 +5869,7 @@ function captureInvoice(e){
             content:[
               {type:'image',source:{type:'base64',media_type:mediaType,data:base64Data}},
               {type:'text',text:`Analisa esta imagem de fatura/recibo e extrai os dados. Responde APENAS em JSON puro (sem markdown), com este formato exacto:
-{"fornecedor":"nome do fornecedor","nif":"NIF se visível ou vazio","total":"valor total com IVA (apenas números e ponto decimal)","iva":"taxa de IVA em percentagem (23, 13, 6 ou 0)","data":"data no formato YYYY-MM-DD se visível","descricao":"breve descrição do que foi comprado","confianca":"alta/media/baixa","problemas":"lista de problemas encontrados na imagem ou dados em falta"}
+{"fornecedor":"nome do fornecedor","nif":"NIF se visível ou vazio","total":"valor total com IVA (apenas números e ponto decimal)","iva":"taxa de IVA em percentagem (23, 13, 6 ou 0)","data":"data no formato YYYY-MM-DD se visível","descricao":"breve descrição do que foi comprado","tipo_despesa":"categoria mais provável, escolhe APENAS um destes ids: ${cfgGetTiposDesp().map(t=>t.id).join(', ')}","confianca":"alta/media/baixa","problemas":"lista de problemas encontrados na imagem ou dados em falta"}
 Se não conseguires ler algum campo, deixa-o em branco. Se a imagem não for uma fatura, coloca confianca baixa e descreve o problema.`}
             ]
           }]
@@ -18516,7 +18595,7 @@ function rpEnviarEmailDiarioPendentes(){
   const isSup = ['admin','gerente','comercial','supervisor'].includes(role);
   if(!isTec && !isSup) return;
 
-  const concluidas = (window.DB.ordens||[]).filter(o=>o.estado==='concluida');
+  const concluidas = (window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   const pendentes  = concluidas.filter(o=>{
     if(isTec && !(o.tecnicos||[]).includes(window.currentUser.id)) return false;
     const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
@@ -19834,6 +19913,23 @@ function agRecEditarSimples(id){
   </div>
 </div>
 
+<!-- MODAL DAR BAIXA DE RECEBIMENTO -->
+<div class="mo" id="mo-rec-baixa" style="z-index:3300;">
+  <div class="md sm" style="max-width:420px;">
+    <div class="mh"><div class="mh-title">✅ Dar baixa — Recebimento</div><button class="mc" onclick="closeMo('mo-rec-baixa')">×</button></div>
+    <div class="mb">
+      <div id="rec-baixa-info" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;font-size:12px;color:#065f46;margin-bottom:14px;"></div>
+      <div class="fg"><label>Data em que o pagamento foi recebido *</label>
+        <input class="fi" type="date" id="rec-baixa-data">
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeMo('mo-rec-baixa')">Cancelar</button>
+      <button class="btn btn-primary" id="rec-baixa-confirmar-btn" onclick="recConfirmarBaixa()">✅ Confirmar recebimento</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL NOVA MODALIDADE -->
 <div class="mo" id="mo-nova-modalidade" style="z-index:3200;">
   <div class="md sm" style="max-width:400px;">
@@ -20471,8 +20567,17 @@ function rpRender(){
   let ordens = [...(window.DB.ordens||[])].filter(o=>o.estado==='concluida'||o.estado==='agendada'||o.estado==='em_curso');
   ordens.sort((a,b)=>(b.concluidoEm||b.data||'').localeCompare(a.concluidoEm||a.data||''));
 
+  // Garantia/Orçamento não são cobradas — ficam fora da vista normal,
+  // só aparecem quando o filtro "🛡️ Garantia/Orçamento" é escolhido,
+  // para não se misturarem com os pendentes do dia-a-dia (faturação).
+  if(filterEst==='nao_faturavel'){
+    ordens = ordens.filter(o=>typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
+  } else {
+    ordens = ordens.filter(o=>!(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
+  }
+
   // Filtrar
-  if(filterEst){
+  if(filterEst && filterEst!=='nao_faturavel'){
     ordens = ordens.filter(os=>{
       const est = rpEstadoRelatorio(os);
       const dias = rpDiasParaEnvio(os);
@@ -20542,7 +20647,9 @@ function rpRender(){
       <td data-col="servico" style="font-size:12px;">${srv?.nome||'—'}</td>
       <td data-col="data" style="font-size:12px;color:#475569;white-space:nowrap;">${dataConclusao}</td>
       <td data-col="pagamento" onclick="event.stopPropagation()">
-        ${pagConfirmado
+        ${naoFat
+          ? `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;background:#eff6ff;color:#1e40af;">🛡️ Não faturável</span>`
+          : pagConfirmado
           ? `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;background:${pagImediato?'#dcfce7':'#fef3c7'};color:${pagImediato?'#15803d':'#92400e'};">${pagImediato?'✅':'⏳'} ${payLabel}</span>`
           : isSup?`<button class="btn btn-sm" style="font-size:11px;color:var(--orange);padding:3px 8px;" onclick="rpAbrirPagamento('${os.id}')">💳</button>`
           : `<span style="color:#cbd5e1;font-size:12px;">—</span>`
@@ -20885,7 +20992,7 @@ function fecharAlertaAtrasados(){
 
 function rpRenderAlertasDiarios(){
   const painel = document.getElementById('rp-painel-alertas'); if(!painel) return;
-  const concluidas = (window.DB.ordens||[]).filter(o=>o.estado==='concluida');
+  const concluidas = (window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   const alertas = [];
 
   concluidas.forEach(os=>{
@@ -23594,7 +23701,7 @@ async function rpConfirmarPagamento(){
 // ── Verificação diária de prazos (ao arrancar) ──────────────
 function rpVerificarPrazosAtraso(){
   if(!window.currentUser) return;
-  const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida');
+  const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   const atrasados=concluidas.filter(os=>{
     const est=rpEstadoRelatorio(os); if(est==='enviado') return false;
     const dias=rpDiasParaEnvio(os); return dias!==null && dias<0;
@@ -23736,10 +23843,11 @@ async function osConfirmarPagamentoOS(){
     await osCriarReciboAutomatico(updated);
     // Notificação ecrã verde
     osNotifPagamento(osId, 'verde', metLabel, os.total);
+    osCriarAvisoFatura(updated, metLabel); // aviso para a gestão emitir a Fatura-Recibo
   } else {
     // Notificação ecrã amarela + email para emitir fatura
     osNotifPagamento(osId, 'amarela', metLabel, os.total);
-    osAvisarEmitirFatura(updated, metLabel);
+    osAvisarEmitirFatura(updated, metLabel); // já cria o aviso (Fatura) internamente
   }
 
   closeMo('mo-os-pagamento');
@@ -23839,12 +23947,46 @@ function osNotifPagamento(osId, cor, metLabel, total){
   }
 }
 
+// ── Criar/atualizar o aviso de faturação para a gestão ───────
+// Esta é a peça que faltava: alimenta o painel "📋 Avisos de
+// Faturação" (mensagens_internas, tipo:'pedido_fatura'), que já
+// existe e já funciona — só não estava a receber dados.
+// Idempotente: um único aviso por OS; se já existir, actualiza só
+// os dados de pagamento sem tocar no que o admin já tiver feito
+// (documentoEmitido, arquivado, documentoNumero, etc.).
+async function osCriarAvisoFatura(os, metLabel){
+  try{
+    if(!os || !os.id) return;
+    const msgId = 'msg_fat_'+os.id;
+    const existente = (window.DB.mensagens_internas||[]).find(m=>m.tipo==='pedido_fatura'&&m.osId===os.id);
+    const tecNomes = (os.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name).filter(Boolean).join(', ')
+                     || window.currentUser?.name || '';
+    const dadosBase = {
+      osId: os.id,
+      metodoPagamento: os.pagamento?.metodo || '',
+      valorTotal: os.total!=null ? os.total : (os.valorTotal||null),
+      tecnicoNome: tecNomes,
+    };
+    if(existente){
+      const idExist = existente._firebaseId || existente.id || msgId;
+      await window.fsSetMerge('mensagens_internas', idExist, dadosBase);
+    } else {
+      await window.fsSet('mensagens_internas', msgId, {
+        id: msgId, tipo:'pedido_fatura', ...dadosBase,
+        documentoEmitido:false, arquivado:false, lida:false,
+        criadoEm:new Date().toISOString(),
+      });
+    }
+  }catch(e){ console.warn('osCriarAvisoFatura falhou:', e.message); }
+}
+
 function osAvisarEmitirFatura(os, metLabel){
   const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
   const msg=`OS ${os.id} — ${cli.nome||'—'} — €${osFmt(os.total||0)} — Pagamento: ${metLabel}\nEmita a Fatura correspondente.`;
   console.log(`📧 EMAIL → localizafugas@gmail.com\nAssunto: ⚠️ Emitir Fatura — OS ${os.id}\n${msg}`);
   toast(`⚠️ Emita a Fatura para OS ${os.id} — ${metLabel}. Email enviado para localizafugas@gmail.com.`,'🟡');
   auditLog('aviso_fatura',`Emitir fatura OS ${os.id} — ${metLabel} — €${osFmt(os.total)}`);
+  osCriarAvisoFatura(os, metLabel);
 }
 
 function osAbrirNovaModalidade(){
@@ -23879,7 +24021,7 @@ function osVerificar72hSemPagamento(){
   const agora = new Date();
   const isSup = ['admin','gerente','comercial'].includes(window.currentUser?.role);
   if(!isSup) return;
-  (window.DB.ordens||[]).filter(o=>o.estado==='concluida'&&!o.pagamento?.metodo&&o.concluidoEm).forEach(o=>{
+  (window.DB.ordens||[]).filter(o=>o.estado==='concluida'&&!o.pagamento?.metodo&&o.concluidoEm&&!(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o))).forEach(o=>{
     const h = (agora - new Date(o.concluidoEm))/3600000;
     if(h>=72&&!o._pag72hNotificado){
       const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
@@ -24344,9 +24486,14 @@ async function osConcluirComAssinaturas(){
     }
   }catch(e){ console.warn('Falha a sincronizar horas do relatório:', e); }
   if(met && !naoFat){
-    if(imediato) await osCriarReciboAutomatico(updated); // só cria se ainda não existe
-    if(imediato) osNotifPagamento(osId,'verde',metLabel,totalCalc);
-    else { osAvisarEmitirFatura(updated,metLabel); osNotifPagamento(osId,'amarela',metLabel,totalCalc); }
+    if(imediato){
+      await osCriarReciboAutomatico(updated); // só cria se ainda não existe
+      osNotifPagamento(osId,'verde',metLabel,totalCalc);
+      osCriarAvisoFatura(updated, metLabel); // aviso para a gestão emitir a Fatura-Recibo
+    } else {
+      osAvisarEmitirFatura(updated,metLabel); // já cria o aviso (Fatura) internamente
+      osNotifPagamento(osId,'amarela',metLabel,totalCalc);
+    }
   }
 
   closeMo('mo-os-concluir');

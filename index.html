@@ -5765,6 +5765,12 @@ function renderDespesas(){
 
 function _despPopularSelectTecnico(valorActual){
   const sel=document.getElementById('d-tecnico'); if(!sel) return;
+  if(window.currentUser?.role==='tecnico'){
+    sel.innerHTML=`<option value="${window.currentUser.id}" selected>${window.currentUser.name}</option>`;
+    sel.disabled=true;
+    return;
+  }
+  sel.disabled=false;
   const users=(window.DB.users||[]).filter(u=>u.active&&(u.role==='tecnico'||u.role==='supervisor'));
   sel.innerHTML='<option value="">Admin / Sistema</option>'
     +users.map(u=>`<option value="${u.id}"${u.id===valorActual?' selected':''}>${u.name}</option>`).join('');

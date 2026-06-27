@@ -12291,6 +12291,7 @@ async function osRegistarPagamentoRapido(id, met){
   if(imediato){
     await osCriarReciboAutomatico(updated);
     osNotifPagamento(id,'verde',metLabel,os.total);
+    osCriarAvisoFatura(updated, metLabel); // aviso para a gestão emitir a Fatura-Recibo (faltava aqui — ficava sem aparecer no Painel de Faturação)
     if(typeof rpSyncFinanceiro==='function') rpSyncFinanceiro(updated);
   } else {
     osNotifPagamento(id,'amarela',metLabel,os.total);

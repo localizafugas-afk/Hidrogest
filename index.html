@@ -6055,11 +6055,16 @@ async function saveDespesa(){
     criadoEm: editingDespId ? (((window.DB.despesas||[]).find(x=>x.id===editingDespId))?.criadoEm || new Date().toISOString()) : new Date().toISOString(),
   };
   if(!d.tecnicoId){delete d.tecnicoId; delete d.tecnicoNome;}
-  await window.fsSet('despesas', d.id, d);
-  if(!editingDespId){window.DB.nextDesp=nextDesp+1; await window.fsMeta('nextDesp', nextDesp+1);}
-  closeMo('mo-despesa');
-  toast(editingDespId?'Despesa atualizada!':'Despesa registada!','✅');
-  auditLog(editingDespId?'despesa_editada':'despesa_criada',`Despesa ${d.id} — ${d.supplier} — €${d.gross||0}${tecUser?' · '+tecUser.name:''}`);
+  try{
+    await window.fsSet('despesas', d.id, d);
+    if(!editingDespId){window.DB.nextDesp=nextDesp+1; await window.fsMeta('nextDesp', nextDesp+1);}
+    closeMo('mo-despesa');
+    toast(editingDespId?'Despesa atualizada!':'Despesa registada!','✅');
+    auditLog(editingDespId?'despesa_editada':'despesa_criada',`Despesa ${d.id} — ${d.supplier} — €${d.gross||0}${tecUser?' · '+tecUser.name:''}`);
+  }catch(e){
+    console.error('saveDespesa falhou:', e);
+    toast('Erro ao guardar despesa: '+(e.message||e),'❌');
+  }
 }
 async function delDesp(id){
   if(!confirm('Eliminar despesa?')) return;
@@ -10358,9 +10363,9 @@ async function osSalvar(){
   }
   window._osSalvarIgnorarDistancia = false;
 
-  // Dados do pagador (override ou dados do cliente)
+  // Dados do pagador (override ou dados do cliente) — nunca undefined, só Firestore rejeita undefined
   const pagador=window._osPagadorOverride||(cli?.quemPaga==='outro'?{
-    nome:cli.fatNome, nif:cli.fatNif, email:cli.fatEmail, tel:cli.fatTel, morada:cli.fatMorada
+    nome:cli.fatNome||'', nif:cli.fatNif||'', email:cli.fatEmail||'', tel:cli.fatTel||'', morada:cli.fatMorada||''
   }:null);
 
   const camposFormulario={
@@ -10403,6 +10408,7 @@ async function osSalvar(){
   };
   const os = isEdit ? {...existing,...camposFormulario} : camposFormulario;
 
+  try{
   if(isEdit){
     await window.fsSet('ordens', id, os);
   } else {
@@ -10518,7 +10524,10 @@ async function osSalvar(){
   await window.osEnviarEmailCliente(os, cli, srv, tipoEmailSalvar);
   toast(isEdit?'OS actualizada e cliente notificado!':'OS criada! Cliente e técnicos notificados!','✅');
   auditLog(isEdit?'os_editada':'os_criada',`OS ${id} — Cliente: ${cli?.nome||''} — Serviço: ${srv?.nome||''} — Total: €${os.total||0}`);
-
+  }catch(e){
+    console.error('osSalvar falhou:', e);
+    toast('Erro ao guardar OS: '+(e.message||e),'❌');
+  }
 }
 
 // ── Notificações ───────────────────────────────────────────────

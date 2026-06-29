@@ -5854,18 +5854,40 @@ function calcDespIVA(){
   document.getElementById('dv-iva').textContent='€'+fmt(iva);
   document.getElementById('dv-total').textContent='€'+fmt(gross);
 }
+// Redimensiona/comprime uma imagem (data URL) para caber confortavelmente num documento Firestore (limite 1MB).
+function _compressImageDataUrl(dataUrl, maxDim, quality){
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxDim||h>maxDim){ if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(dataUrl);
+    img.src=dataUrl;
+  });
+}
 function captureInvoice(e){
   const file=e.target.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=async ev=>{
-    const base64=ev.target.result; // data:image/...;base64,...
+    const original=ev.target.result; // data:image/...;base64,... (qualidade total — só para a IA ler)
+
+    // Versão comprimida para mostrar e GRAVAR (o Firestore rejeita documentos >1MB; a foto da câmara
+    // do telemóvel facilmente passa isso em base64). Tenta 1400px/0.65; se ainda for grande, aperta mais.
+    let base64=await _compressImageDataUrl(original, 1400, 0.65);
+    if(base64.length > 700000) base64=await _compressImageDataUrl(original, 1000, 0.5);
+
     document.getElementById('d-photo-img').src=base64;
     document.getElementById('d-photo-preview').style.display='block';
     toast('Fatura fotografada! A verificar dados...','📷');
 
     // ── Verificação inteligente com IA ────────────────────────
     try{
-      const base64Data=base64.split(',')[1];
+      const base64Data=original.split(',')[1];
       const mediaType=file.type||'image/jpeg';
 
       // Mostrar indicador de carregamento na área da foto

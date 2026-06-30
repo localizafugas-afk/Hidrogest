@@ -12044,11 +12044,7 @@ function osAbrirDetalhe(id){
   const isMeuTec=(o.tecnicos||[]).includes(window.currentUser.id);
   const isSup=window.currentUser.role==='supervisor'||window.currentUser.role==='gerente'||window.currentUser.role==='admin';
   // Morada de serviço
-  const moradaSrv=cli?.outraMorada
-    ?[cli.srvRua,cli.srvCp,cli.srvLocalidade,cli.srvConcelho,cli.srvDistrito].filter(Boolean).join(', ')
-    :[cli?.rua,cli?.cp,cli?.localidade,cli?.concelho,cli?.distrito].filter(Boolean).join(', ');
-  const mapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(moradaSrv||'')}`;
-  // Data/hora criação
+  const {morada:moradaSrv, mapsUrl, cpOk:_moradaCpOk} = _tecBuildMaps(cli);  // Data/hora criação
   const criadoEm=o.criadoEm?new Date(o.criadoEm).toLocaleString('pt-PT'):'—';
   const criadoPor=window.DB.users.find(u=>u.id===o.criadoPor)?.name||'—';
   const body=document.getElementById('mo-os-tec-body'); if(!body) return;
@@ -12107,7 +12103,7 @@ function osAbrirDetalhe(id){
       </div>
       <div style="margin-top:8px;font-size:16px;font-weight:700;">${cli?.nome||'—'}</div>
       <div style="font-size:12px;opacity:.8;margin-top:2px;">📍 ${moradaSrv||[cli?.rua,cli?.localidade].filter(Boolean).join(', ')||'—'}
-        ${moradaSrv?`&nbsp;<a href="${mapsUrl}" target="_blank" onclick="tecMarcarDeslocamento('${id}','${(cli?.nome||'').replace(/'/g,"\\'")}','${moradaSrv.replace(/'/g,"\\'")}');" style="color:#93c5fd;font-size:11px;">🗺️ Ir →</a>`:''}
+        ${moradaSrv?`&nbsp;<a href="#" onclick="event.preventDefault();_tecAbrirMaps('${id}','${(cli?.nome||'').replace(/'/g,"\\'")}',window.DB.clientes.find(x=>x.id==='${cli?.id}'));return false;" style="color:${_moradaCpOk?'#93c5fd':'#fde68a'};font-size:11px;">🗺️ ${_moradaCpOk?'Ir →':'⚠️ Ir →'}</a>`:''}
       </div>
       <div style="font-size:12px;opacity:.75;margin-top:2px;">📞 ${cli?.tel||'—'} &nbsp;·&nbsp; 🔧 ${srv?.nome||'—'}</div>
       ${o.aceitaCondicoes?`<div style="font-size:11px;margin-top:6px;background:rgba(255,255,255,.15);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Condições de serviço aceites</div>`:
@@ -13518,8 +13514,8 @@ function osRenderMinhas(){
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
       const relEst=rel?.estado||'';
       const morada=[cli.srvRua||cli.rua,cli.srvLocalidade||cli.localidade].filter(Boolean).join(', ');
-      const mapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([cli.srvRua||cli.rua,cli.srvCp||cli.cp,cli.srvLocalidade||cli.localidade].filter(Boolean).join(', '))}`;
-      const isHoje=data===hoje;
+      const {mapsUrl, cpOk:_cpOk} = _tecBuildMaps(cli);
+      const {morada:_moradaDisplay} = _tecBuildMaps(cli);      const isHoje=data===hoje;
       const emCurso=o.estado==='em_curso';
       const concluida=o.estado==='concluida'||o.estado==='os_fechada';
       const arquivada=o.estado==='os_fechada';
@@ -13627,7 +13623,7 @@ function osRenderMinhas(){
         ${morada?`
         <div style="padding:0 16px 10px;display:flex;align-items:center;gap:8px;">
           <span style="font-size:12px;color:#64748b;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📍 ${morada}</span>
-          <a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation();tecMarcarDeslocamento('${o.id}','${(cli.nome||'').replace(/'/g,"\\'")}','${morada.replace(/'/g,"\\'")}');" style="flex-shrink:0;background:#eff6ff;color:#2563eb;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;text-decoration:none;white-space:nowrap;">🗺️ Maps</a>
+          <a href="#" onclick="event.stopPropagation();event.preventDefault();_tecAbrirMaps('${o.id}','${(cli.nome||'').replace(/'/g,"\\'")}',window.DB.clientes.find(x=>x.id==='${o.clienteId}'));return false;" style="flex-shrink:0;background:${_cpOk?'#eff6ff':'#fef9c3'};color:${_cpOk?'#2563eb':'#92400e'};font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;text-decoration:none;white-space:nowrap;">🗺️ ${_cpOk?'Maps':'⚠️ Maps'}</a>
         </div>`:''}
 
         <!-- Contacto rápido -->
@@ -13739,6 +13735,33 @@ function tecPararGPS(){
     chegouEm: new Date().toISOString(),
   }).catch(()=>{});
   console.log('[GPS] tecPararGPS: marcou chegada, tracking continua via locStartTracking');
+}
+
+// ── Helper: monta morada na ordem correta e valida CP ────────
+function _tecBuildMaps(cli){
+  if(!cli) return { morada:'', mapsUrl:'', cpOk:false };
+  const rua      = cli.srvRua       || cli.rua       || '';
+  const cp       = cli.srvCp        || cli.cp        || '';
+  const local    = cli.srvLocalidade || cli.localidade || '';
+  const concelho = cli.srvConcelho   || cli.concelho   || '';
+  const morada = [rua, cp ? cp + (local ? ' ' + local : '') : local, concelho]
+    .filter(Boolean).join(', ');
+  const cpOk = cp.trim().length >= 4;
+  const dest = [rua, cp, local].filter(Boolean).join(', ');
+  const mapsUrl = cpOk
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}`
+    : '';
+  return { morada, mapsUrl, cpOk };
+}
+function _tecAbrirMaps(osId, cliNome, cli){
+  const { morada, mapsUrl, cpOk } = _tecBuildMaps(cli);
+  if(!cpOk){
+    alert('⚠️ Morada incompleta!\n\nEsta OS não tem código postal registado.\nContacta o escritório antes de te deslocares.');
+    return false;
+  }
+  tecMarcarDeslocamento(osId, cliNome, morada);
+  window.open(mapsUrl, '_blank');
+  return false;
 }
 
 // ── Marcar técnico como em deslocamento ao abrir Maps ────────

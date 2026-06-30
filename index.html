@@ -12163,15 +12163,41 @@ function osAbrirDetalhe(id){
             <div style="font-weight:700;font-size:14px;color:${cor2};">${txt2}</div>`;
           })()}
         </div>
+        ${(()=>{
+          const _rel2 = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+          const _isTec = window.currentUser?.role==='tecnico';
+          // ── Se ainda não há relatório nem decisão tomada, perguntar "Agora" ou "Depois" ──
+          if(_isTec && !_rel2?.campos && o.estado!=='concluida'){
+            if(!o.fluxoRelatorio){
+              return `
+              <div style="padding:12px 14px;">
+                <div style="font-size:12.5px;color:#475569;margin-bottom:8px;font-weight:600;">📋 Vai fazer o relatório agora ou mais tarde?</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button class="btn btn-primary btn-sm" style="background:#15803d;flex:1;min-width:130px;" onclick="osEscolherFluxoRelatorio('${id}','agora')">⏱️ Fazer agora</button>
+                  <button class="btn btn-ghost btn-sm" style="flex:1;min-width:130px;" onclick="osEscolherFluxoRelatorio('${id}','depois')">📅 Fazer depois</button>
+                </div>
+              </div>`;
+            }
+            if(o.fluxoRelatorio==='depois'){
+              return `
+              <div style="padding:12px 14px;">
+                <div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fed7aa;border-radius:6px;padding:8px 10px;margin-bottom:8px;">⏳ Vai preencher o relatório mais tarde. Agora vamos fechar a OS com as assinaturas e o valor a cobrar.</div>
+                <button class="btn btn-primary btn-sm" style="background:#c2410c;width:100%;" onclick="closeMo('mo-os-tec');tecFecharOSDepois('${id}')">✍️ Recolher assinaturas e fechar OS</button>
+                <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px;" onclick="osEscolherFluxoRelatorio('${id}','agora')">↩️ Afinal vou fazer agora</button>
+              </div>`;
+            }
+          }
+          // ── Fluxo normal (agora, ou relatório já existe, ou não é técnico) ──
+          return `
         <div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" style="background:#1e3a5f;" onclick="closeMo('mo-os-tec');rpAbrirFormulario('${id}')">
-            ${(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.campos?'✏️ Editar relatório':'📝 Preencher relatório'}
+            ${_rel2?.campos?'✏️ Editar relatório':'📝 Preencher relatório'}
           </button>
-          ${(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.campos?`<button class="btn btn-ghost btn-sm" onclick="closeMo('mo-os-tec');rpVerRelatorio('${id}')">👁 Ver</button>`:''}
-          ${(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.campos&&(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.estado!=='enviado'&&['admin','gerente','supervisor'].includes(window.currentUser?.role)?`<button class="btn btn-ghost btn-sm" onclick="closeMo('mo-os-tec');rpEnviarEmailDireto('${id}')">📧 Enviar ao cliente</button>`:''}
-          ${window.currentUser?.role==='tecnico'&&!(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.campos?'<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Preencha o relatório após terminar o trabalho.</div>':''}
-          ${window.currentUser?.role==='tecnico'&&(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)?.estado==='enviado'?'':''}
-        </div>
+          ${_rel2?.campos?`<button class="btn btn-ghost btn-sm" onclick="closeMo('mo-os-tec');rpVerRelatorio('${id}')">👁 Ver</button>`:''}
+          ${_rel2?.campos&&_rel2?.estado!=='enviado'&&['admin','gerente','supervisor'].includes(window.currentUser?.role)?`<button class="btn btn-ghost btn-sm" onclick="closeMo('mo-os-tec');rpEnviarEmailDireto('${id}')">📧 Enviar ao cliente</button>`:''}
+          ${_isTec&&!_rel2?.campos?'<div style="font-size:11px;color:#94a3b8;margin-top:4px;">Preencha o relatório após terminar o trabalho. Ao guardar, indique a forma de pagamento para enviar ao cliente na hora.</div>':''}
+        </div>`;
+        })()}
       </div>
 
       <!-- PASSO 3: REGISTO DE TEMPO + PAGAMENTO -->
@@ -12357,6 +12383,27 @@ function osCalcPreview(id){
   el.innerHTML=`⏱ <strong>${hh}h${mm>0?' '+mm+'min':''}</strong> &nbsp;·&nbsp; Total: <strong style="color:var(--accent);font-size:15px;">€${osFmt(total)}</strong>`;
 }
 
+// ── Escolha do técnico: fazer relatório "agora" ou "depois" ──
+async function osEscolherFluxoRelatorio(id, modo){
+  const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
+  await window.fsSetMerge('ordens',id,{...os, fluxoRelatorio:modo});
+  auditLog('os_fluxo_relatorio', `OS ${id} — técnico escolheu fazer o relatório "${modo}"`);
+  if(modo==='agora'){
+    toast('⏱️ Boa! Quando terminar, preencha o relatório e indique a forma de pagamento.','✅');
+    osAbrirDetalhe(id);
+  } else {
+    toast('📅 Combinado — vamos fechar a OS agora com as assinaturas.','📅');
+    osAbrirDetalhe(id);
+  }
+}
+
+// ── "Fazer depois": fecha a OS já, como relatório PRELIMINAR, ──
+// só com tempo + assinaturas + valor. O relatório escrito fica pendente.
+function tecFecharOSDepois(id){
+  osAbrirConcluir(id);
+  setTimeout(()=>{ if(typeof osSelecionarTipoRelatorio==='function') osSelecionarTipoRelatorio('preliminar'); }, 50);
+}
+
 // ── Registar pagamento rápido (botões directos) ──────────────
 async function osRegistarPagamentoRapido(id, met){
   const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
@@ -12378,6 +12425,29 @@ async function osRegistarPagamentoRapido(id, met){
     osAvisarEmitirFatura(updated,metLabel);
   }
   auditLog('pagamento_os',`OS ${id} — ${metLabel} — €${osFmt(os.total)}`);
+
+  // ── Fluxo "Agora": técnico escolheu MB/MBWay/Numerário/Cheque com o relatório já feito ──
+  // → enviar o relatório ao cliente de imediato e fechar a OS, sem esperar pela gestão.
+  const _isTec = window.currentUser?.role==='tecnico';
+  const _rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===id);
+  if(_isTec && os.fluxoRelatorio==='agora' && imediato && _rel?.campos && _rel?.estado!=='enviado'){
+    toast('📧 A enviar o relatório ao cliente...','⏳');
+    try{
+      const resultado = await brevoEnviarRelatorio(id);
+      if(resultado?.ok){
+        const cli3=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+        await rpSaveDoc(id, {..._rel, estado:'enviado', enviadoEm:new Date().toISOString(), enviadoPor:window.currentUser?.id, enviadoPara:cli3.email});
+        await window.fsSetMerge('ordens',id,{estado:'concluida', concluidoEm:new Date().toISOString(), concluidoPor:window.currentUser?.id});
+        auditLog('relatorio_enviado_tecnico_hora', `OS ${id} — relatório enviado pelo técnico na hora, pagamento ${metLabel}`);
+        toast('✅ Relatório enviado ao cliente e OS encerrada!','✅');
+      } else {
+        toast('⚠️ Pagamento registado, mas não foi possível enviar o relatório agora. A gestão irá enviar.','⚠️',7000);
+      }
+    }catch(e){
+      console.warn('Envio automático na hora falhou:', e);
+      toast('⚠️ Pagamento registado, mas o envio automático falhou. A gestão irá enviar o relatório.','⚠️',7000);
+    }
+  }
   osAbrirDetalhe(id);
 }
 
@@ -21860,7 +21930,12 @@ async function rpSalvarRelatorio(){
   // Técnicos NÃO podem enviar email ao cliente — apenas guardam o relatório
   const _isTecSalvar = _auditRole === 'tecnico';
   if(_isTecSalvar){
-    toast('✅ Relatório guardado! Aguarda revisão da gestão para envio ao cliente.','📄');
+    if(os.fluxoRelatorio==='agora'){
+      toast('✅ Relatório guardado! Agora termine o trabalho, encerre o relógio e indique a forma de pagamento para enviar ao cliente.','📄',6000);
+      setTimeout(()=>osAbrirDetalhe(osId), 350);
+    } else {
+      toast('✅ Relatório guardado! Aguarda revisão da gestão para envio ao cliente.','📄');
+    }
     return;
   }
 

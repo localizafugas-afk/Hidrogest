@@ -403,6 +403,15 @@ window._fsDoc = (col, id) => doc(db, col, id);
 window._setDoc = setDoc;
 window._deleteDoc = deleteDoc;
 
+// ── Recalcular badge do ícone sempre que a app volta ao 1º plano ──
+// (cobre o caso de a app ter ficado em segundo plano e o técnico
+// voltar a abri-la — o badge tem de reflectir o estado actual logo aí)
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState==='visible' && typeof osCheckNotifs==='function'){
+    osCheckNotifs();
+  }
+});
+
 // ─── Boot ─────────────────────────────────────────────────────
 async function boot() {
   try {
@@ -4205,6 +4214,13 @@ function doLogin(uid){
   document.getElementById('main-app').style.display='flex';
   sessionGuardar(uid);
   renderSidebar(); renderUserPill(); setDate();
+  // ── Actualizar badge do ícone/título logo ao abrir/entrar na app ──
+  // (antes disto, o badge só era recalculado quando uma OS mudava
+  // ENQUANTO a app estava aberta — nunca no arranque/login, pelo que
+  // o ícone ficava sem indicação ao abrir a app de novo)
+  if(typeof osCheckNotifs==='function') osCheckNotifs();
+  setTimeout(()=>{ if(typeof osCheckNotifs==='function') osCheckNotifs(); }, 1500);
+  setTimeout(()=>{ if(typeof osCheckNotifs==='function') osCheckNotifs(); }, 4000);
   // Mostrar botão Nova Proposta na topbar para roles com acesso
   (function(){
     const _role = window.currentUser?.role||'';

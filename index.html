@@ -4437,7 +4437,7 @@ function renderSidebar(){
   // Técnico — só vê as suas OS
   if(r==='tecnico'){
     nav+=`<div class="nav-group">Trabalho</div>`;
-    const osPendTec=(window.DB.ordens||[]).filter(o=>o.estado==='agendada' && (o.tecnicos||[]).includes(window.currentUser.id)).length;
+    const osPendTec=(typeof osContarNaoVistas==='function')?osContarNaoVistas(window.currentUser.id):(window.DB.ordens||[]).filter(o=>o.estado==='agendada' && (o.tecnicos||[]).includes(window.currentUser.id)).length;
     nav+=`<div class="ni" data-page="minhas-os" onclick="navigate('minhas-os',this)"><span class="ico">🔧</span> Minhas OS${osPendTec>0?`<span class="nb">${osPendTec}</span>`:''}</div>`;
     const relPendTec=rpPendentesCount();
     nav+=`<div class="ni" data-page="relat-pesquisa" onclick="navigate('relat-pesquisa',this)"><span class="ico">📄</span> Relatórios OS${relPendTec>0?`<span class="nb">${relPendTec}</span>`:''}</div>`;
@@ -10810,24 +10810,30 @@ function osEnviarEmailCliente(os, cli, srv, tipo, forcar=false){
   }
 }
 
-function osCheckNotifs(){
-  if(!window.currentUser) return;
-  const uid = window.currentUser.id;
+// ── Contagem de OS com alterações não vistas (partilhada) ────────
+// Lógica: conta se a OS foi modificada DEPOIS da última vez que o
+// técnico a abriu (comparando editadoEm/notificadoEm/criadoEm com
+// o registo em localStorage). É esta a MESMA contagem usada tanto
+// no ícone do ecrã inicial (Badging API) como no botão "Minhas OS"
+// dentro da app, para que os dois nunca fiquem dessincronizados.
+function osContarNaoVistas(uid){
+  uid = uid || window.currentUser?.id;
+  if(!uid) return 0;
   const minhas=(window.DB.ordens||[]).filter(o=>
     (o.tecnicos||[]).includes(uid) && o.estado!=='os_fechada'
   );
-
-  // ── Contagem de OS com alterações não vistas ───────────────
-  // Lógica: badge acende se a OS foi modificada DEPOIS da última
-  // vez que o técnico a abriu (comparando editadoEm com localStorage)
-  const naoVistas = minhas.filter(o=>{
+  return minhas.filter(o=>{
     const chave = `os_seen_${uid}_${o.id}`;
     const ultimoVisto = localStorage.getItem(chave); // ISO string ou null
     const ultimaAlteracao = o.editadoEm || o.notificadoEm || o.criadoEm || '';
     if(!ultimoVisto) return true; // nunca abriu
     return ultimaAlteracao > ultimoVisto; // foi alterada depois de ver
-  });
-  const count = naoVistas.length;
+  }).length;
+}
+
+function osCheckNotifs(){
+  if(!window.currentUser) return;
+  const count = osContarNaoVistas(window.currentUser.id);
 
   // ── Badge no ícone do ecrã inicial (Badging API) ───────────
   if('setAppBadge' in navigator){
@@ -10835,22 +10841,15 @@ function osCheckNotifs(){
     else navigator.clearAppBadge().catch(()=>{});
   }
 
-  // ── Badge no botão "Minhas OS" dentro da app ───────────────
-  const nb=document.querySelector('[data-page="minhas-os"] .nb');
-  const totalAgendadas = minhas.filter(o=>o.estado==='agendada').length;
-  if(totalAgendadas>0){
-    if(!nb){
-      const ni=document.querySelector('[data-page="minhas-os"]');
-      if(ni){ const s=document.createElement('span');s.className='nb';s.textContent=count||totalAgendadas;ni.appendChild(s); }
-    } else { nb.textContent=count||totalAgendadas; }
-  } else if(nb) nb.remove();
-
   // ── Título da aba do browser ───────────────────────────────
   if(count > 0 && window.currentUser.role==='tecnico'){
     document.title = `(${count}) HidroGest`;
   } else {
     document.title = 'HidroGest — Gestão de Serviços';
   }
+
+  // Garantir que o menu lateral reflete de imediato a mesma contagem
+  if(typeof renderSidebar==='function') renderSidebar();
 }
 
 // ── AGENDA (Vista semanal) ─────────────────────────────────────

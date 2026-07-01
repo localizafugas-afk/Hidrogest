@@ -21833,52 +21833,96 @@ function rpAdicionarFotosAdmin(evt, osId){
   if(!files.length) return;
   let loaded = 0;
   let falhas = 0;
+  let primeiroMotivo = '';
   const total = files.length;
   const concluir = ()=>{
     loaded++;
     if(loaded + falhas >= total){
-      if(falhas>0) toast(`${falhas} foto(s) falharam ao processar. Tente novamente ou use outra foto.`,'⚠️');
+      if(falhas>0) toast(`${falhas} foto(s) falharam ao processar${primeiroMotivo?' ('+primeiroMotivo+')':''}. Tente novamente ou use outra foto.`,'⚠️',7000);
       if(loaded>0) rpAbrirFormulario(osId, true); // re-render com novas fotos
     }
   };
   const marcarFalha = (motivo)=>{
     console.error('Falha ao processar foto:', motivo);
+    if(!primeiroMotivo) primeiroMotivo = String(motivo).slice(0,60);
     falhas++;
     if(loaded + falhas >= total){
-      toast(`${falhas} foto(s) falharam ao processar. Tente novamente ou use outra foto.`,'⚠️');
+      toast(`${falhas} foto(s) falharam ao processar${primeiroMotivo?' ('+primeiroMotivo+')':''}. Tente novamente ou use outra foto.`,'⚠️',7000);
       if(loaded>0) rpAbrirFormulario(osId, true);
     }
   };
+
+  // Desenha um bitmap/imagem já decodificado(a) num canvas redimensionado e
+  // devolve o dataUrl comprimido — usado pelos dois caminhos abaixo.
+  const comprimirParaDataUrl = (source, srcW, srcH)=>{
+    const MAX=1600; let w=srcW,h=srcH;
+    if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+    const canvas=document.createElement('canvas');
+    canvas.width=w;canvas.height=h;
+    canvas.getContext('2d').drawImage(source,0,0,w,h);
+    return canvas.toDataURL('image/jpeg',.82);
+  };
+
   files.forEach(file=>{
     if(!file.type || !file.type.startsWith('image/')){
       marcarFalha('tipo de ficheiro não suportado: '+file.type);
       return;
     }
-    const watchdog = setTimeout(()=>{ marcarFalha('timeout ao processar '+file.name); }, 15000);
-    const reader = new FileReader();
-    reader.onerror = ()=>{ clearTimeout(watchdog); marcarFalha('erro FileReader em '+file.name); };
-    reader.onload = e=>{
-      const img = new Image();
-      img.onerror = ()=>{ clearTimeout(watchdog); marcarFalha('imagem inválida/corrompida: '+file.name); };
-      img.onload = ()=>{
+    const watchdog = setTimeout(()=>{ marcarFalha('demorou demasiado tempo — foto muito grande'); }, 25000);
+
+    // ── Caminho principal: createImageBitmap ────────────────────────
+    // Fotos tiradas directamente pela câmara do telemóvel costumam vir
+    // já numa resolução mais pequena, mas fotos escolhidas da GALERIA
+    // são muitas vezes o ficheiro original de alta resolução (ex: 50MP
+    // num Samsung), o que pode esgotar a memória do <img>+<canvas>
+    // clássico em telemóveis. createImageBitmap lida com isso de forma
+    // muito mais eficiente, por isso tentamos sempre este caminho primeiro.
+    if('createImageBitmap' in window){
+      createImageBitmap(file).then(bitmap=>{
         clearTimeout(watchdog);
         try{
-          const MAX=1600; let w=img.width,h=img.height;
-          if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
-          const canvas=document.createElement('canvas');
-          canvas.width=w;canvas.height=h;
-          canvas.getContext('2d').drawImage(img,0,0,w,h);
-          window._rpFotosTemp.push({dataUrl:canvas.toDataURL('image/jpeg',.82),legenda:''});
+          const dataUrl = comprimirParaDataUrl(bitmap, bitmap.width, bitmap.height);
+          bitmap.close?.();
+          window._rpFotosTemp.push({dataUrl, legenda:''});
           concluir();
         }catch(err){
-          marcarFalha('erro ao comprimir '+file.name+': '+err.message);
+          marcarFalha('erro ao comprimir (bitmap) '+file.name+': '+err.message);
         }
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      }).catch(err=>{
+        clearTimeout(watchdog);
+        // Fallback: alguns formatos/telemóveis podem falhar no createImageBitmap
+        // — tenta o método clássico via FileReader + Image antes de desistir.
+        rpProcessarFotoClassico(file, comprimirParaDataUrl, concluir, marcarFalha);
+      });
+      return;
+    }
+
+    // ── Caminho de reserva (browsers sem createImageBitmap) ─────────
+    rpProcessarFotoClassico(file, comprimirParaDataUrl, concluir, marcarFalha);
   });
   evt.target.value = '';
+}
+
+// Método clássico (FileReader + Image + canvas) — usado como fallback
+// quando createImageBitmap não existe ou falha para um ficheiro específico.
+function rpProcessarFotoClassico(file, comprimirParaDataUrl, concluir, marcarFalha){
+  const reader = new FileReader();
+  reader.onerror = ()=>{ marcarFalha('erro FileReader em '+file.name); };
+  reader.onload = e=>{
+    const img = new Image();
+    img.onerror = ()=>{ marcarFalha('imagem inválida/corrompida: '+file.name); };
+    img.onload = ()=>{
+      try{
+        const dataUrl = comprimirParaDataUrl(img, img.width, img.height);
+        window._rpFotosTemp.push({dataUrl, legenda:''});
+        concluir();
+      }catch(err){
+        marcarFalha('erro ao comprimir '+file.name+': '+err.message);
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Adicionar anexos (admin) ──────────────────────────────────

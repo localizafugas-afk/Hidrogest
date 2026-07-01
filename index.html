@@ -27,6 +27,14 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "159682339032",
   appId:             "1:159682339032:web:3a4b9011337611b208b7ad"
 };
+// ── Notificações push (badge com a app fechada) ─────────────────
+// PASSO 2A: colar aqui a "Chave pública" gerada em
+//   Firebase Console → ⚙️ Definições do projecto → Cloud Messaging
+//   → Certificados Web Push → Gerar par de chaves
+const PUSH_VAPID_KEY = "COLAR_AQUI_A_CHAVE_PUBLICA_VAPID";
+// PASSO 2B: URL do Cloudflare Worker (hidrogest-push-worker.js)
+// depois de o publicares — mesmo esquema do moloni-proxy.
+const PUSH_WORKER_URL = "https://hidrogest-push.localizafugas.workers.dev";
 </script>
 
 <!-- Firebase SDK -->
@@ -37,11 +45,65 @@ import { getFirestore, collection, doc, getDocs, getDoc, runTransaction,
          query, orderBy, limit, where }           from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as stRef, uploadString, getDownloadURL,
          deleteObject }                            from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+import { getMessaging, getToken as fcmGetToken, onMessage as fcmOnMessage }
+                                                     from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
 // ─── Inicialização ────────────────────────────────────────────
 const app = initializeApp(FIREBASE_CONFIG);
 const db  = getFirestore(app);
 const storage = getStorage(app);
+let messaging = null;
+try{ messaging = getMessaging(app); }catch(e){ console.warn('FCM não suportado neste browser:', e.message); }
+
+// ── Registo de push (badge com a app fechada) ───────────────────
+// Chamado após o login. Pede permissão, regista o Service Worker,
+// obtém o token FCM e guarda-o no utilizador para o admin poder
+// enviar-lhe notificações mais tarde.
+window.pushInicializar = async function pushInicializar(){
+  try{
+    if(!messaging || !('serviceWorker' in navigator)) return;
+    if(!PUSH_VAPID_KEY || PUSH_VAPID_KEY.startsWith('COLAR_AQUI')) return; // ainda não configurado
+
+    if(Notification.permission === 'default'){
+      await Notification.requestPermission();
+    }
+    if(Notification.permission !== 'granted') return;
+
+    const reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const token = await fcmGetToken(messaging, {vapidKey: PUSH_VAPID_KEY, serviceWorkerRegistration: reg});
+    if(!token || !window.currentUser) return;
+
+    if(window.currentUser.fcmToken !== token){
+      window.currentUser.fcmToken = token;
+      await setDoc(doc(db,'users',window.currentUser.id), {fcmToken: token, fcmTokenAt:new Date().toISOString()}, {merge:true});
+      console.log('📲 Token push registado para', window.currentUser.id);
+    }
+
+    // Mensagens recebidas com a app ABERTA em primeiro plano
+    fcmOnMessage(messaging, (payload)=>{
+      if(typeof osCheckNotifs==='function') osCheckNotifs();
+      const n = payload.notification;
+      if(n && typeof toast==='function') toast(`🔔 ${n.title||''} — ${n.body||''}`,'📲');
+    });
+  }catch(e){
+    console.warn('⚠️ pushInicializar falhou:', e.message);
+  }
+};
+
+// ── Enviar push a uma lista de técnicos (via Cloudflare Worker) ──
+window.pushEnviarParaTecnicos = async function pushEnviarParaTecnicos(tecnicoIds, title, body, osId){
+  if(!PUSH_WORKER_URL || !tecnicoIds?.length) return;
+  for(const uid of tecnicoIds){
+    const u = (window.DB.users||[]).find(x=>x.id===uid);
+    if(!u?.fcmToken) continue;
+    const count = typeof osContarNaoVistas==='function' ? osContarNaoVistas(uid) : 0;
+    fetch(PUSH_WORKER_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({token:u.fcmToken, title, body, count, osId}),
+    }).catch(e=>console.warn('⚠️ Push falhou para', uid, e.message));
+  }
+};
 
 // ─── Coleções ─────────────────────────────────────────────────
 const COLS = {
@@ -4221,6 +4283,7 @@ function doLogin(uid){
   if(typeof osCheckNotifs==='function') osCheckNotifs();
   setTimeout(()=>{ if(typeof osCheckNotifs==='function') osCheckNotifs(); }, 1500);
   setTimeout(()=>{ if(typeof osCheckNotifs==='function') osCheckNotifs(); }, 4000);
+  if(typeof window.pushInicializar==='function') window.pushInicializar();
   // Mostrar botão Nova Proposta na topbar para roles com acesso
   (function(){
     const _role = window.currentUser?.role||'';
@@ -10761,6 +10824,16 @@ window.osNotificarTecnicos = async function osNotificarTecnicos(os, tipo){
     new Notification(`🔧 ${tipoLabel}`, {
       body:`OS ${os.id} — ${cli.nome||'—'} — ${dataFmt} ${horaIni}${moradaCli!=='—'?' — '+moradaCli:''}`,
     });
+  }
+
+  // ── Push (badge + notificação, mesmo com a app fechada) ───────
+  if(typeof window.pushEnviarParaTecnicos==='function'){
+    window.pushEnviarParaTecnicos(
+      tecnicosFinais,
+      `🔧 ${tipoLabel}`,
+      `OS ${os.id} — ${cli.nome||'—'} — ${dataFmt} ${horaIni}`,
+      os.id
+    );
   }
 
   // ── Email a cada técnico atribuído ───────────────────────────
@@ -21967,7 +22040,15 @@ async function rpAutoSaveInterno(){
       setTimeout(()=>{ if(badge) badge.style.display='none'; }, 3000);
     }
   }catch(e){
-    if(badge){ badge.textContent='⚠️ Erro ao guardar'; }
+    console.error('rpAutoSaveInterno — falha ao guardar:', e);
+    if(badge){
+      const _permNegada = /permission|insufficient|denied/i.test(String(e?.message||e));
+      const _grande = /maximum|size|larger|1048576|exceed|too large|payload|entity|invalid-argument/i.test(String(e?.message||e));
+      badge.textContent = _permNegada ? '⚠️ Sem permissão para guardar — contacte o escritório'
+                         : _grande     ? '⚠️ Relatório muito grande — reduza fotos/anexos'
+                         : `⚠️ Erro ao guardar: ${e?.message||'sem ligação'}`;
+      badge.title = String(e?.message||e); // toque longo/hover mostra o erro completo
+    }
   }
 }
 

@@ -21596,17 +21596,23 @@ function rpAbrirFormulario(osId, preserveTemp){
     <div><div style="font-size:14px;font-weight:800;color:#1e3a5f;">${t}</div>${sub?`<div style="font-size:11px;color:#64748b;margin-top:1px;">${sub}</div>`:''}</div>
   </div>`;
 
-  // Fotos existentes (com reordenação)
+  // Fotos existentes (com reordenação + campo de "local da foto")
   const _nFotos = window._rpFotosTemp.length;
   const fotosHTML = window._rpFotosTemp.map((f,i)=>`
-    <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f1f5f9;">
-      <img src="${f.dataUrl||f.url||''}" style="width:100%;height:100%;object-fit:cover;">
-      <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.5);color:#fff;font-size:10px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i+1}. ${f.legenda||'Foto '+(i+1)}</div>
-      <button onclick="window._rpFotosTemp.splice(${i},1);rpAbrirFormulario('${osId}',true)" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,.8);border:none;border-radius:50%;width:22px;height:22px;color:#fff;cursor:pointer;font-size:12px;">×</button>
-      <div style="position:absolute;top:4px;left:4px;display:flex;gap:4px;">
-        <button onclick="rpMoverFoto(${i},-1,'${osId}')" ${i===0?'disabled':''} title="Mover para trás" style="background:rgba(30,58,95,.85);border:none;border-radius:6px;width:24px;height:24px;color:#fff;cursor:${i===0?'not-allowed':'pointer'};font-size:13px;opacity:${i===0?'.35':'1'};">◀</button>
-        <button onclick="rpMoverFoto(${i},1,'${osId}')" ${i===_nFotos-1?'disabled':''} title="Mover para a frente" style="background:rgba(30,58,95,.85);border:none;border-radius:6px;width:24px;height:24px;color:#fff;cursor:${i===_nFotos-1?'not-allowed':'pointer'};font-size:13px;opacity:${i===_nFotos-1?'.35':'1'};">▶</button>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <div style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f1f5f9;">
+        <img src="${f.dataUrl||f.url||''}" style="width:100%;height:100%;object-fit:cover;">
+        <button onclick="window._rpFotosTemp.splice(${i},1);rpAbrirFormulario('${osId}',true)" style="position:absolute;top:4px;right:4px;background:rgba(239,68,68,.8);border:none;border-radius:50%;width:22px;height:22px;color:#fff;cursor:pointer;font-size:12px;">×</button>
+        <div style="position:absolute;top:4px;left:4px;display:flex;gap:4px;">
+          <button onclick="rpMoverFoto(${i},-1,'${osId}')" ${i===0?'disabled':''} title="Mover para trás" style="background:rgba(30,58,95,.85);border:none;border-radius:6px;width:24px;height:24px;color:#fff;cursor:${i===0?'not-allowed':'pointer'};font-size:13px;opacity:${i===0?'.35':'1'};">◀</button>
+          <button onclick="rpMoverFoto(${i},1,'${osId}')" ${i===_nFotos-1?'disabled':''} title="Mover para a frente" style="background:rgba(30,58,95,.85);border:none;border-radius:6px;width:24px;height:24px;color:#fff;cursor:${i===_nFotos-1?'not-allowed':'pointer'};font-size:13px;opacity:${i===_nFotos-1?'.35':'1'};">▶</button>
+        </div>
+        <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:9px;padding:2px 5px;">Foto ${i+1}</div>
       </div>
+      <input type="text" value="${(f.legenda||'').replace(/"/g,'&quot;')}"
+        placeholder="📍 Local da foto (ex: contador, WC, fuga na parede...)"
+        oninput="rpAtualizarLegendaFoto(${i}, this.value)"
+        style="font-size:11px;padding:6px 7px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#1e293b;width:100%;box-sizing:border-box;">
     </div>`).join('');
 
   document.getElementById('rp-modal-body').innerHTML = `
@@ -21748,9 +21754,9 @@ function rpAbrirFormulario(osId, preserveTemp){
     </div>
 
     ${secTit(6,'Registo Fotográfico','Mínimo 4 fotos')}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:10px;">
       ${fotosHTML}
-      <label style="aspect-ratio:1;border-radius:8px;border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#f8fafc;color:#64748b;font-size:12px;">
+      <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#f8fafc;color:#64748b;font-size:12px;">
         <span style="font-size:24px;">📷</span>Adicionar
         <input type="file" accept="image/*" multiple style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
       </label>
@@ -21826,6 +21832,14 @@ function rpMoverFoto(i, dir, osId){
   if(j < 0 || j >= arr.length) return;
   [arr[i], arr[j]] = [arr[j], arr[i]];   // troca de posição
   rpAbrirFormulario(osId || window._rpEditOsId || window._rpOsId, true);
+}
+
+// Actualiza o "local da foto" (legenda) enquanto o utilizador escreve.
+// Não re-renderiza o formulário para não perder o foco do campo de texto —
+// fica guardado em memória e vai para o Firestore no próximo auto-save/guardar.
+function rpAtualizarLegendaFoto(i, valor){
+  const arr = window._rpFotosTemp; if(!arr || !arr[i]) return;
+  arr[i].legenda = valor;
 }
 
 function rpAdicionarFotosAdmin(evt, osId){

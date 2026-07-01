@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HidroGest">
+<meta name="theme-color" content="#1e3a5f">
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/localizafugas-afk/Hidrogest/main/icon-192.png">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22HidroGest%22%2C%22short_name%22%3A%22HidroGest%22%2C%22start_url%22%3A%22.%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%231e3a5f%22%2C%22theme_color%22%3A%22%231e3a5f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fraw.githubusercontent.com%2Flocalizafugas-afk%2FHidrogest%2Fmain%2Ficon-192.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22https%3A%2F%2Fraw.githubusercontent.com%2Flocalizafugas-afk%2FHidrogest%2Fmain%2Ficon-512.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <title>HidroGest — Gestão de Serviços</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -10257,7 +10264,21 @@ async function osSalvar(){
   const tecs=[...document.querySelectorAll('#os-tec-checkboxes input:checked')].map(x=>x.value);
   if(!tecs.length){ toast('Seleccione pelo menos um técnico!','⚠️'); return; }
 
-  // ── Validação: horaFim > horaIni ──
+  // ── Validação: campos obrigatórios de comunicação ──────────
+  const _cliParaVal = (window.DB.clientes||[]).find(c=>c.id===cliId) || window._osCliObjPendente;
+  const _telContacto = document.getElementById('os-contact-tel')?.value?.trim();
+  const _telCliente  = _cliParaVal?.tel?.trim();
+  const _obsVal      = document.getElementById('os-obs')?.value?.trim();
+  const _cpVal       = (_cliParaVal?.srvCp||_cliParaVal?.cp||'').trim();
+  const _camposFalta = [];
+  if(!_telContacto && !_telCliente) _camposFalta.push('📞 Telefone de contacto (campo "Telefone do contacto" ou número do cliente)');
+  if(!_obsVal) _camposFalta.push('📝 Descrição do trabalho (campo "Observações / Instruções para o técnico")');
+  if(!_cpVal) _camposFalta.push('📮 Código postal da morada de serviço');
+  if(_camposFalta.length){
+    const _msg = '⚠️ Informação obrigatória em falta:\n\n' + _camposFalta.join('\n') + '\n\nO técnico precisa destes dados para chegar e trabalhar corretamente.';
+    const _continuar = confirm(_msg + '\n\nPodes guardar mesmo assim, mas o técnico ficará sem informação essencial.\nDeseja continuar?');
+    if(!_continuar) return;
+  }
   const _hIni = document.getElementById('os-hora-ini')?.value;
   const _hFim = document.getElementById('os-hora-fim')?.value;
   if(_hIni && _hFim){
@@ -10343,6 +10364,12 @@ async function osSalvar(){
 
   // Em edição: ler a OS existente para preservar todos os campos históricos
   const existing = isEdit ? ((window.DB.ordens||[]).find(x=>x.id===id)||{}) : {};
+
+  // Guardar estado anterior para detectar alterações que afectam o técnico
+  const _tecAntes   = isEdit ? [...(existing.tecnicos||[])] : [];
+  const _dataAntes  = isEdit ? (existing.data||'') : '';
+  const _horaAntes  = isEdit ? (existing.horaIni||'') : '';
+  const _estadoAntes = isEdit ? (existing.estado||'') : '';
 
   // ── Verificar sobreposição de agendamentos (ignorar se já confirmado) ──
   if(!window._osSalvarForcarSobreposicao){
@@ -10545,6 +10572,35 @@ async function osSalvar(){
   const tipoEmailSalvar = !isEdit ? 'nova' : os.estado==='cancelada' ? 'cancelamento' : 'alteracao';
   await window.osNotificarTecnicos(os, tipoEmailSalvar==='cancelamento'?'cancelamento': (!isEdit?'nova':'alteracao'));
   await window.osEnviarEmailCliente(os, cli, srv, tipoEmailSalvar);
+
+  // ── Notificar técnicos removidos da OS ───────────────────
+  if(isEdit && _tecAntes.length){
+    const _tecDepois = os.tecnicos||[];
+    const _removidos = _tecAntes.filter(t=>!_tecDepois.includes(t));
+    if(_removidos.length){
+      const _usersRemovidos = (window.DB.users||[]).filter(u=>_removidos.includes(u.id));
+      _usersRemovidos.forEach(u=>{
+        toast(`⚠️ ${u.name} foi removido desta OS — será notificado por email`,'📣');
+      });
+      // Enviar email de cancelamento para técnicos removidos
+      for(const _u of _usersRemovidos){
+        if(_u.email){
+          const _osRemov = {...os, tecnicos:[_u.id]};
+          try{ await window.osNotificarTecnicos(_osRemov,'cancelamento'); }catch(e){}
+        }
+      }
+    }
+    // ── Notificar se data ou hora mudou ──────────────────
+    const _dataNova = os.data||'';
+    const _horaNova = os.horaIni||'';
+    if((_dataAntes && _dataNova !== _dataAntes) || (_horaAntes && _horaNova !== _horaAntes)){
+      toast(`📅 Reagendamento detectado (${_dataAntes} ${_horaAntes} → ${_dataNova} ${_horaNova}) — técnicos notificados`,'📣');
+    }
+    // ── Notificar se OS foi cancelada ────────────────────
+    if(_estadoAntes !== 'cancelada' && os.estado === 'cancelada'){
+      toast('❌ OS cancelada — técnicos notificados por email','📣');
+    }
+  }
   toast(isEdit?'OS actualizada e cliente notificado!':'OS criada! Cliente e técnicos notificados!','✅');
   auditLog(isEdit?'os_editada':'os_criada',`OS ${id} — Cliente: ${cli?.nome||''} — Serviço: ${srv?.nome||''} — Total: €${os.total||0}`);
   }catch(e){
@@ -10756,16 +10812,45 @@ function osEnviarEmailCliente(os, cli, srv, tipo, forcar=false){
 
 function osCheckNotifs(){
   if(!window.currentUser) return;
+  const uid = window.currentUser.id;
   const minhas=(window.DB.ordens||[]).filter(o=>
-    (o.tecnicos||[]).includes(window.currentUser.id)&&o.estado==='agendada'
+    (o.tecnicos||[]).includes(uid) && o.estado!=='os_fechada'
   );
+
+  // ── Contagem de OS com alterações não vistas ───────────────
+  // Lógica: badge acende se a OS foi modificada DEPOIS da última
+  // vez que o técnico a abriu (comparando editadoEm com localStorage)
+  const naoVistas = minhas.filter(o=>{
+    const chave = `os_seen_${uid}_${o.id}`;
+    const ultimoVisto = localStorage.getItem(chave); // ISO string ou null
+    const ultimaAlteracao = o.editadoEm || o.notificadoEm || o.criadoEm || '';
+    if(!ultimoVisto) return true; // nunca abriu
+    return ultimaAlteracao > ultimoVisto; // foi alterada depois de ver
+  });
+  const count = naoVistas.length;
+
+  // ── Badge no ícone do ecrã inicial (Badging API) ───────────
+  if('setAppBadge' in navigator){
+    if(count > 0) navigator.setAppBadge(count).catch(()=>{});
+    else navigator.clearAppBadge().catch(()=>{});
+  }
+
+  // ── Badge no botão "Minhas OS" dentro da app ───────────────
   const nb=document.querySelector('[data-page="minhas-os"] .nb');
-  if(minhas.length>0){
+  const totalAgendadas = minhas.filter(o=>o.estado==='agendada').length;
+  if(totalAgendadas>0){
     if(!nb){
       const ni=document.querySelector('[data-page="minhas-os"]');
-      if(ni){ const s=document.createElement('span');s.className='nb';s.textContent=minhas.length;ni.appendChild(s); }
-    } else { nb.textContent=minhas.length; }
+      if(ni){ const s=document.createElement('span');s.className='nb';s.textContent=count||totalAgendadas;ni.appendChild(s); }
+    } else { nb.textContent=count||totalAgendadas; }
   } else if(nb) nb.remove();
+
+  // ── Título da aba do browser ───────────────────────────────
+  if(count > 0 && window.currentUser.role==='tecnico'){
+    document.title = `(${count}) HidroGest`;
+  } else {
+    document.title = 'HidroGest — Gestão de Serviços';
+  }
 }
 
 // ── AGENDA (Vista semanal) ─────────────────────────────────────
@@ -12072,6 +12157,12 @@ function osAbrirDetalhe(id){
       window.fsSetMerge('ordens', id, {vistoEm: _agora, vistosPor: _vp})
         .then(()=>{ console.log('[OS] vistoEm gravado:', id); })
         .catch(e=>{ console.error('[OS] Erro ao gravar vistoEm:', e.message, '— OS:', id); });
+
+      // Guardar localmente que o técnico viu esta versão da OS
+      const _chaveVisto = `os_seen_${window.currentUser.id}_${id}`;
+      localStorage.setItem(_chaveVisto, o.editadoEm || o.notificadoEm || _agora);
+      // Actualizar badge imediatamente
+      if(typeof osCheckNotifs==='function') osCheckNotifs();
     }
   }
 
@@ -12093,6 +12184,61 @@ function osAbrirDetalhe(id){
       </div>`:''}
     </div>`;
   }
+  // ── Histórico de OS anteriores do mesmo cliente ───────────
+  const _osAnteriores = (window.DB.ordens||[])
+    .filter(x => x.clienteId===o.clienteId && x.id!==id && (x.estado==='concluida'||x.estado==='os_fechada'))
+    .sort((a,b)=>(b.data||'').localeCompare(a.data||''))
+    .slice(0,3);
+  const _histBloco = _osAnteriores.length ? `
+    <div style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="font-weight:700;color:#0369a1;font-size:13px;margin-bottom:8px;">🕐 Histórico neste cliente</div>
+      ${_osAnteriores.map(h=>{
+        const _hs = (window.DB.servicos||[]).find(s=>s.id===h.servicoId);
+        const _rel = (window.DB.relatorios_pesquisa||[]).find(r=>r.id===h.id);
+        return `<div style="border-top:1px solid #bae6fd;padding-top:8px;margin-top:8px;font-size:12px;">
+          <div style="font-weight:600;color:#0c4a6e;">${h.data||'—'} · ${_hs?.nome||h.servicoId||'—'}</div>
+          ${h.obs?`<div style="color:#075985;margin-top:2px;">📝 ${h.obs}</div>`:''}
+          ${_rel?.campos?.conclusao?`<div style="color:#065f46;margin-top:2px;">✅ ${_rel.campos.conclusao}</div>`:''}
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // ── Resumo de missão ──────────────────────────────────────
+  const _telMissao = o.contactTel || cli?.tel || '—';
+  const _nomeMissao = o.contactNome || cli?.nome || '—';
+  const _cpMissao = cli?.srvCp || cli?.cp || '';
+  const _ruaMissao = cli?.srvRua || cli?.rua || '';
+  const _fracaoMissao = cli?.condFracao || cli?.fracao || '';
+  const _numPortaMissao = cli?.numPorta || '';
+  const _locMissao = [_ruaMissao, _numPortaMissao?`nº ${_numPortaMissao}`:'', _fracaoMissao?`(${_fracaoMissao})`:'', _cpMissao, cli?.srvLocalidade||cli?.localidade||''].filter(Boolean).join(' ');
+  const _descMissao = o.obs || '—';
+  const _notaIntMissao = o.notaInterna || '';
+  const _missaoBloco = `
+    <div style="background:linear-gradient(135deg,#1e40af,#1d4ed8);border-radius:10px;padding:16px;margin-bottom:12px;color:#fff;">
+      <div style="font-weight:800;font-size:14px;margin-bottom:12px;letter-spacing:.5px;">📋 RESUMO DA MISSÃO</div>
+      <div style="display:grid;gap:8px;">
+        <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Trabalho a realizar</div>
+          <div style="font-weight:600;font-size:13px;">${_descMissao}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Contacto no local</div>
+          <div style="font-weight:600;font-size:13px;">${_nomeMissao}</div>
+          <a href="tel:${_telMissao}" style="color:#93c5fd;font-size:13px;font-weight:700;">📞 ${_telMissao}</a>
+        </div>
+        <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Localização</div>
+          <div style="font-weight:600;font-size:13px;">${_locMissao||'—'}</div>
+          ${!_cpMissao?'<div style="color:#fde68a;font-size:11px;margin-top:3px;">⚠️ Sem código postal — confirma o endereço antes de sair</div>':''}
+        </div>
+        ${_notaIntMissao?`
+        <div style="background:rgba(250,204,21,.15);border:1px solid rgba(250,204,21,.4);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:10px;opacity:.8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">🔒 Nota da equipa comercial</div>
+          <div style="font-size:13px;line-height:1.6;white-space:pre-wrap;">${_notaIntMissao}</div>
+        </div>`:''}
+      </div>
+    </div>`;
+
   body.innerHTML=`
     <!-- CABEÇALHO DA OS -->
     <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;margin:-16px -16px 16px;padding:16px 20px;border-radius:var(--r) var(--r) 0 0;">
@@ -12121,6 +12267,9 @@ function osAbrirDetalhe(id){
     </div>`:''}
 
     ${osFracaoCardHtml(o)}
+
+    ${_missaoBloco}
+    ${_histBloco}
 
     ${(isMeuTec||isSup)?`
     <!-- PASSOS DA OS -->

@@ -8352,6 +8352,55 @@ function _minutosEntreHoras(ini, fim){
 }
 window._minutosEntreHoras=_minutosEntreHoras;
 
+// ── Soma os minutos de todas as pausas de uma OS (ex: almoço) ──
+// Pausas em curso (sem "fim") contam até agora, para o preview em tempo real.
+function osCalcMinPausados(os){
+  const pausas = (os&&os.pausas)||[];
+  let min=0;
+  pausas.forEach(p=>{
+    if(!p||!p.inicio) return;
+    const iniTs = new Date(p.inicio).getTime();
+    const fimTs = p.fim ? new Date(p.fim).getTime() : Date.now();
+    if(isNaN(iniTs)||isNaN(fimTs)) return;
+    const d=(fimTs-iniTs)/60000;
+    if(d>0) min+=d;
+  });
+  return Math.round(min);
+}
+window.osCalcMinPausados=osCalcMinPausados;
+
+// ── Técnico (ou admin/gerente/supervisor) pausa o trabalho (ex: almoço) ──
+async function osPausarTrabalho(id){
+  const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
+  if(os.pausaAtiva){ toast('Já está em pausa.','⏸️'); return; }
+  const pausas=[...(os.pausas||[]), {inicio:new Date().toISOString()}];
+  try{
+    await window.fsSetMerge('ordens', id, {pausas, pausaAtiva:true});
+    toast('⏸️ Trabalho em pausa. O tempo não conta enquanto estiver pausado.','⏸️');
+    auditLog('os_pausada', `OS ${id} pausada por ${window.currentUser?.name||''}`);
+    if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(id);
+    if(typeof osRenderLista==='function') osRenderLista();
+    if(typeof osRenderMinhas==='function') osRenderMinhas();
+  }catch(e){ toast('Erro ao pausar: '+e.message,'❌'); }
+}
+
+// ── Retoma o trabalho depois de uma pausa ──
+async function osRetomarTrabalho(id){
+  const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
+  const pausas=[...(os.pausas||[])];
+  const ultima=pausas[pausas.length-1];
+  if(!ultima || ultima.fim){ toast('Não há pausa activa.','⚠️'); return; }
+  ultima.fim=new Date().toISOString();
+  try{
+    await window.fsSetMerge('ordens', id, {pausas, pausaAtiva:false});
+    toast('▶️ Trabalho retomado — a contar novamente.','▶️');
+    auditLog('os_retomada', `OS ${id} retomada por ${window.currentUser?.name||''}`);
+    if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(id);
+    if(typeof osRenderLista==='function') osRenderLista();
+    if(typeof osRenderMinhas==='function') osRenderMinhas();
+  }catch(e){ toast('Erro ao retomar: '+e.message,'❌'); }
+}
+
 function calcHorasAddQuartos(horas){
   // Regra oficial: 1.ª hora fixa. Tempo além da 1.ª hora cobrado em
   // blocos de 30 min, arredondados ao bloco MAIS PRÓXIMO,
@@ -12400,8 +12449,14 @@ function osAbrirDetalhe(id){
             ${window.currentUser?.role==='tecnico'?'':`<button onclick="document.getElementById('os-hora-ini-real').value=new Date().toTimeString().slice(0,5)" class="btn btn-ghost btn-sm">🕐 Agora</button>`}
           </div>
           <button class="btn btn-primary" style="width:100%;background:#16a34a;" onclick="osIniciarTrabalho('${id}')">▶ Iniciar agora</button>
-        </div>`:o.horaIniReal&&o.estado!=='concluida'?`
-        <div style="padding:8px 14px;font-size:12px;color:#15803d;">Temporizador activo — trabalho em curso</div>`:''}
+        </div>`:o.horaIniReal&&!o.horaFimReal&&o.estado!=='concluida'?`
+        <div style="padding:8px 14px;">
+          ${o.pausaAtiva?`
+          <div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:8px;">⏸️ Em pausa — o tempo não está a contar</div>
+          <button class="btn btn-primary" style="width:100%;background:#d97706;" onclick="osRetomarTrabalho('${id}')">▶️ Retomar trabalho</button>`:`
+          <div style="font-size:12px;color:#15803d;margin-bottom:8px;">Temporizador activo — trabalho em curso${osCalcMinPausados(o)>0?` <span style="color:#94a3b8;">(pausado ${Math.round(osCalcMinPausados(o))} min até agora)</span>`:''}</div>
+          <button class="btn btn-ghost btn-sm" style="width:100%;color:#b45309;border:1px dashed #fde68a;" onclick="osPausarTrabalho('${id}')">⏸️ Pausar (ex: almoço)</button>`}
+        </div>`:''}
       </div>
 
       <!-- PASSO 2: RELATÓRIO -->
@@ -12631,13 +12686,15 @@ function osCalcPreview(id){
   if(!ini||!fim){ el.innerHTML='<span style="color:var(--text3);">Preencha a hora de fim para ver o valor</span>'; return; }
   const [sh,sm]=ini.split(':').map(Number),[eh,em]=fim.split(':').map(Number);
   let min=(eh*60+em)-(sh*60+sm); if(min<0)min+=1440;
+  const minPausa=osCalcMinPausados(os);
+  if(minPausa>0) min=Math.max(0,min-minPausa);
   if(min<=0){ el.innerHTML='<span style="color:var(--red);">Hora de fim deve ser depois da hora de início</span>'; return; }
   const horas=min/60;
   const h1Val=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, iva=parseInt(os.iva||23)/100;
   const net=calcNetOS(horas,h1Val,haddV);
   const total=net*(1+iva);
   const hh=Math.floor(min/60),mm=min%60;
-  el.innerHTML=`⏱ <strong>${hh}h${mm>0?' '+mm+'min':''}</strong> &nbsp;·&nbsp; Total: <strong style="color:var(--accent);font-size:15px;">€${osFmt(total)}</strong>`;
+  el.innerHTML=`⏱ <strong>${hh}h${mm>0?' '+mm+'min':''}</strong>${minPausa>0?` <span style="color:#94a3b8;font-size:11px;">(já descontados ${minPausa} min de pausa)</span>`:''} &nbsp;·&nbsp; Total: <strong style="color:var(--accent);font-size:15px;">€${osFmt(total)}</strong>`;
 }
 
 // ── Escolha do técnico: fazer relatório "agora" ou "depois" ──
@@ -14082,7 +14139,9 @@ async function tecPararRapido(id){
   const ini=os.horaIniReal||os.horaIni||'';
   let net=os.net||0, ivaV=os.ivaVal||0, tot=os.total||0, hAddCalc=os.haddN||0;
   if(ini&&fim){
-    const min=_minutosEntreHoras(ini,fim);
+    const min0=_minutosEntreHoras(ini,fim);
+    const minPausa=osCalcMinPausados(os);
+    const min = min0!==null ? Math.max(0,min0-minPausa) : min0;
     if(min!==null && min>0){
       const horas=min/60;
       const h1Val=parseFloat(os.h1)||0,haddV=parseFloat(os.haddV)||0,iva=parseInt(os.iva||23);
@@ -14093,7 +14152,8 @@ async function tecPararRapido(id){
       hAddCalc=hAddCalcInt;
     }
   }
-  await window.fsSetMerge('ordens',id,{...os,horaFimReal:fim,haddN:hAddCalc,net,ivaVal:ivaV,total:tot});
+  const pausasFechadas=(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:new Date().toISOString()}:p);
+  await window.fsSetMerge('ordens',id,{...os,horaFimReal:fim,haddN:hAddCalc,net,ivaVal:ivaV,total:tot,pausas:pausasFechadas,pausaAtiva:false});
   toast(`⏹ Parado às ${fim} · Total: €${osFmt(tot)}. Prima "Concluir e assinar" para fechar.`,'✅');
   if(navigator.vibrate) navigator.vibrate([80,40,80]);
   osRenderMinhas();
@@ -24637,18 +24697,20 @@ function osCalcularHoras(osId){
   const el  = document.getElementById('os-horas-calc');
   if(!el) return;
   if(!ini||!fim){ el.innerHTML='<span style="color:var(--text3);">Preencha as horas para calcular</span>'; return; }
-  const min=_minutosEntreHoras(ini,fim);
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId)||{};
+  let min=_minutosEntreHoras(ini,fim);
   if(min===null){ el.innerHTML='<span style="color:var(--text3);">Preencha as horas para calcular</span>'; return; }
+  const minPausaCH=osCalcMinPausados(os);
+  if(minPausaCH>0) min=Math.max(0,min-minPausaCH);
   if(min<=0){ el.innerHTML='<span style="color:var(--red);">⚠️ Hora de fim deve ser posterior à de início</span>'; return; }
   const aviso16 = min>16*60 ? '<div style="color:#b45309;font-size:11px;margin-top:4px;">⚠️ Mais de 16h — confirme se as horas de início/fim não estão trocadas.</div>' : '';
   const h=Math.floor(min/60), m=min%60;
-  const os=(window.DB.ordens||[]).find(x=>x.id===osId)||{};
   const h1Val=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, iva=parseInt(os.iva)||23;
   const horas=min/60;
   const hAdd=calcHorasAddQuartos(horas);
   const net=h1Val+(hAdd>0?hAdd*haddV:0);
   const ivaVal=net*(iva/100), total=net+ivaVal;
-  el.innerHTML=`<strong>⏱ ${h}h${m>0?' '+String(m).padStart(2,'0')+'min':''} trabalhadas</strong> &nbsp;·&nbsp; 1ª hora €${osFmt(h1Val)}${hAdd>0?` + ${Math.round(hAdd*10)/10}h × €${osFmt(haddV)}`:''}  &nbsp;·&nbsp; Total c/IVA: <strong style="color:var(--accent);">€${osFmt(total)}</strong>`+aviso16;
+  el.innerHTML=`<strong>⏱ ${h}h${m>0?' '+String(m).padStart(2,'0')+'min':''} trabalhadas</strong>${minPausaCH>0?` <span style="color:#94a3b8;font-size:11px;">(descontados ${minPausaCH} min de pausa)</span>`:''} &nbsp;·&nbsp; 1ª hora €${osFmt(h1Val)}${hAdd>0?` + ${Math.round(hAdd*10)/10}h × €${osFmt(haddV)}`:''}  &nbsp;·&nbsp; Total c/IVA: <strong style="color:var(--accent);">€${osFmt(total)}</strong>`+aviso16;
 }
 
 async function osGuardarHoras(osId){
@@ -24657,7 +24719,9 @@ async function osGuardarHoras(osId){
   const fim = document.getElementById('os-hora-fim-real')?.value||'';
   if(!ini){ toast('Preencha a hora de início!','⚠️'); return; }
   const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
-  const min = fim ? (_minutosEntreHoras(ini,fim) ?? 60) : 60;
+  let min = fim ? (_minutosEntreHoras(ini,fim) ?? 60) : 60;
+  const minPausaGH=osCalcMinPausados(os);
+  if(minPausaGH>0) min=Math.max(0,min-minPausaGH);
   const horas=min/60;
   const h1Val=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, iva=parseInt(os.iva)||23;
   const net=parseFloat(calcNetOS(horas,h1Val,haddV).toFixed(2));
@@ -25006,6 +25070,8 @@ async function osConcluirComAssinaturas(){
   if(ini&&fim){
     const [sh,sm]=ini.split(':').map(Number),[eh,em]=fim.split(':').map(Number);
     let min=(eh*60+em)-(sh*60+sm); if(min<0)min+=1440;
+    const minPausaConc=osCalcMinPausados(os);
+    if(minPausaConc>0) min=Math.max(0,min-minPausaConc);
     if(min>0){
       const horas=(min/60);
       const h1Val=parseFloat(os.h1)||0,haddV=parseFloat(os.haddV)||0,iva=parseInt(os.iva)||23;
@@ -25028,6 +25094,8 @@ async function osConcluirComAssinaturas(){
     assinaturaTecnico:assTec,
     assinaturaCliente:assCli||'',
     pagamento,
+    pausas:(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:new Date().toISOString()}:p),
+    pausaAtiva:false,
   };
   // Botão "Concluir OS" — feedback e nunca ficar preso
   const _btnConc = document.querySelector('[onclick="osConcluirComAssinaturas()"]');

@@ -1920,10 +1920,11 @@ tr:hover td{background:rgba(37,99,235,.03);}
   <!-- Filtros rápidos (botões) — mais fáceis de tocar no telemóvel -->
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px;">
     <button class="tec-fchip" data-f="hoje"      onclick="tecSetFiltro('hoje',this)"      style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #1e3a5f;background:#1e3a5f;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">📅 Hoje</button>
-    <button class="tec-fchip" data-f="agendada"  onclick="tecSetFiltro('agendada',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">🗓️ Agendadas</button>
+    <button class="tec-fchip" data-f="agendada"  onclick="tecSetFiltro('agendada',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">🗓️ Semana</button>
     <button class="tec-fchip" data-f="em_curso"  onclick="tecSetFiltro('em_curso',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">🔧 Em curso</button>
     <button class="tec-fchip" data-f="fechadas"  onclick="tecSetFiltro('fechadas',this)"  style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">✅ Concluídas</button>
     <button class="tec-fchip" data-f="falta_rel" onclick="tecSetFiltro('falta_rel',this)" style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #fecaca;background:#fff;color:#b91c1c;font-weight:700;font-size:13px;cursor:pointer;">📄 Falta relatório</button>
+    <button class="tec-fchip" data-f="realizados" onclick="tecSetFiltro('realizados',this)" style="flex:1 1 auto;min-width:84px;padding:9px 10px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;color:#475569;font-weight:600;font-size:13px;cursor:pointer;">📋 Trabalhos realizados</button>
   </div>
   <input class="fi" id="tec-search" placeholder="🔍 Procurar OS por cliente ou nº…" oninput="osRenderMinhas()" style="width:100%;font-size:13px;">
   <input type="hidden" id="tec-filter-estado" value="hoje">
@@ -13642,8 +13643,22 @@ function osRenderMinhas(){
   } else if(filtro==='concluida'){
     minhas = minhas.filter(o=>o.estado==='concluida');
   } else if(filtro==='agendada'){
-    // Agendadas — agrupadas por dia (a ordenação ascendente já garante por dia)
-    minhas = minhas.filter(o=>o.estado==='agendada' && o.estado!=='os_fechada');
+    // Agendadas — só os próximos 7 dias (hoje incluído), agrupadas por dia.
+    const fimSemana = new Date(); fimSemana.setDate(fimSemana.getDate()+6);
+    const fimSemanaStr = fimSemana.toISOString().slice(0,10);
+    minhas = minhas.filter(o=>{
+      if(o.estado!=='agendada' && o.estado!=='em_curso') return false;
+      return (o.data||'')>=hoje && (o.data||'')<=fimSemanaStr;
+    });
+  } else if(filtro==='realizados'){
+    // Trabalhos realizados — todos os relatórios já feitos (prontos ou enviados) por este técnico.
+    minhas = (window.DB.ordens||[])
+      .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada')
+      .filter(o=>{
+        const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+        return rel && (rel.estado==='pronto' || rel.estado==='enviado');
+      })
+      .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
   } else if(filtro==='em_curso'){
     minhas = minhas.filter(o=>o.estado==='em_curso');
   } else if(filtro==='hoje'){
@@ -13665,7 +13680,7 @@ function osRenderMinhas(){
   }
 
   // Concluídas / fechadas / falta relatório / arquivadas / pesquisa: mais recentes primeiro
-  if(q || filtro==='concluida' || filtro==='fechadas' || filtro==='falta_rel' || filtro==='arquivadas'){
+  if(q || filtro==='concluida' || filtro==='fechadas' || filtro==='falta_rel' || filtro==='arquivadas' || filtro==='realizados'){
     minhas = minhas.slice().reverse();
   }
 
@@ -13713,7 +13728,9 @@ function osRenderMinhas(){
     const vazioTitulo = q ? 'Nenhuma OS encontrada'
       : filtro==='hoje' ? 'Sem OS por fazer hoje'
       : filtro==='' ? 'Sem OS para hoje'
-      : filtro==='agendada' ? 'Sem OS agendadas'
+      : filtro==='agendada' ? 'Sem OS agendadas para os próximos 7 dias'
+      : filtro==='realizados' ? 'Ainda não há relatórios feitos por ti'
+      : filtro==='semana' ? 'Sem OS agendadas para os próximos 7 dias'
       : filtro==='fechadas' ? 'Sem OS concluídas'
       : filtro==='falta_rel' ? 'Sem relatórios em falta'
       : filtro==='concluida' ? 'Sem OS concluídas'
@@ -21478,6 +21495,27 @@ function rpRenderAlertasDiarios(){
   </div>`;
 }
 
+// ── Histórico de visitas anteriores de um cliente (para mostrar ao técnico) ──
+// Devolve os últimos 2 relatórios (excluindo a OS atual) já prontos/enviados.
+function tecHistoricoCliente(clienteId, excludeOsId){
+  if(!clienteId) return [];
+  const osDoCliente = (window.DB.ordens||[])
+    .filter(o=>o.clienteId===clienteId && o.id!==excludeOsId)
+    .sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.horaIni||'').localeCompare(a.horaIni||''));
+  const historico=[];
+  for(const o of osDoCliente){
+    const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+    if(!rel || !(rel.estado==='pronto'||rel.estado==='enviado')) continue;
+    const c=rel.campos||{};
+    if(!c.reclamacao && !c.trabalho && !c.conclusao) continue;
+    const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId)||{};
+    historico.push({ osId:o.id, data:o.data, servico:srv.nome||'', reclamacao:c.reclamacao||'', trabalho:c.trabalho||'', conclusao:c.conclusao||'' });
+    if(historico.length>=2) break;
+  }
+  return historico;
+}
+
+
 // ── Abrir formulário de preenchimento (wizard simplificado) ──
 function rpAbrirFormulario(osId, preserveTemp){
   const os  = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
@@ -21641,6 +21679,21 @@ function rpAbrirFormulario(osId, preserveTemp){
         <div>🕐 ${(os.horaIniReal||os.horaIni||'—').slice(0,5)} → ${(os.horaFimReal||os.horaFim||'—').slice(0,5)}</div>
       </div>
     </div>
+
+    ${(()=>{
+      const hist = tecHistoricoCliente(os.clienteId, osId);
+      if(!hist.length) return '';
+      return `
+      <div style="background:#f0f9ff;border:2px solid #7dd3fc;border-radius:12px;padding:14px 16px;margin-bottom:20px;">
+        <div style="font-size:13px;font-weight:800;color:#0369a1;margin-bottom:10px;">📋 Este cliente já foi atendido antes — últimas visitas:</div>
+        ${hist.map(h=>`
+          <div style="background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;border:1px solid #e0f2fe;">
+            <div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:4px;">📅 ${fmtDate(h.data)}${h.servico?' · '+h.servico:''}</div>
+            ${h.reclamacao?`<div style="font-size:12px;color:#334155;margin-bottom:3px;"><strong>Reclamação:</strong> ${h.reclamacao}</div>`:''}
+            ${h.conclusao?`<div style="font-size:12px;color:#334155;"><strong>Conclusão:</strong> ${h.conclusao}</div>`:''}
+          </div>`).join('')}
+      </div>`;
+    })()}
 
     ${secTit(1,'Caracterização da Intervenção','Tipo de anomalia e localização')}
 

@@ -8282,6 +8282,24 @@ async function osConfirmarEncerramentoAuto(id){
   }catch(e){ console.warn('osConfirmarEncerramentoAuto:', e.message); }
 }
 
+// ── Reabrir cronómetro (admin/gerente/supervisor) — limpa a hora de fim para o técnico continuar a contar tempo ──
+async function osReabrirCronometro(id){
+  const o=(window.DB.ordens||[]).find(x=>x.id===id); if(!o) return;
+  if(!['admin','gerente','supervisor'].includes(window.currentUser?.role)){
+    toast('Só admin, gerente ou supervisor podem reabrir o cronómetro.','🔒'); return;
+  }
+  if(!confirm(`Reabrir o cronómetro da OS ${id}?\n\nA hora de fim registada (${o.horaFimReal||'—'}) será apagada e a OS volta a "em curso", para o técnico continuar a contar o tempo (ex: pausa para almoço).`)) return;
+  try{
+    await window.fsSetMerge('ordens', id, {
+      horaFimReal:'', encerramentoAutomatico:false, encerramentoAutomaticoEm:null, encerramentoAutomaticoDistM:null
+    });
+    await auditLog('os_cronometro_reaberto', `OS ${id}: cronómetro reaberto por ${window.currentUser?.name||''} (hora de fim anterior: ${o.horaFimReal||'—'})`);
+    toast('Cronómetro reaberto — a contar novamente.','🔄');
+    if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(id);
+    if(typeof osRenderLista==='function') osRenderLista();
+  }catch(e){ toast('Erro ao reabrir cronómetro: '+e.message,'❌'); console.error(e); }
+}
+
 function osBadge(estado, os){
   // Estado visual baseado no ciclo real da OS
   // verde = tempo fechado (horaFimReal preenchida)
@@ -12352,7 +12370,10 @@ function osAbrirDetalhe(id){
         <div style="font-weight:700;color:#991b1b;font-size:13px;">Cronómetro parado automaticamente</div>
         <div style="font-size:12px;color:#7f1d1d;margin-top:2px;">O técnico afastou-se ~${o.encerramentoAutomaticoDistM||300}m do local sem terminar o relatório. Hora de fim registada: <strong>${o.horaFimReal||'—'}</strong>. O relatório continua pendente.</div>
       </div>
-      <button class="btn btn-sm" onclick="event.stopPropagation();osConfirmarEncerramentoAuto('${o.id}')" style="white-space:nowrap;">✓ Já vi</button>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${['admin','gerente','supervisor'].includes(window.currentUser?.role)?`<button class="btn btn-sm" style="background:#c2410c;color:#fff;white-space:nowrap;" onclick="event.stopPropagation();osReabrirCronometro('${o.id}')">🔄 Reabrir</button>`:''}
+        <button class="btn btn-sm" onclick="event.stopPropagation();osConfirmarEncerramentoAuto('${o.id}')" style="white-space:nowrap;">✓ Já vi</button>
+      </div>
     </div>`:''}
 
     ${osFracaoCardHtml(o)}
@@ -12448,6 +12469,8 @@ function osAbrirDetalhe(id){
             <input type="time" id="os-hora-fim-real" class="fi" value="${o.horaFimReal||(window.currentUser?.role==='tecnico'?new Date().toTimeString().slice(0,5):o.horaFim)||''}" style="width:110px;font-size:15px;font-weight:700;" oninput="osCalcPreview('${id}')"${window.currentUser?.role==='tecnico'?' readonly':''}>
             ${window.currentUser?.role==='tecnico'?'':`<button onclick="document.getElementById('os-hora-fim-real').value=new Date().toTimeString().slice(0,5);osCalcPreview('${id}')" class="btn btn-ghost btn-sm">🕐 Agora</button>`}
           </div>
+          ${o.horaFimReal&&['admin','gerente','supervisor'].includes(window.currentUser?.role)?`
+          <button onclick="event.stopPropagation();osReabrirCronometro('${id}')" class="btn btn-ghost btn-sm" style="width:100%;color:#c2410c;border:1px dashed #fdba74;margin-bottom:10px;">🔄 Reabrir cronómetro (ex: pausa para almoço)</button>`:''}
           <div id="os-calc-preview" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;min-height:36px;">
             ${(()=>{
               const ini2=o.horaIniReal||o.horaIni||''; const fim2=o.horaFimReal||o.horaFim||'';

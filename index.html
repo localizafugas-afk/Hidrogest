@@ -2000,9 +2000,8 @@ tr:hover td{background:rgba(37,99,235,.03);}
         <input class="fi" id="rp-search" placeholder="🔍 OS, cliente..." style="width:150px;font-size:12px;" oninput="rpRender()">
         <select class="fs" id="rp-filter-estado" onchange="rpFiltroEstado(this.value)" style="font-size:12px;">
           <option value="">Todos os estados</option>
-          <option value="a_realizar">📅 A realizar</option>
-          <option value="pendente">⏳ Pendente</option>
-          <option value="rascunho">📝 Rascunho</option>
+          <option value="a_realizar">📝 Relatório a realizar</option>
+          <option value="pronto">✅ Pronto</option>
           <option value="atrasado">🔴 Atrasado</option>
           <option value="enviado">✅ Enviado</option>
           <option value="nao_faturavel">🛡️ Garantia / Orçamento</option>
@@ -2032,9 +2031,8 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <!-- chips ocultos mas necessários para rpFiltroEstado -->
     <div style="display:none;" id="rp-chips-estado">
       <button class="rp-chip active" id="rpc-todos">Todos</button>
-      <button class="rp-chip" id="rpc-a_realizar">A realizar</button>
-      <button class="rp-chip" id="rpc-pendente">Pendente</button>
-      <button class="rp-chip" id="rpc-rascunho">Rascunho</button>
+      <button class="rp-chip" id="rpc-a_realizar">Relatório a realizar</button>
+      <button class="rp-chip" id="rpc-pronto">Pronto</button>
       <button class="rp-chip" id="rpc-atrasado">Atrasado</button>
       <button class="rp-chip" id="rpc-enviado">Enviado</button>
     </div>
@@ -4808,7 +4806,7 @@ function dashRenderPainelRelatorios(container){
           ${verm?`<span style="background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🔴 ${verm} crítico${verm>1?'s':''}</span>`:''}
           ${amar?`<span style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🟡 ${amar} urgente${amar>1?'s':''}</span>`:''}
           ${verd?`<span style="background:#16a34a;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🟢 ${verd} ok</span>`:''}
-          <button onclick="navigate('relat-pesquisa');setTimeout(()=>rpAbrirLista('pendente'),200);" style="padding:5px 14px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Ver todos →</button>
+          <button onclick="navigate('relat-pesquisa');setTimeout(()=>rpAbrirLista(''),200);" style="padding:5px 14px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Ver todos →</button>
         </div>
       </div>
       <!-- Lista compacta -->
@@ -20824,6 +20822,21 @@ function rpEstadoRelatorio(os){
   return rel.estado||'rascunho';
 }
 
+// ── Agrupamento por "card" para os cartões da Home e para a listagem geral ──
+// Agendas ainda não realizadas não entram em nenhum card (retorna null).
+// Dentro das concluídas: atrasado (>5 dias) tem sempre prioridade; depois pronto;
+// tudo o resto (rascunho ou sem relatório, dentro do prazo) cai em "a_realizar"
+// — que passa a significar "Relatório a Realizar", não "agenda a realizar".
+function rpEstadoCard(os){
+  const est = rpEstadoRelatorio(os);
+  if(est==='a_realizar') return null; // agenda ainda não realizada — não conta em nenhum card
+  if(est==='enviado') return 'enviado';
+  const dias = rpDiasParaEnvio(os);
+  if(dias!==null && dias<0) return 'atrasado';
+  if(est==='pronto') return 'pronto';
+  return 'a_realizar'; // rascunho ou pendente, dentro do prazo → "Relatório a Realizar"
+}
+
 function rpBadgeEstado(est, dias){
   const MAP = {
     a_realizar:{bg:'#f0f9ff',c:'#0369a1',txt:'📅 A realizar'},
@@ -20987,8 +21000,8 @@ function rpAbrirLista(estado, titulo){
   document.getElementById('rp-lista-view').style.display='';
   // Definir título
   const titulos = {
-    '':'Todos os Relatórios', 'a_realizar':'📅 A Realizar',
-    'pendente':'⏳ Pendente', 'rascunho':'📝 Rascunho',
+    '':'Todos os Relatórios', 'a_realizar':'📝 Relatório a Realizar',
+    'pronto':'✅ Prontos',
     'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados'
   };
   const el = document.getElementById('rp-lista-titulo');
@@ -21000,31 +21013,27 @@ function rpAbrirLista(estado, titulo){
 function rpRenderHomeCards(){
   const cards = document.getElementById('rp-home-cards');
   if(!cards) return;
-  const ordens = (window.DB.ordens||[]).filter(o=>o.estado==='concluida'||o.estado==='agendada'||o.estado==='em_curso');
+  // Só entram OS concluídas — agendas ainda não realizadas não aparecem em nenhum card
+  const ordens = (window.DB.ordens||[]).filter(o=>o.estado==='concluida');
   const rels = window.DB.relatorios_pesquisa||[];
   const isSup = ['admin','gerente','comercial'].includes(window.currentUser?.role);
   const isTec = window.currentUser?.role==='tecnico';
 
-  // Contar por estado
-  let counts = {a_realizar:0, rascunho:0, pendente:0, atrasado:0, enviado:0};
+  // Contar por card (rpEstadoCard já filtra agendas não realizadas)
+  let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0};
   ordens.forEach(os=>{
     if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return;
-    const est = rpEstadoRelatorio(os);
-    const dias = rpDiasParaEnvio(os);
-    if(est==='enviado') counts.enviado++;
-    else if(dias!==null && dias<0) counts.atrasado++;
-    else if(est==='pendente') counts.pendente++;
-    else if(est==='rascunho') counts.rascunho++;
-    else counts.a_realizar++;
+    const card = rpEstadoCard(os);
+    if(!card) return;
+    counts[card] = (counts[card]||0)+1;
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
   const defs = [
-    {key:'atrasado',  icon:'🔴', label:'Atrasados',   desc:'Relatórios fora do prazo', urgente:true},
-    {key:'pendente',  icon:'⏳', label:'Pendente',     desc:'Preenchidos, aguardam envio'},
-    {key:'rascunho',  icon:'📝', label:'Rascunho',     desc:'Iniciados, não concluídos'},
-    {key:'a_realizar',icon:'📅', label:'A Realizar',   desc:'Por preencher'},
-    {key:'enviado',   icon:'✅', label:'Enviados',      desc:'Relatórios já enviados'},
+    {key:'atrasado',  icon:'🔴', label:'Atrasados',            desc:'Fora do prazo de entrega', urgente:true},
+    {key:'a_realizar',icon:'📝', label:'Relatório a Realizar', desc:'Dentro do prazo'},
+    {key:'pronto',    icon:'✅', label:'Prontos',              desc:'Prontos para enviar'},
+    {key:'enviado',   icon:'📨', label:'Enviados',             desc:'Já enviados ao cliente'},
   ];
 
   cards.innerHTML = defs.map(d=>`
@@ -21039,7 +21048,7 @@ function rpRenderHomeCards(){
   // Atualizar alerta pendentes
   const alertaDiv = document.getElementById('rp-alerta-pendentes');
   if(alertaDiv){
-    const urgentes = counts.atrasado + counts.pendente;
+    const urgentes = counts.atrasado;
     if(urgentes>0){
       alertaDiv.style.display='';
       alertaDiv.textContent=`⚠️ ${urgentes} relatório${urgentes>1?'s':''} requer${urgentes>1?'em':''} atenção`;
@@ -21077,8 +21086,8 @@ function rpRender(){
   const filterEst = _rpFiltroEstado || document.getElementById('rp-filter-estado')?.value||'';
   const q = (document.getElementById('rp-search')?.value||'').toLowerCase().trim();
 
-  // Ordenar OS concluídas (e também agendadas para aparecerem na lista)
-  let ordens = [...(window.DB.ordens||[])].filter(o=>o.estado==='concluida'||o.estado==='agendada'||o.estado==='em_curso');
+  // Ordenar OS concluídas — agendas ainda não realizadas não entram nesta listagem
+  let ordens = [...(window.DB.ordens||[])].filter(o=>o.estado==='concluida');
   ordens.sort((a,b)=>(b.concluidoEm||b.data||'').localeCompare(a.concluidoEm||a.data||''));
 
   // Garantia/Orçamento não são cobradas — ficam fora da vista normal,
@@ -21093,16 +21102,17 @@ function rpRender(){
   // Filtrar
   if(filterEst && filterEst!=='nao_faturavel'){
     ordens = ordens.filter(os=>{
-      const est = rpEstadoRelatorio(os);
-      const dias = rpDiasParaEnvio(os);
-      if(filterEst==='atrasado') return est!=='enviado' && dias!==null && dias<0;
       if(filterEst==='aguarda_pagamento'){
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
         return !rel?.pagamento?.metodo;
       }
-      // "pendente" não inclui "a_realizar" (são estados distintos)
-      if(filterEst==='pendente') return est==='pendente';
-      return est===filterEst;
+      return rpEstadoCard(os)===filterEst;
+    });
+  } else if(!filterEst){
+    // "Ver todos" — mostrar só o que está ativo: atrasados, a realizar e prontos
+    ordens = ordens.filter(os=>{
+      const card = rpEstadoCard(os);
+      return card==='atrasado'||card==='a_realizar'||card==='pronto';
     });
   }
   if(q){

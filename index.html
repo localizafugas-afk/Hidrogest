@@ -22245,7 +22245,7 @@ async function rpAutoSaveInterno(){
   const os = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   // Não sobrescrever relatório já finalizado
   const existing = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
-  if(existing.estado==='pronto') return;
+  if(existing.estado==='pronto' || existing.estado==='enviado') return; // nunca desfazer um relatório já enviado
   const badge = document.getElementById('rp-autosave-badge');
   // Enviar fotos novas para o Storage (silencioso) — mantém o rascunho leve
   try{
@@ -22316,18 +22316,20 @@ async function rpSalvarRascunho(){
   const osId = window._rpEditOsId; if(!osId) return;
   const os = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   const existing = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const _jaEnviado = existing.estado==='enviado';
   const rel = {
     ...existing,
     id: osId, osId,
-    estado: 'rascunho',
+    estado: _jaEnviado ? 'enviado' : 'rascunho', // nunca desfazer um relatório já enviado
     campos: rpRecolherCampos(),
     fotos: window._rpFotosTemp||[],
     anexos: (window._rpAnexosTemp||[]).map(a=>({nome:a.nome,tamanho:a.tamanho,tipo:a.tipo,data:a.data,base64:a.base64||''})),
     editadoEm: new Date().toISOString(),
     editadoPor: window.currentUser?.id,
+    ...(_jaEnviado?{alteradoAposEnvio:true, alteradoAposEnvioEm:new Date().toISOString(), alteradoAposEnvioPor:window.currentUser?.id}:{}),
   };
   await rpSaveDoc(osId, rel);
-  toast('Rascunho guardado!','💾');
+  toast(_jaEnviado?'Alterações guardadas (relatório mantém-se como Enviado)':'Rascunho guardado!','💾');
   // Não fechar — o utilizador continua a editar
 }
 
@@ -22356,10 +22358,11 @@ async function rpSalvarRelatorio(){
     toast('📄 Relatório guardado SEM fotografias — fica marcado como "⏳ Falta foto". Adicione as fotos quando puder.','⚠️',6000);
   }
 
+  const _jaEnviado = existing.estado==='enviado';
   const rel = {
     ...existing,
     id: osId, osId,
-    estado: 'pronto',   // 'rascunho' = guardado parcial; 'pronto' = relatório completo pronto a enviar
+    estado: _jaEnviado ? 'enviado' : 'pronto',   // nunca desfazer um relatório já enviado; 'rascunho' = guardado parcial; 'pronto' = relatório completo pronto a enviar
     pendenteFoto: _pendenteFoto,
     campos,
     fotos: window._rpFotosTemp||[],
@@ -22383,6 +22386,12 @@ async function rpSalvarRelatorio(){
     rel.alteradoPorTecnicoEm = new Date().toISOString();
     rel.alteradoPorTecnicoNome = window.currentUser?.name||'';
     rel.revistoPelaGestao    = false;
+  }
+  // ── Sinalizar quando um relatório JÁ ENVIADO é reaberto e alterado (qualquer perfil) ──
+  if(!isNew && existing.estado==='enviado'){
+    rel.editadoAposEnvio = true;
+    rel.editadoAposEnvioEm = new Date().toISOString();
+    rel.editadoAposEnvioPor = window.currentUser?.name || window.currentUser?.id || '';
   }
   // Parar o auto-save para não competir com a gravação final
   if(window._rpAutoSaveInterval){ clearInterval(window._rpAutoSaveInterval); window._rpAutoSaveInterval=null; }

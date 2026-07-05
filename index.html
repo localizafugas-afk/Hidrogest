@@ -5030,6 +5030,34 @@ function renderDashboard(){
       </span>
     </button>`;
 
+  // ── Card: Informações do mês em curso ──────────────────────
+  let _mesBtn = document.getElementById('dash-mes-atual');
+  if(!_mesBtn){
+    _mesBtn = document.createElement('div');
+    _mesBtn.id = 'dash-mes-atual';
+    _mesBtn.style.cssText = 'margin-bottom:14px;';
+    dashStats.parentNode.insertBefore(_mesBtn, dashStats);
+  }
+  const _now = new Date();
+  const _mesAtualKey = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+  const _nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const _nomeMesAtual = _nomesMes[_now.getMonth()];
+  const _recsMes = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
+  const _totNetMes = _recsMes.reduce((a,r)=>a+r.net,0);
+  const _totGrossMes = _recsMes.reduce((a,r)=>a+r.total,0);
+  const _totIVAMes = _recsMes.reduce((a,r)=>a+r.iva,0);
+  const _despMes = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey)).reduce((a,d)=>a+_fN(d.gross),0);
+  const _ordensConcMes = getVisibleOrdens().filter(o=>o.estado==='concluida' && String(o.data||'').startsWith(_mesAtualKey)).length;
+  _mesBtn.innerHTML = `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;">
+    <div style="font-weight:800;font-size:13px;color:var(--text2);margin-bottom:10px;">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
+    <div class="stats">
+      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_totNetMes)}</div><div class="sc-sub">sem IVA · ${_recsMes.length} recebimento${_recsMes.length===1?'':'s'}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_totGrossMes)}</div><div class="sc-sub">com IVA incluído</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_totIVAMes)}</div><div class="sc-sub">a entregar ao Estado</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">${_ordensConcMes} trabalho${_ordensConcMes===1?'':'s'} concluído${_ordensConcMes===1?'':'s'}</div></div>
+    </div>
+  </div>`;
+
   dashStats.innerHTML=`${pendBanner}<div class="stats">
     <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>

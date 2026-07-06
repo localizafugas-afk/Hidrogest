@@ -8444,6 +8444,63 @@ function calcNetOS(horas, h1, hadd){
 }
 function calcHorasAdd(horas){ return calcHorasAddQuartos(horas); }
 
+// ── Calculadora flexível de preços por tipo de serviço ──
+window.osPrecoCalculator = {
+  _calculators: {
+    'hora': function(os, h1, haddV, horas, pausas=0) {
+      const min = horas * 60;
+      const minPausa = window.osCalcMinPausados ? window.osCalcMinPausados({pausas}) : 0;
+      const minTrabalho = Math.max(0, min - minPausa);
+      const net = window.calcNetOS ? window.calcNetOS(minTrabalho/60, h1, haddV) : h1 + (horas-1)*haddV;
+      return {net, iva: net * (os.iva||23)/100};
+    },
+    'm2': function(os, h1, haddV, qtd) {
+      const net = h1 * qtd;
+      return {net, iva: net * (os.iva||23)/100};
+    },
+    'ml': function(os, h1, haddV, qtd) {
+      const net = h1 * qtd;
+      return {net, iva: net * (os.iva||23)/100};
+    },
+    'verba': function(os, h1, haddV, qtd=1) {
+      const net = h1;
+      return {net, iva: net * (os.iva||23)/100};
+    },
+    'escalonado': function(os, h1, haddV, qtd, corte=0) {
+      const primeiros = Math.min(qtd, corte);
+      const restantes = Math.max(0, qtd - corte);
+      const net = (primeiros * h1) + (restantes * haddV);
+      return {net, iva: net * (os.iva||23)/100};
+    }
+  },
+
+  calcular: function(os, qtd=1, tipo='hora') {
+    const h1 = parseFloat(os.h1)||0;
+    const haddV = parseFloat(os.haddV)||0;
+    const horas = parseFloat(os.horas)||1;
+    const corte = parseFloat(os.corteMetros)||0;
+    const pausas = os.pausas||[];
+
+    const calc = this._calculators[tipo] || this._calculators['hora'];
+    const resultado = calc(os, h1, haddV, tipo==='escalonado'?qtd:(tipo==='hora'?horas:qtd), tipo==='hora'?pausas:corte);
+
+    // Arredondar para 2 casas decimais
+    resultado.net = parseFloat(resultado.net.toFixed(2));
+    resultado.iva = parseFloat(resultado.iva.toFixed(2));
+    resultado.total = parseFloat((resultado.net + resultado.iva).toFixed(2));
+
+    return resultado;
+  },
+
+  registrarTipo: function(tipo, funcao) {
+    if(typeof funcao === 'function') {
+      this._calculators[tipo] = funcao;
+      return true;
+    }
+    return false;
+  }
+};
+
 // ── Fração e valor cobrado a partir do tempo AGENDADO ──
 function osFracaoInfo(o){
   const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
@@ -17419,6 +17476,71 @@ function rotCargaTecnico(tecId, data){
   return {os, horas:Math.round(horas*10)/10, count:os.length};
 }
 
+// ── Sugestão de horários alternativos considerando carga e distância ──
+window.osAgendaSugerirHorarios = async function(data, duracaoMin=90, tecId=null) {
+  const tecnicos = tecId ? [window.DB.users.find(u=>u.id===tecId)].filter(Boolean)
+                         : (window.DB.users||[]).filter(u=>u.role==='tecnico'&&u.active);
+  const resultado = [];
+
+  for(const tec of tecnicos) {
+    // Calcular carga do dia para este técnico
+    const {horas} = window.rotCargaTecnico(tec.id, data);
+    const cargaPct = Math.min(100, Math.round(horas/8*100));
+
+    // Obter geolocalização da sua base
+    const loc = window.tecGetCpActivo(tec);
+    let coordTec = null;
+    if(loc.cp) coordTec = await window.cpParaCoordenadas(loc.cp);
+
+    // Encontrar slots livres
+    const slotsLivres = [];
+    const SLOTS_TESTE = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00','17:00'];
+
+    for(const slot of SLOTS_TESTE) {
+      const [h,m] = slot.split(':').map(Number);
+      const fim = new Date(); fim.setHours(h, m + duracaoMin);
+      const fimStr = `${String(fim.getHours()).padStart(2,'0')}:${String(fim.getMinutes()).padStart(2,'0')}`;
+
+      // Verificar sobreposição
+      const conflitos = window.osVerificarSobreposicao(data, slot, fimStr, [tec.id]);
+      if(!conflitos) {
+        // Calcular distância aproximada
+        let distKm = null;
+        if(coordTec) {
+          // Assumir cliente como ponto central do dia (ou usar o mais próximo)
+          const ordensDia = window.DB.ordens.filter(o=>o.data===data && (o.tecnicos||[]).includes(tec.id) && o.estado!=='cancelada');
+          if(ordensDia.length) {
+            const cli = window.DB.clientes.find(c=>c.id===ordensDia[0].clienteId);
+            const cp = cli?.srvCp||cli?.cp;
+            if(cp) {
+              const coordCli = await window.cpParaCoordenadas(cp);
+              if(coordCli) {
+                distKm = window.rotDistKm(coordTec.lat, coordTec.lng, coordCli.lat, coordCli.lng);
+              }
+            }
+          }
+        }
+
+        // Score composto: carga (40%) + distância (60%)
+        let score = 100 - (cargaPct * 0.4);
+        if(distKm !== null && distKm > 0) {
+          score -= Math.min(50, distKm * 0.2); // Penalizar distâncias grandes
+        }
+
+        slotsLivres.push({tecnico: tec.name, tecId: tec.id, slot, fimStr, carga: cargaPct, distKm, score});
+      }
+    }
+
+    // Adicionar apenas os 3 melhores slots deste técnico
+    slotsLivres.sort((a,b)=>b.score-a.score);
+    resultado.push(...slotsLivres.slice(0,3));
+  }
+
+  // Ordenar globalmente por score (melhor primeiro)
+  resultado.sort((a,b)=>b.score-a.score);
+  return resultado.slice(0,10); // Limitar a 10 sugestões
+};
+
 // ── Gerar link de tracking seguro para uma OS ────────────────
 async function gerarLinkTracking(osId){
   const msgUint8 = new TextEncoder().encode(osId + 'hg_track_2026');
@@ -20754,13 +20876,23 @@ async function rpSaveDoc(id, data){
 // Envia para o Storage qualquer foto que ainda esteja em base64 (dataUrl) e
 // substitui-a por {url, path, legenda}. Fotos que já têm url são ignoradas.
 // Migra também relatórios antigos automaticamente quando voltam a ser guardados.
-async function rpUploadFotosPendentes(osId){
+async function rpUploadFotosPendentes(osId, onProgress){
   // Serializar execuções para evitar uploads concorrentes (auto-save + guardar)
   while(window._rpUploadEmCurso){ try{ await window._rpUploadEmCurso; }catch(e){} }
   window._rpUploadEmCurso = (async()=>{
     const arr = window._rpFotosTemp;
     if(!Array.isArray(arr) || !arr.length) return;
     if(typeof window.fsUploadFoto !== 'function') return; // Storage indisponível — mantém base64 (comportamento antigo)
+
+    // Contar quantas fotos precisam mesmo de ser enviadas (para a barra de progresso)
+    const totalPendentes = arr.reduce((n,f)=>{
+      if(!f) return n;
+      if(typeof f === 'string') return n + (f.startsWith('data:') ? 1 : 0);
+      return n + ((f.dataUrl||'').startsWith('data:') ? 1 : 0);
+    },0);
+    let enviadas = 0;
+    if(totalPendentes>0 && typeof onProgress==='function') onProgress({done:0, total:totalPendentes});
+
     for(let i=0;i<arr.length;i++){
       const f = arr[i];
       if(!f) continue;
@@ -20771,6 +20903,8 @@ async function rpUploadFotosPendentes(osId){
           const path = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
           const up = await window.fsUploadFoto(path, f);
           arr[i] = { url:up.url, path:up.path, legenda:'' };
+          enviadas++;
+          if(typeof onProgress==='function') onProgress({done:enviadas, total:totalPendentes});
         }
         continue;
       }
@@ -20782,6 +20916,8 @@ async function rpUploadFotosPendentes(osId){
         const path = `relatorios/${osId}/foto_${Date.now()}_${i}.jpg`;
         const up = await window.fsUploadFoto(path, dataUrl);
         arr[i] = { url:up.url, path:up.path, legenda:f.legenda||'' };
+        enviadas++;
+        if(typeof onProgress==='function') onProgress({done:enviadas, total:totalPendentes});
       }
     }
   })();
@@ -22252,7 +22388,9 @@ async function rpAutoSaveInterno(){
     if(badge && (window._rpFotosTemp||[]).some(f=>f&&(f.dataUrl||(typeof f==='string'&&f.startsWith('data:'))))){
       badge.style.display='inline-block'; badge.textContent='💾 A enviar fotos...';
     }
-    await rpUploadFotosPendentes(osId);
+    await rpUploadFotosPendentes(osId, ({done,total})=>{
+      if(badge && total>0) badge.textContent = `📷 ${done}/${total} fotos enviadas`;
+    });
   }catch(e){ /* sem rede/Storage — guarda como estiver; o guardar manual tenta de novo */ }
   const rel = {
     ...existing,
@@ -22407,7 +22545,9 @@ async function rpSalvarRelatorio(){
   // Assim o documento fica pequeno e nunca rebenta o limite de 1 MB do Firestore.
   try{
     if(_btnSalvar) _btnSalvar.textContent='⏳ A enviar fotos...';
-    await rpUploadFotosPendentes(osId);
+    await rpUploadFotosPendentes(osId, ({done,total})=>{
+      if(_btnSalvar && total>0) _btnSalvar.textContent = `⏳ A enviar fotos ${done}/${total}...`;
+    });
     rel.fotos = window._rpFotosTemp||[];   // agora só com links (url), sem base64
     if(_btnSalvar) _btnSalvar.textContent='⏳ A guardar...';
   }catch(e){

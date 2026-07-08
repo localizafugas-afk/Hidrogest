@@ -40,7 +40,9 @@ const PUSH_WORKER_URL = "https://hidrogest-push.localizafugas.workers.dev";
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, doc, getDocs, getDoc, runTransaction,
+import { getFirestore, initializeFirestore, persistentLocalCache,
+         persistentMultipleTabManager,
+         collection, doc, getDocs, getDoc, runTransaction,
          setDoc, deleteDoc, onSnapshot, writeBatch,
          query, orderBy, limit, where }           from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as stRef, uploadString, getDownloadURL,
@@ -50,7 +52,18 @@ import { getMessaging, getToken as fcmGetToken, onMessage as fcmOnMessage }
 
 // ─── Inicialização ────────────────────────────────────────────
 const app = initializeApp(FIREBASE_CONFIG);
-const db  = getFirestore(app);
+// Persistência offline: as gravações ficam guardadas no telemóvel e sincronizam
+// sozinhas quando a rede voltar (essencial para o trabalho no terreno com sinal fraco).
+// Se o navegador não suportar (ex.: janela privada antiga), volta ao modo normal.
+let db;
+try {
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+  });
+} catch (e) {
+  console.warn('[Firestore] Persistência offline indisponível, a usar modo normal:', e);
+  db = getFirestore(app);
+}
 const storage = getStorage(app);
 let messaging = null;
 try{ messaging = getMessaging(app); }catch(e){ console.warn('FCM não suportado neste browser:', e.message); }

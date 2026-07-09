@@ -11435,6 +11435,13 @@ function osRenderAgenda(){
             ${srv?.nome?`<div style="font-size:10px;color:${tx};opacity:.7;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🔧 ${srv.nome}</div>`:''}
             ${o.osParente?`<div style="font-size:9px;color:${tx};opacity:.7;margin-top:1px;font-weight:700;">↳ cont. ${o.osParente} · dia ${o.diaOrdem||'?'}${o.diasTotal?' de '+o.diasTotal:''}</div>`:''}
             ${!o.osParente && o.diasTotal && o.diasTotal>1?`<div style="font-size:9px;background:${col.solid};color:#fff;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;font-weight:700;">📅 ${o.diasTotal} dias</div>`:''}
+            ${(()=>{
+              const _relOS=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
+              if(!_relOS||_relOS.estado!=='enviado'||!_relOS.enviadoEm) return '';
+              const _d=new Date(_relOS.enviadoEm).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
+              const _rec=!!_relOS.recebidoEm;
+              return `<div style="font-size:9px;font-weight:700;margin-top:2px;color:${_rec?'#065f46':'#0369a1'};background:${_rec?'#d1fae5':'#e0f2fe'};border-radius:3px;padding:1px 5px;display:inline-block;" title="${_rec?'Recebido pelo cliente':'Enviado ao cliente'}">${_rec?'📬':'📧'} ${_d}${_rec?' ✓':''}</div>`;
+            })()}
           </div>`;
         });
       }
@@ -22915,8 +22922,23 @@ function rpVerRelatorio(osId){
     } else if(jaEnviado){
       const aviso = document.createElement('div');
       aviso.className = 'rp-aviso-role';
-      aviso.style.cssText = 'font-size:12px;color:#065f46;background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:7px 12px;';
-      aviso.textContent = `✅ Relatório enviado em ${new Date(rel.enviadoEm).toLocaleDateString('pt-PT')} por ${(window.DB.users||[]).find(u=>u.id===rel.enviadoPor)?.name||'—'}`;
+      aviso.style.cssText = 'font-size:12px;color:#065f46;background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:9px 12px;display:flex;flex-direction:column;gap:8px;';
+      const _envData = rel.enviadoEm ? new Date(rel.enviadoEm).toLocaleString('pt-PT') : '—';
+      const _envNome = (window.DB.users||[]).find(u=>u.id===rel.enviadoPor)?.name||'—';
+      const _reenvTxt = rel.reenvios ? ` · 🔁 ${rel.reenvios} reenvio(s)` : '';
+      // Estado de receção pelo cliente
+      const _recebido = !!rel.recebidoEm;
+      const _recTxt = _recebido
+        ? `📬 <strong>Recebido pelo cliente</strong> em ${new Date(rel.recebidoEm).toLocaleString('pt-PT')}${rel.recebidoPorNome?(' · confirmado por '+rel.recebidoPorNome):''}`
+        : '📭 Receção pelo cliente ainda não confirmada';
+      const _podeGestao = ['admin','gerente','supervisor','comercial'].includes(window.currentUser?.role);
+      aviso.innerHTML =
+        `<div>✅ Enviado em <strong>${_envData}</strong> por ${_envNome}${_reenvTxt} · para ${rel.enviadoPara||'—'}</div>` +
+        `<div style="color:${_recebido?'#065f46':'#92400e'};">${_recTxt}</div>` +
+        `<div style="display:flex;gap:8px;flex-wrap:wrap;">` +
+          (podeSuperEnviar?`<button id="rp-btn-reenviar" onclick="rpReenviarRelatorio('${osId}')" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">🔁 Reenviar relatório</button>`:'') +
+          (_podeGestao?`<button onclick="rpMarcarRecebido('${osId}')" style="background:${_recebido?'#fef2f2':'#15803d'};color:${_recebido?'#dc2626':'#fff'};border:${_recebido?'1px solid #fca5a5':'none'};border-radius:6px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">${_recebido?'↩️ Anular receção':'📬 Confirmar receção do cliente'}</button>`:'') +
+        `</div>`;
       footerEl.insertBefore(aviso, footerEl.firstChild);
     }
     // Aviso de alteração feita pelo técnico após fecho (para a gestão)
@@ -22945,7 +22967,83 @@ function rpVerRelatorio(osId){
   openMo('mo-relat-ver');
 }
 
-// Obter assinaturas de um relatório — tenta campos inline primeiro,
+// ── Reenviar o relatório ao cliente (repete o envio via Brevo) ──
+async function rpReenviarRelatorio(osId){
+  const podeEnviar = ['admin','gerente','supervisor'].includes(window.currentUser?.role);
+  if(!podeEnviar){ toast('⚠️ Apenas o supervisor/gestão pode reenviar.','⚠️'); return; }
+  const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+  const cli = (window.DB.clientes||[]).find(x=>x.id===os?.clienteId)||{};
+  const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  if(!cli.email){ toast('⚠️ Cliente sem email registado.','⚠️'); return; }
+  if(!confirm(`Reenviar o relatório da OS ${osId} para ${cli.email}?`)) return;
+
+  const btn = document.getElementById('rp-btn-reenviar');
+  const txtOrig = btn ? btn.textContent : '';
+  if(btn){ btn.disabled=true; btn.textContent='⏳ A reenviar...'; }
+
+  try{
+    const resultado = await brevoEnviarRelatorio(osId);
+    if(resultado && resultado.ok){
+      const relAtual = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||rel;
+      const updated = {
+        ...relAtual,
+        estado:'enviado',
+        enviadoEm:new Date().toISOString(),
+        enviadoPor:window.currentUser?.id,
+        enviadoPara:cli.email,
+        reenviadoEm:new Date().toISOString(),
+        reenviadoPor:window.currentUser?.id,
+        reenvios:(relAtual.reenvios||0)+1,
+      };
+      await rpSaveDoc(osId, updated);
+      toast(`✅ Relatório reenviado para ${cli.email}!`,'📧');
+      auditLog('relatorio_reenviado',`OS ${osId} → ${cli.email} — reenvio #${updated.reenvios} por ${window.currentUser?.name}`);
+      rpRender();
+      if(typeof osRenderAgenda==='function') osRenderAgenda();
+      rpVerRelatorio(osId); // recarregar o viewer com o novo estado
+    } else if(resultado && resultado.motivo==='sem-api-key'){
+      toast('⚠️ Configure a API Key Brevo em Configurações → Email.','⚠️');
+    } else {
+      toast('⚠️ Não foi possível reenviar. Verifique a ligação e tente de novo.','⚠️');
+    }
+  }catch(e){
+    console.error('rpReenviarRelatorio — falha:', e);
+    toast('❌ Erro ao reenviar: '+(e?.message||'sem ligação'),'❌');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=txtOrig||'🔁 Reenviar relatório'; }
+  }
+}
+
+// ── Confirmar / anular a receção do relatório pelo cliente (confirmação manual) ──
+async function rpMarcarRecebido(osId){
+  const podeConfirmar = ['admin','gerente','supervisor','comercial'].includes(window.currentUser?.role);
+  if(!podeConfirmar){ toast('⚠️ Sem permissão para confirmar a receção.','⚠️'); return; }
+  const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const jaRecebido = !!rel.recebidoEm;
+  try{
+    if(jaRecebido){
+      if(!confirm('Anular a confirmação de receção deste relatório?')) return;
+      await window.fsSetMerge('relatorios_pesquisa', osId, { recebidoEm:'', recebidoPor:'', recebidoPorNome:'' });
+      const idx=(window.DB.relatorios_pesquisa||[]).findIndex(x=>x.id===osId);
+      if(idx>=0) window.DB.relatorios_pesquisa[idx]={...window.DB.relatorios_pesquisa[idx], recebidoEm:'', recebidoPor:'', recebidoPorNome:''};
+      toast('Confirmação de receção anulada.','↩️');
+      auditLog('relatorio_recebido_anulado',`OS ${osId} — por ${window.currentUser?.name}`);
+    } else {
+      const nowIso=new Date().toISOString();
+      const quem=window.currentUser?.name||'—';
+      await window.fsSetMerge('relatorios_pesquisa', osId, { recebidoEm:nowIso, recebidoPor:window.currentUser?.id, recebidoPorNome:quem });
+      const idx=(window.DB.relatorios_pesquisa||[]).findIndex(x=>x.id===osId);
+      if(idx>=0) window.DB.relatorios_pesquisa[idx]={...window.DB.relatorios_pesquisa[idx], recebidoEm:nowIso, recebidoPor:window.currentUser?.id, recebidoPorNome:quem};
+      toast('✅ Relatório marcado como recebido pelo cliente.','✅');
+      auditLog('relatorio_recebido',`OS ${osId} — confirmado por ${quem}`);
+    }
+    if(typeof osRenderAgenda==='function') osRenderAgenda();
+    rpVerRelatorio(osId);
+  }catch(e){
+    console.error('rpMarcarRecebido — falha:', e);
+    toast('❌ Erro ao guardar a confirmação: '+(e?.message||'sem ligação'),'❌');
+  }
+}
 // depois relatorios_assinaturas (doc separado quando assinaturas eram grandes)
 function rpGetAssinaturas(osId, campos, rel, os){
   const sigTec = campos?.assinaturaTecnico || rel?.assinaturaTecnico || os?.assinaturaTecnico || '';
@@ -23499,7 +23597,19 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
                 <div style="font-size:11px;font-weight:600;">${a.nome}</div>
               </div>
               <div style="font-size:10px;color:#94a3b8;">${a.tamanho||''}</div>
-              ${a.data?`<a href="${a.data}" download="${a.nome}" style="font-size:10px;color:#2563eb;text-decoration:none;font-weight:600;">⬇ Descarregar</a>`:''}
+              ${(()=>{
+                // Reconstruir o ficheiro para download a partir do base64 (conteúdo real).
+                // Compatível com anexos antigos que porventura tenham o conteúdo no campo "data".
+                let href = '';
+                if(a.base64){
+                  href = `data:${a.tipo||'application/octet-stream'};base64,${a.base64}`;
+                } else if(typeof a.data==='string' && a.data.startsWith('data:')){
+                  href = a.data; // anexo antigo que já guardava o dataURL completo
+                }
+                return href
+                  ? `<a href="${href}" download="${a.nome}" style="font-size:10px;color:#2563eb;text-decoration:none;font-weight:600;">⬇ Descarregar</a>`
+                  : '<span style="font-size:10px;color:#94a3b8;">sem conteúdo</span>';
+              })()}
             </div>`).join('')}
         </div>
       </div>`:''}

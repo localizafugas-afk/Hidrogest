@@ -11437,10 +11437,21 @@ function osRenderAgenda(){
             ${!o.osParente && o.diasTotal && o.diasTotal>1?`<div style="font-size:9px;background:${col.solid};color:#fff;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;font-weight:700;">📅 ${o.diasTotal} dias</div>`:''}
             ${(()=>{
               const _relOS=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
-              if(!_relOS||_relOS.estado!=='enviado'||!_relOS.enviadoEm) return '';
-              const _d=new Date(_relOS.enviadoEm).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
-              const _rec=!!_relOS.recebidoEm;
-              return `<div style="font-size:9px;font-weight:700;margin-top:2px;color:${_rec?'#065f46':'#0369a1'};background:${_rec?'#d1fae5':'#e0f2fe'};border-radius:3px;padding:1px 5px;display:inline-block;" title="${_rec?'Recebido pelo cliente':'Enviado ao cliente'}">${_rec?'📬':'📧'} ${_d}${_rec?' ✓':''}</div>`;
+              if(!_relOS) return '';
+              let _html='';
+              // 1) Data de conclusão pelo técnico (prontoEm; recorre à conclusão da OS ou à criação do relatório em relatórios antigos)
+              const _concRaw = _relOS.prontoEm || o.concluidoEm || _relOS.criadoEm;
+              if((_relOS.estado==='pronto'||_relOS.estado==='enviado') && _concRaw){
+                const _dc=new Date(_concRaw).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
+                _html += `<div style="margin-top:2px;"><span style="font-size:9px;font-weight:700;color:#7c3aed;background:#f3e8ff;border-radius:3px;padding:1px 5px;display:inline-block;" title="Relatório concluído pelo técnico">✔️ Concl. ${_dc}</span></div>`;
+              }
+              // 2) Data de envio / receção (só quando enviado) — fica por baixo da conclusão
+              if(_relOS.estado==='enviado' && _relOS.enviadoEm){
+                const _d=new Date(_relOS.enviadoEm).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
+                const _rec=!!_relOS.recebidoEm;
+                _html += `<div style="margin-top:2px;"><span style="font-size:9px;font-weight:700;color:${_rec?'#065f46':'#0369a1'};background:${_rec?'#d1fae5':'#e0f2fe'};border-radius:3px;padding:1px 5px;display:inline-block;" title="${_rec?'Recebido pelo cliente':'Enviado ao cliente'}">${_rec?'📬':'📧'} ${_d}${_rec?' ✓':''}</span></div>`;
+              }
+              return _html;
             })()}
           </div>`;
         });
@@ -22526,6 +22537,8 @@ async function rpSalvarRelatorio(){
     fotos: window._rpFotosTemp||[],
     anexos: (window._rpAnexosTemp||[]).map(a=>({nome:a.nome,tamanho:a.tamanho,tipo:a.tipo,data:a.data,base64:a.base64||''})),
     criadoEm: existing.criadoEm||new Date().toISOString(),
+    // Momento em que o relatório foi concluído pelo técnico (primeira vez que fica 'pronto')
+    prontoEm: existing.prontoEm || (existing.estado==='rascunho' || !existing.estado ? new Date().toISOString() : existing.prontoEm) || new Date().toISOString(),
     editadoEm: new Date().toISOString(),
     editadoPor: window.currentUser?.id,
     // Guardar prazo de 5 dias úteis a partir do dia seguinte se ainda não definido

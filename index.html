@@ -5070,19 +5070,38 @@ function renderDashboard(){
   const _mesAtualKey = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
   const _nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const _nomeMesAtual = _nomesMes[_now.getMonth()];
-  const _recsMes = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
-  const _totNetMes = _recsMes.reduce((a,r)=>a+r.net,0);
-  const _totGrossMes = _recsMes.reduce((a,r)=>a+r.total,0);
-  const _totIVAMes = _recsMes.reduce((a,r)=>a+r.iva,0);
-  const _despMes = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey)).reduce((a,d)=>a+_fN(d.gross),0);
-  const _ordensConcMes = getVisibleOrdens().filter(o=>o.estado==='concluida' && String(o.data||'').startsWith(_mesAtualKey)).length;
+  const _hojeKeyMes = _now.toISOString().slice(0,10);
+  // ── Faturação do mês: recibos EMITIDOS no mês (recebidos ou não) ──
+  const _recsFatMes  = recs.filter(r=>String(r.date||r.pagoEm||'').startsWith(_mesAtualKey));
+  const _fatNetMes   = _recsFatMes.reduce((a,r)=>a+_fN(r.net),0);
+  const _fatGrossMes = _recsFatMes.reduce((a,r)=>a+_fN(r.total),0);
+  const _ivaReceita  = _recsFatMes.reduce((a,r)=>a+_fN(r.iva),0);
+  // ── Já recebido no mês (por data de pagamento) ──
+  const _recsPagMes  = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
+  const _recebidoMes = _recsPagMes.reduce((a,r)=>a+_fN(r.total),0);
+  // ── Despesas do mês + IVA dedutível (suportado nas compras) ──
+  const _despMesArr  = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey));
+  const _despMes     = _despMesArr.reduce((a,d)=>a+_fN(d.gross),0);
+  const _ivaDesp     = _despMesArr.reduce((a,d)=>a+_fN(d.iva),0);
+  // ── IVA a pagar ao Estado = IVA liquidado (receita) − IVA dedutível (despesas) ──
+  const _ivaPagar    = _ivaReceita - _ivaDesp;
+  const _ivaPagarCor = _ivaPagar>=0 ? 'var(--yellow)' : 'var(--green)';
+  const _ivaPagarSub = _ivaPagar>=0 ? 'IVA receita − IVA despesas' : 'crédito de IVA a recuperar';
+  // ── Faturado hoje (emitido hoje, recebido ou não) ──
+  const _fatHoje     = recs.filter(r=>String(r.date||r.pagoEm||'').startsWith(_hojeKeyMes)).reduce((a,r)=>a+_fN(r.total),0);
   _mesBtn.innerHTML = `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;">
-    <div style="font-weight:800;font-size:13px;color:var(--text2);margin-bottom:10px;">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <div style="font-weight:800;font-size:13px;color:var(--text2);">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
+      <div style="font-size:12px;color:var(--text3);">Faturado hoje: <strong style="color:var(--accent);">€${fmt(_fatHoje)}</strong></div>
+    </div>
     <div class="stats">
-      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_totNetMes)}</div><div class="sc-sub">sem IVA · ${_recsMes.length} recebimento${_recsMes.length===1?'':'s'}</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_totGrossMes)}</div><div class="sc-sub">com IVA incluído</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_totIVAMes)}</div><div class="sc-sub">a entregar ao Estado</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">${_ordensConcMes} trabalho${_ordensConcMes===1?'':'s'} concluído${_ordensConcMes===1?'':'s'}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_fatGrossMes)}</div><div class="sc-sub">faturada · ${_recsFatMes.length} fatura${_recsFatMes.length===1?'':'s'}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_fatNetMes)}</div><div class="sc-sub">sem IVA</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA da Receita</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_ivaReceita)}</div><div class="sc-sub">liquidado</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">IVA das Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_ivaDesp)}</div><div class="sc-sub">dedutível</div></div>
+      <div class="sc"><div class="sc-glow" style="background:${_ivaPagarCor}"></div><div class="sc-label">IVA a Pagar</div><div class="sc-val" style="color:${_ivaPagarCor}">€${fmt(_ivaPagar)}</div><div class="sc-sub">${_ivaPagarSub}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">total c/ IVA</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Já Recebido</div><div class="sc-val" style="color:var(--green)">€${fmt(_recebidoMes)}</div><div class="sc-sub">${_recsPagMes.length} recebimento${_recsPagMes.length===1?'':'s'}</div></div>
     </div>
   </div>`;
 

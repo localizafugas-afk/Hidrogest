@@ -5089,19 +5089,26 @@ function renderDashboard(){
   const _ivaPagarSub = _ivaPagar>=0 ? 'IVA receita − IVA despesas' : 'crédito de IVA a recuperar';
   // ── Faturado hoje (emitido hoje, recebido ou não) ──
   const _fatHoje     = recs.filter(r=>String(r.date||r.pagoEm||'').startsWith(_hojeKeyMes)).reduce((a,r)=>a+_fN(r.total),0);
+  // ── Guardar dados para o detalhe dos cards (clique) ──
+  window._dashDet = {
+    mesLabel:   `${_nomeMesAtual}/${_now.getFullYear()}`,
+    recsFatMes: _recsFatMes,   // recibos emitidos este mês
+    despMesArr: _despMesArr,    // despesas deste mês
+    recsPagMes: _recsPagMes,    // recebimentos com baixa este mês
+  };
   _mesBtn.innerHTML = `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
       <div style="font-weight:800;font-size:13px;color:var(--text2);">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
       <div style="font-size:12px;color:var(--text3);">Faturado hoje: <strong style="color:var(--accent);">€${fmt(_fatHoje)}</strong></div>
     </div>
     <div class="stats">
-      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_fatGrossMes)}</div><div class="sc-sub">faturada · ${_recsFatMes.length} fatura${_recsFatMes.length===1?'':'s'}</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_fatNetMes)}</div><div class="sc-sub">sem IVA</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA da Receita</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_ivaReceita)}</div><div class="sc-sub">liquidado</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">IVA das Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_ivaDesp)}</div><div class="sc-sub">dedutível</div></div>
+      <div class="sc" onclick="dashDetalhe('bruta-mes')" style="cursor:pointer" title="Ver faturas emitidas este mês"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_fatGrossMes)}</div><div class="sc-sub">faturada · ${_recsFatMes.length} fatura${_recsFatMes.length===1?'':'s'}</div></div>
+      <div class="sc" onclick="dashDetalhe('liq-mes')" style="cursor:pointer" title="Ver faturas emitidas este mês (sem IVA)"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_fatNetMes)}</div><div class="sc-sub">sem IVA</div></div>
+      <div class="sc" onclick="dashDetalhe('iva-rec-mes')" style="cursor:pointer" title="Ver IVA liquidado nas faturas deste mês"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA da Receita</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_ivaReceita)}</div><div class="sc-sub">liquidado</div></div>
+      <div class="sc" onclick="dashDetalhe('iva-desp-mes')" style="cursor:pointer" title="Ver IVA dedutível nas despesas deste mês"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">IVA das Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_ivaDesp)}</div><div class="sc-sub">dedutível</div></div>
       <div class="sc"><div class="sc-glow" style="background:${_ivaPagarCor}"></div><div class="sc-label">IVA a Pagar</div><div class="sc-val" style="color:${_ivaPagarCor}">€${fmt(_ivaPagar)}</div><div class="sc-sub">${_ivaPagarSub}</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">total c/ IVA</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Já Recebido</div><div class="sc-val" style="color:var(--green)">€${fmt(_recebidoMes)}</div><div class="sc-sub">${_recsPagMes.length} recebimento${_recsPagMes.length===1?'':'s'}</div></div>
+      <div class="sc" onclick="dashDetalhe('desp-mes')" style="cursor:pointer" title="Ver despesas registadas este mês"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">total c/ IVA</div></div>
+      <div class="sc" onclick="dashDetalhe('recebido-mes')" style="cursor:pointer" title="Ver recebimentos com baixa este mês"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Já Recebido</div><div class="sc-val" style="color:var(--green)">€${fmt(_recebidoMes)}</div><div class="sc-sub">${_recsPagMes.length} recebimento${_recsPagMes.length===1?'':'s'}</div></div>
     </div>
   </div>`;
 
@@ -5131,6 +5138,75 @@ function renderDashboard(){
     </div>`;
   const recent=[...recs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   dashTable.innerHTML=recent.map(r=>recRow(r,true)).join('')||`<tr><td colspan="9" class="empty">Sem recebimentos</td></tr>`;
+}
+
+// ── Detalhe de um card do dashboard (lista as faturas/despesas que compõem o valor) ──
+function dashDetalhe(tipo){
+  const D = window._dashDet;
+  if(!D){ alert('Recarregue o dashboard e tente novamente.'); return; }
+  const _fN = v => parseFloat(String(v||0).replace(',','.')) || 0;
+  const cfg = {
+    'bruta-mes':    { titulo:'Receita Bruta',    sub:`Faturas emitidas em ${D.mesLabel}`,               arr:D.recsFatMes, kind:'rec',  campo:'total', cor:'#2563eb' },
+    'liq-mes':      { titulo:'Receita Líquida',  sub:`Faturas emitidas em ${D.mesLabel} (sem IVA)`,     arr:D.recsFatMes, kind:'rec',  campo:'net',   cor:'#15803d' },
+    'iva-rec-mes':  { titulo:'IVA da Receita',   sub:`IVA liquidado nas faturas de ${D.mesLabel}`,      arr:D.recsFatMes, kind:'rec',  campo:'iva',   cor:'#ca8a04' },
+    'recebido-mes': { titulo:'Já Recebido',      sub:`Recebimentos com baixa em ${D.mesLabel}`,         arr:D.recsPagMes, kind:'rec',  campo:'total', cor:'#15803d' },
+    'desp-mes':     { titulo:'Despesas',         sub:`Despesas registadas em ${D.mesLabel} (c/ IVA)`,   arr:D.despMesArr, kind:'desp', campo:'gross', cor:'#dc2626' },
+    'iva-desp-mes': { titulo:'IVA das Despesas', sub:`IVA dedutível nas despesas de ${D.mesLabel}`,     arr:D.despMesArr, kind:'desp', campo:'iva',   cor:'#dc2626' },
+  };
+  const c = cfg[tipo];
+  if(!c) return;
+  const arr = (c.arr||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  const total = arr.reduce((a,x)=>a+_fN(x[c.campo]),0);
+
+  let thead, linhas, ncols;
+  if(c.kind==='rec'){
+    ncols = 7;
+    thead = `<thead><tr style="text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
+      <th style="padding:8px;">Data</th><th style="padding:8px;">Cliente</th><th style="padding:8px;">Serviço</th><th style="padding:8px;">Técnico</th>
+      <th style="padding:8px;text-align:right;">Líquido</th><th style="padding:8px;text-align:right;">IVA</th><th style="padding:8px;text-align:right;">Total</th></tr></thead>`;
+    linhas = arr.map(r=>`
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:8px;white-space:nowrap;">${fmtDate(r.date)}</td>
+        <td style="padding:8px;font-weight:600;">${r.client||'—'}</td>
+        <td style="padding:8px;color:#475569;">${r.service||'—'}</td>
+        <td style="padding:8px;color:#475569;">${r.tech||'—'}</td>
+        <td style="padding:8px;text-align:right;color:#15803d;font-family:monospace;">€${fmt(r.net)}</td>
+        <td style="padding:8px;text-align:right;color:#ca8a04;font-family:monospace;">€${fmt(r.iva)}</td>
+        <td style="padding:8px;text-align:right;font-weight:700;font-family:monospace;">€${fmt(r.total)}</td>
+      </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:40px 0;">Sem faturas neste período.</td></tr>`;
+  } else {
+    ncols = 6;
+    thead = `<thead><tr style="text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
+      <th style="padding:8px;">Data</th><th style="padding:8px;">Descrição</th><th style="padding:8px;">Fornecedor / Técnico</th>
+      <th style="padding:8px;text-align:right;">Líquido</th><th style="padding:8px;text-align:right;">IVA</th><th style="padding:8px;text-align:right;">Total</th></tr></thead>`;
+    linhas = arr.map(d=>`
+      <tr style="border-bottom:1px solid #f1f5f9;">
+        <td style="padding:8px;white-space:nowrap;">${fmtDate(d.date)}</td>
+        <td style="padding:8px;font-weight:600;">${d.descricao||d.categoria||d.tipo||'—'}</td>
+        <td style="padding:8px;color:#475569;">${d.fornecedor||d.tecnicoNome||'—'}</td>
+        <td style="padding:8px;text-align:right;font-family:monospace;">€${fmt(d.net)}</td>
+        <td style="padding:8px;text-align:right;color:#ca8a04;font-family:monospace;">€${fmt(d.iva)}</td>
+        <td style="padding:8px;text-align:right;font-weight:700;color:#dc2626;font-family:monospace;">€${fmt(d.gross)}</td>
+      </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px 0;">Sem despesas neste período.</td></tr>`;
+  }
+
+  document.getElementById('mo-dash-det')?.remove();
+  const mo=document.createElement('div');
+  mo.id='mo-dash-det';
+  mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;';
+  mo.onclick=(e)=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:900px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="padding:16px 20px;background:linear-gradient(135deg,#1e3a5f,#2c5282);color:#fff;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+      <div><div style="font-size:17px;font-weight:800;">${c.titulo} — €${fmt(total)}</div><div style="font-size:12px;opacity:.85;">${c.sub} · ${arr.length} registo${arr.length===1?'':'s'}</div></div>
+      <button onclick="document.getElementById('mo-dash-det').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;">×</button>
+    </div>
+    <div style="padding:8px 12px 16px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">${thead}<tbody>${linhas}</tbody>
+      <tfoot><tr style="border-top:2px solid #e2e8f0;"><td colspan="${ncols-1}" style="padding:12px 8px;text-align:right;font-weight:800;">Total</td><td style="padding:12px 8px;text-align:right;font-weight:800;color:${c.cor};font-family:monospace;">€${fmt(total)}</td></tr></tfoot>
+      </table>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
 }
 
 // ── Lista dos trabalhos de hoje: agendados + concluídos (filtrado por técnico quando aplicável) ──

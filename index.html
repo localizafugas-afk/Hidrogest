@@ -1278,9 +1278,12 @@ tr:hover td{background:rgba(37,99,235,.03);}
           <button class="btn btn-primary" onclick="openNewRecibo()">+ Novo Recebimento</button>
         </div>
         <div id="rec-home-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:32px;"></div>
-        <div style="text-align:center;">
+        <div style="text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
           <button onclick="recAbrirLista('all')" style="padding:12px 36px;background:#1e3a5f;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
             💰 Ver todos os recebimentos
+          </button>
+          <button onclick="abrirTrabalhosReceber()" style="padding:12px 36px;background:#b45309;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
+            📋 Trabalhos a Receber
           </button>
         </div>
       </div>
@@ -3582,6 +3585,18 @@ Localiza Fugas
   </div>
 </div>
 
+<!-- MODAL TRABALHOS A RECEBER -->
+<div class="mo" id="mo-trab-receber">
+  <div class="md" style="max-width:920px;">
+    <div class="mh"><div class="mh-title">📋 Trabalhos a Receber</div><button class="mc" onclick="closeMo('mo-trab-receber')">×</button></div>
+    <div class="mb" id="trab-receber-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeMo('mo-trab-receber')">Fechar</button>
+      <button class="btn btn-green" onclick="trabReceberImprimir()">🖨 Imprimir</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL DESPESA -->
 <div class="mo" id="mo-despesa">
   <div class="md">
@@ -5290,6 +5305,81 @@ function renderRecibos(){
   }
 }
 function recSetStatus(v){ recFilter=v||'all'; renderRecibos(); }
+
+// ── Relatório: Trabalhos a Receber (OS concluídas/faturáveis ainda por pagar) ──
+function _trabReceberDados(){
+  const num=(v)=>parseFloat(String(v==null?0:v).replace(',','.'))||0;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const linhas=[];
+  (getVisibleOrdens()||[]).forEach(o=>{
+    if(!['concluida','os_fechada'].includes(o.estado)) return;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
+    const recibo=(window.DB.recibos||[]).find(r=>r.osId===o.id);
+    const pago=(o.pago===true) || (recibo && recibo.status==='paid');
+    if(pago) return; // já pago → não é "a receber"
+    const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+    const nomeCli=cli?.nome || o.clienteNomeSnapshot || o.clienteNome || o.cliente || '—';
+    const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId);
+    const nomeSrv=srv?.nome || o.servicoNome || o.servicoId || '—';
+    const dataConc=String(o.concluidoEm||o.data||'').slice(0,10);
+    const dias = dataConc ? Math.floor((hoje - new Date(dataConc))/86400000) : 0;
+    const valor = num(o.total) || num(recibo?.total);
+    linhas.push({id:o.id, cliente:nomeCli, servico:nomeSrv, data:dataConc, dias, valor, temRecibo:!!recibo});
+  });
+  linhas.sort((a,b)=>String(a.data).localeCompare(String(b.data))); // mais antigos (mais em atraso) primeiro
+  return linhas;
+}
+function abrirTrabalhosReceber(){
+  const linhas=_trabReceberDados();
+  const total=linhas.reduce((s,l)=>s+l.valor,0);
+  const fmtN=(typeof fmt==='function')?fmt:(x=>Number(x).toFixed(2));
+  let html=`<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+    <div style="font-size:13px;color:#64748b;">OS concluídas e faturáveis ainda por receber</div>
+    <div style="font-size:15px;font-weight:800;color:#b45309;">${linhas.length} trabalho(s) · Total: €${fmtN(total)}</div></div>`;
+  if(!linhas.length){
+    html+=`<div style="padding:30px;text-align:center;color:#16a34a;font-weight:600;">✅ Não há trabalhos por receber.</div>`;
+  } else {
+    html+=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#1e3a5f;color:#fff;">
+        <th style="padding:7px 9px;text-align:left;">OS</th>
+        <th style="padding:7px 9px;text-align:left;">Cliente</th>
+        <th style="padding:7px 9px;text-align:left;">Serviço</th>
+        <th style="padding:7px 9px;text-align:center;">Concluída</th>
+        <th style="padding:7px 9px;text-align:center;">Dias</th>
+        <th style="padding:7px 9px;text-align:right;">Valor (c/IVA)</th>
+      </tr></thead><tbody>`;
+    linhas.forEach(l=>{
+      const atras=l.dias>30;
+      const dataFmt=l.data ? l.data.split('-').reverse().join('/') : '—';
+      html+=`<tr style="border-bottom:1px solid #e2e8f0;${atras?'background:#fff7ed;':''}">
+        <td style="padding:6px 9px;font-weight:700;">${l.id}${l.temRecibo?'':' <span title="Sem recibo lançado" style="color:#dc2626;">⚠</span>'}</td>
+        <td style="padding:6px 9px;">${l.cliente}</td>
+        <td style="padding:6px 9px;">${l.servico}</td>
+        <td style="padding:6px 9px;text-align:center;">${dataFmt}</td>
+        <td style="padding:6px 9px;text-align:center;font-weight:700;color:${atras?'#dc2626':'#475569'};">${l.dias}</td>
+        <td style="padding:6px 9px;text-align:right;font-family:monospace;font-weight:700;">€${fmtN(l.valor)}</td>
+      </tr>`;
+    });
+    html+=`</tbody><tfoot><tr style="background:#eff4f9;font-weight:800;">
+      <td colspan="5" style="padding:8px 9px;text-align:right;color:#1e3a5f;">TOTAL A RECEBER</td>
+      <td style="padding:8px 9px;text-align:right;font-family:monospace;color:#b45309;">€${fmtN(total)}</td>
+    </tr></tfoot></table></div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">⚠ = OS sem recibo lançado · linhas a laranja = mais de 30 dias por receber</div>`;
+  }
+  const body=document.getElementById('trab-receber-body');
+  if(body) body.innerHTML=html;
+  window._trabReceberHTML=html;
+  openMo('mo-trab-receber');
+}
+function trabReceberImprimir(){
+  const html=window._trabReceberHTML||document.getElementById('trab-receber-body')?.innerHTML||'';
+  const w=window.open('','_blank');
+  if(!w){ toast('Permite pop-ups para imprimir.','⚠️'); return; }
+  w.document.write(`<html><head><title>Trabalhos a Receber</title><meta charset="utf-8">
+    <style>body{font-family:Calibri,Arial,sans-serif;padding:24px;color:#1e293b;}h1{color:#1e3a5f;font-size:20px;margin:0 0 4px;}table{width:100%;border-collapse:collapse;}th,td{border-bottom:1px solid #e2e8f0;}</style></head>
+    <body><h1>Localiza Fugas — Trabalhos a Receber</h1><div style="font-size:12px;color:#64748b;margin-bottom:12px;">Emitido em ${new Date().toLocaleDateString('pt-PT')}</div>${html}</body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>{ try{w.print();}catch(e){} },300);
+}
 // ── Atalhos de período para análise de recebimentos ──────────
 function recDefinirPeriodo(tipo){
   const hoje=new Date();
@@ -20491,7 +20581,16 @@ async function agRecSalvar(){
     toast('Erro: contador de recibos não carregado. Aguarda e tenta de novo.','❌');
     return;
   }
-  const id=reuseId||'R'+String(nextRec).padStart(3,'0');
+  // Gerar id à prova de colisão: avançar o contador até um id LIVRE,
+  // para um recibo novo nunca escrever por cima de um recibo já existente.
+  let _nrUsed = nextRec;
+  let id;
+  if(reuseId){
+    id = reuseId;
+  } else {
+    while((window.DB.recibos||[]).some(r=>r.id==='R'+String(_nrUsed).padStart(3,'0'))) _nrUsed++;
+    id = 'R'+String(_nrUsed).padStart(3,'0');
+  }
   // Usar todos os técnicos da OS, não só o logado
   const tecNomes = o ? (o.tecnicos||[]).map(tid=>window.DB.users.find(u=>u.id===tid)?.name||'').filter(Boolean).join(', ') : window.currentUser.name;
   const rec={
@@ -20513,8 +20612,14 @@ async function agRecSalvar(){
     criadoPor:window.currentUser.id,
     criadoEm:new Date().toISOString(),
   };
-  await window.fsSet('recibos',id,rec);
-  if(isNew){ window.DB.nextRec=nextRec+1; await window.fsMeta('nextRec',nextRec+1); }
+  try{
+    await window.fsSet('recibos',id,rec);
+  }catch(err){
+    console.error('agRecSalvar — falha ao guardar recibo:', err);
+    toast('❌ Não foi possível guardar o recebimento. Verifica a ligação e tenta de novo — os dados não foram perdidos.','❌',6000);
+    return; // não fecha o modal, não avança o contador, não sincroniza a OS
+  }
+  if(isNew){ window.DB.nextRec=_nrUsed+1; await window.fsMeta('nextRec',_nrUsed+1); }
   // Sincronizar a OS → Faturada + Paga (reflecte na agenda e na ficha)
   if(osId){
     try{

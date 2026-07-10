@@ -5106,10 +5106,10 @@ function renderDashboard(){
   </div>`;
 
   dashStats.innerHTML=`${pendBanner}<div class="stats">
-    <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
-    <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
-    <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
-    <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(despTotal)}</div><div class="sc-sub">total de custos</div></div>
+    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
+    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
+    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
+    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(despTotal)}</div><div class="sc-sub">total de custos</div></div>
   </div>`;
   // Gráfico mensal
   const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];

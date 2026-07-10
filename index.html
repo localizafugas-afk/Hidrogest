@@ -5316,7 +5316,7 @@ function _trabReceberDados(){
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
     const recibo=(window.DB.recibos||[]).find(r=>r.osId===o.id);
     const pago=(o.pago===true) || (recibo && recibo.status==='paid');
-    if(pago) return; // já pago → não é "a receber"
+    if(pago) return;
     const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
     const nomeCli=cli?.nome || o.clienteNomeSnapshot || o.clienteNome || o.cliente || '—';
     const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId);
@@ -5324,33 +5324,61 @@ function _trabReceberDados(){
     const dataConc=String(o.concluidoEm||o.data||'').slice(0,10);
     const dias = dataConc ? Math.floor((hoje - new Date(dataConc))/86400000) : 0;
     const valor = num(o.total) || num(recibo?.total);
-    linhas.push({id:o.id, cliente:nomeCli, servico:nomeSrv, data:dataConc, dias, valor, temRecibo:!!recibo});
+    const tecIds=(o.tecnicos||[]);
+    linhas.push({id:o.id, cliente:nomeCli, servico:nomeSrv, data:dataConc, dias, valor, temRecibo:!!recibo, tecIds});
   });
-  linhas.sort((a,b)=>String(a.data).localeCompare(String(b.data))); // mais antigos (mais em atraso) primeiro
+  linhas.sort((a,b)=>String(a.data).localeCompare(String(b.data)));
   return linhas;
 }
 function abrirTrabalhosReceber(){
-  const linhas=_trabReceberDados();
-  const total=linhas.reduce((s,l)=>s+l.valor,0);
+  const dados=_trabReceberDados();
+  // Técnicos presentes nos trabalhos por receber
+  const tecMap=new Map();
+  dados.forEach(l=>l.tecIds.forEach(tid=>{ const n=(window.DB.users||[]).find(u=>u.id===tid)?.name; if(n) tecMap.set(tid,n); }));
+  const tecOpts=['<option value="">Todos os técnicos</option>'].concat([...tecMap.entries()].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,n])=>`<option value="${id}">${n}</option>`)).join('');
+  const payOpts='mb:MB,dinheiro:Numerário,mbway:MBWay,cheque:Cheque,transferencia:Transferência,entidade:Entidade';
+  window._trabPayOpts=payOpts;
+  const body=document.getElementById('trab-receber-body');
+  if(body) body.innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+      <input id="tb-q" placeholder="🔍 OS ou cliente" oninput="trabReceberRender()" style="font-size:12px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;width:150px;">
+      <select id="tb-tec" onchange="trabReceberRender()" style="font-size:12px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;">${tecOpts}</select>
+      <label style="font-size:11px;color:#64748b;">De <input id="tb-de" type="date" onchange="trabReceberRender()" style="font-size:12px;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius:8px;"></label>
+      <label style="font-size:11px;color:#64748b;">Até <input id="tb-ate" type="date" onchange="trabReceberRender()" style="font-size:12px;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius:8px;"></label>
+      <button onclick="document.getElementById('tb-q').value='';document.getElementById('tb-tec').value='';document.getElementById('tb-de').value='';document.getElementById('tb-ate').value='';trabReceberRender()" style="font-size:11px;padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;color:#475569;font-weight:700;">Limpar</button>
+    </div>
+    <div id="trab-receber-lista"></div>`;
+  trabReceberRender();
+  openMo('mo-trab-receber');
+}
+function trabReceberRender(){
   const fmtN=(typeof fmt==='function')?fmt:(x=>Number(x).toFixed(2));
-  let html=`<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-    <div style="font-size:13px;color:#64748b;">OS concluídas e faturáveis ainda por receber</div>
+  const q=(document.getElementById('tb-q')?.value||'').toLowerCase().trim();
+  const tec=document.getElementById('tb-tec')?.value||'';
+  const de=document.getElementById('tb-de')?.value||'';
+  const ate=document.getElementById('tb-ate')?.value||'';
+  let linhas=_trabReceberDados();
+  if(q)   linhas=linhas.filter(l=>String(l.id).toLowerCase().includes(q)||String(l.cliente).toLowerCase().includes(q));
+  if(tec) linhas=linhas.filter(l=>l.tecIds.includes(tec));
+  if(de)  linhas=linhas.filter(l=>(l.data||'')>=de);
+  if(ate) linhas=linhas.filter(l=>(l.data||'')<=ate);
+  const total=linhas.reduce((s,l)=>s+l.valor,0);
+  const payOpts=(window._trabPayOpts||'dinheiro:Numerário').split(',').map(p=>{const[v,t]=p.split(':');return `<option value="${v}">${t}</option>`;}).join('');
+  let html=`<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+    <div style="font-size:13px;color:#64748b;">OS concluídas e faturáveis por receber</div>
     <div style="font-size:15px;font-weight:800;color:#b45309;">${linhas.length} trabalho(s) · Total: €${fmtN(total)}</div></div>`;
   if(!linhas.length){
-    html+=`<div style="padding:30px;text-align:center;color:#16a34a;font-weight:600;">✅ Não há trabalhos por receber.</div>`;
+    html+=`<div style="padding:30px;text-align:center;color:#16a34a;font-weight:600;">✅ Nada a receber com estes filtros.</div>`;
   } else {
     html+=`<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr style="background:#1e3a5f;color:#fff;">
-        <th style="padding:7px 9px;text-align:left;">OS</th>
-        <th style="padding:7px 9px;text-align:left;">Cliente</th>
-        <th style="padding:7px 9px;text-align:left;">Serviço</th>
-        <th style="padding:7px 9px;text-align:center;">Concluída</th>
-        <th style="padding:7px 9px;text-align:center;">Dias</th>
-        <th style="padding:7px 9px;text-align:right;">Valor (c/IVA)</th>
-      </tr></thead><tbody>`;
+        <th style="padding:7px 9px;text-align:left;">OS</th><th style="padding:7px 9px;text-align:left;">Cliente</th>
+        <th style="padding:7px 9px;text-align:left;">Serviço</th><th style="padding:7px 9px;text-align:center;">Concl.</th>
+        <th style="padding:7px 9px;text-align:center;">Dias</th><th style="padding:7px 9px;text-align:right;">Valor</th>
+        <th style="padding:7px 9px;text-align:center;">Dar baixa</th></tr></thead><tbody>`;
     linhas.forEach(l=>{
       const atras=l.dias>30;
-      const dataFmt=l.data ? l.data.split('-').reverse().join('/') : '—';
+      const dataFmt=l.data?l.data.split('-').reverse().join('/'):'—';
       html+=`<tr style="border-bottom:1px solid #e2e8f0;${atras?'background:#fff7ed;':''}">
         <td style="padding:6px 9px;font-weight:700;">${l.id}${l.temRecibo?'':' <span title="Sem recibo lançado" style="color:#dc2626;">⚠</span>'}</td>
         <td style="padding:6px 9px;">${l.cliente}</td>
@@ -5358,25 +5386,74 @@ function abrirTrabalhosReceber(){
         <td style="padding:6px 9px;text-align:center;">${dataFmt}</td>
         <td style="padding:6px 9px;text-align:center;font-weight:700;color:${atras?'#dc2626':'#475569'};">${l.dias}</td>
         <td style="padding:6px 9px;text-align:right;font-family:monospace;font-weight:700;">€${fmtN(l.valor)}</td>
-      </tr>`;
+        <td style="padding:6px 9px;text-align:center;white-space:nowrap;">
+          <select id="tb-pay-${l.id}" style="font-size:11px;padding:3px 5px;border:1px solid #cbd5e1;border-radius:6px;">${payOpts}</select>
+          <button onclick="trabDarBaixa('${l.id}')" style="font-size:11px;padding:4px 9px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-weight:700;cursor:pointer;margin-left:4px;">✓ Baixa</button>
+        </td></tr>`;
     });
     html+=`</tbody><tfoot><tr style="background:#eff4f9;font-weight:800;">
       <td colspan="5" style="padding:8px 9px;text-align:right;color:#1e3a5f;">TOTAL A RECEBER</td>
-      <td style="padding:8px 9px;text-align:right;font-family:monospace;color:#b45309;">€${fmtN(total)}</td>
-    </tr></tfoot></table></div>
-    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">⚠ = OS sem recibo lançado · linhas a laranja = mais de 30 dias por receber</div>`;
+      <td style="padding:8px 9px;text-align:right;font-family:monospace;color:#b45309;">€${fmtN(total)}</td><td></td></tr></tfoot></table></div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">⚠ = OS sem recibo lançado · laranja = mais de 30 dias · "Dar baixa" marca como recebido e cria/atualiza o recibo.</div>`;
   }
-  const body=document.getElementById('trab-receber-body');
-  if(body) body.innerHTML=html;
+  const lista=document.getElementById('trab-receber-lista');
+  if(lista) lista.innerHTML=html;
   window._trabReceberHTML=html;
-  openMo('mo-trab-receber');
+}
+async function trabDarBaixa(osId){
+  const o=(window.DB.ordens||[]).find(x=>x.id===osId);
+  if(!o){ toast('OS não encontrada.','⚠️'); return; }
+  const pay=document.getElementById('tb-pay-'+osId)?.value||'dinheiro';
+  if(!confirm(`Dar baixa da OS ${osId} (marcar como recebido)?`)) return;
+  const num=(v)=>parseFloat(String(v==null?0:v).replace(',','.'))||0;
+  const reciboEx=(window.DB.recibos||[]).find(r=>r.osId===osId);
+  const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+  const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId);
+  // id à prova de colisão
+  let id, nrUsado=null;
+  if(reciboEx){ id=reciboEx.id; }
+  else {
+    let nr=window.DB.nextRec;
+    if(!nr||nr<1){ toast('Contador de recibos não carregado. Aguarda e tenta de novo.','❌'); return; }
+    while((window.DB.recibos||[]).some(r=>r.id==='R'+String(nr).padStart(3,'0'))) nr++;
+    id='R'+String(nr).padStart(3,'0'); nrUsado=nr;
+  }
+  const tecNomes=(o.tecnicos||[]).map(tid=>(window.DB.users||[]).find(u=>u.id===tid)?.name||'').filter(Boolean).join(', ');
+  const docType=(['mb','dinheiro','numerario','mbway','cheque'].includes(pay))?'fatura-recibo':'fatura';
+  const rec={ ...(reciboEx||{}),
+    id, osId,
+    client: cli?.nome || o.clienteNomeSnapshot || '—',
+    nif: cli?.nif || o.clienteNifSnapshot || '',
+    service: srv?.nome || o.servicoId || '',
+    date: today(),
+    net: num(o.net)||num(reciboEx?.net), iva: num(o.ivaVal)||num(reciboEx?.iva), total: num(o.total)||num(reciboEx?.total),
+    pay, bank:'', tech: tecNomes||window.currentUser?.name, techId:(o.tecnicos||[])[0]||window.currentUser?.id,
+    docType, status:'paid', pagoEm: today(),
+    criadoPor: reciboEx?.criadoPor||window.currentUser?.id, criadoEm: reciboEx?.criadoEm||new Date().toISOString(),
+  };
+  try{
+    await window.fsSet('recibos', id, rec);
+  }catch(err){ console.error('trabDarBaixa — falha:', err); toast('❌ Não foi possível dar baixa. Verifica a ligação e tenta de novo.','❌',5000); return; }
+  if(nrUsado!=null){ window.DB.nextRec=nrUsado+1; await window.fsMeta('nextRec', nrUsado+1); }
+  try{
+    const now=new Date().toISOString();
+    await window.fsSetMerge('ordens', osId, {faturaEmitida:true, faturaEmitidaEm:now, pago:true, pagoEm:now, pagoPor:window.currentUser?.id});
+    if(o){ o.faturaEmitida=true; o.pago=true; o.pagoEm=now; }
+  }catch(err){ console.warn('sync OS baixa',err); }
+  const idx=(window.DB.recibos||[]).findIndex(r=>r.id===id);
+  if(idx>=0) window.DB.recibos[idx]=rec; else (window.DB.recibos=window.DB.recibos||[]).push(rec);
+  toast(`✅ OS ${osId} recebida (recibo ${id}).`,'💰');
+  if(typeof auditLog==='function') auditLog('recibo_baixa_direta',`Baixa direta OS ${osId} → ${id} · €${rec.total}`);
+  if(typeof osRenderAgenda==='function') osRenderAgenda();
+  if(typeof renderRecibos==='function') renderRecibos();
+  trabReceberRender();
 }
 function trabReceberImprimir(){
-  const html=window._trabReceberHTML||document.getElementById('trab-receber-body')?.innerHTML||'';
+  const html=window._trabReceberHTML||document.getElementById('trab-receber-lista')?.innerHTML||'';
   const w=window.open('','_blank');
   if(!w){ toast('Permite pop-ups para imprimir.','⚠️'); return; }
   w.document.write(`<html><head><title>Trabalhos a Receber</title><meta charset="utf-8">
-    <style>body{font-family:Calibri,Arial,sans-serif;padding:24px;color:#1e293b;}h1{color:#1e3a5f;font-size:20px;margin:0 0 4px;}table{width:100%;border-collapse:collapse;}th,td{border-bottom:1px solid #e2e8f0;}</style></head>
+    <style>body{font-family:Calibri,Arial,sans-serif;padding:24px;color:#1e293b;}h1{color:#1e3a5f;font-size:20px;margin:0 0 4px;}table{width:100%;border-collapse:collapse;}th,td{border-bottom:1px solid #e2e8f0;} select,button{display:none;}</style></head>
     <body><h1>Localiza Fugas — Trabalhos a Receber</h1><div style="font-size:12px;color:#64748b;margin-bottom:12px;">Emitido em ${new Date().toLocaleDateString('pt-PT')}</div>${html}</body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>{ try{w.print();}catch(e){} },300);
 }

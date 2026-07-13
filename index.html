@@ -2686,8 +2686,10 @@ Localiza Fugas
   <div id="cfg-tab-modelos-proposta" style="display:none;min-width:600px;">
     <div class="sh">
       <div class="sh-title">📝 Modelos de Proposta</div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="cfgRestaurarModeloProposta()">↺ Restaurar original</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="cfgNovoModeloProposta()" style="color:#059669;border-color:#059669;">+ Novo Modelo</button>
+        <button class="btn btn-ghost btn-sm" id="mp-btn-restaurar" onclick="cfgRestaurarModeloProposta()">↺ Restaurar original</button>
+        <button class="btn btn-ghost btn-sm" id="mp-btn-eliminar" onclick="cfgEliminarModeloProposta()" style="display:none;color:#dc2626;border-color:#dc2626;">🗑 Eliminar modelo</button>
         <button class="btn btn-primary btn-sm" onclick="cfgGuardarModeloProposta()">💾 Guardar</button>
       </div>
     </div>
@@ -2699,6 +2701,25 @@ Localiza Fugas
       <label>Serviço</label>
       <select class="fs" id="mp-select" onchange="cfgCarregarModeloProposta(this.value)"></select>
       <div id="mp-aliases" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+    </div>
+
+    <div class="fgrid" style="max-width:480px;">
+      <div class="fg">
+        <label>Tipo de cobrança <span style="font-size:10px;color:var(--text3);">(define a tabela de preços)</span></label>
+        <select class="fs" id="mp-tipo">
+          <option value="hora">Por hora (1.ª hora + hora adicional)</option>
+          <option value="metro_linear">Por metro linear</option>
+          <option value="metro_quadrado">Por metro quadrado</option>
+          <option value="metro_escalonado">Metro escalonado</option>
+          <option value="spray_cipp">Spray Epóxi / CIPP</option>
+          <option value="unidade">Por unidade</option>
+          <option value="valor_fixo">Valor fixo</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>IVA sugerido</label>
+        <select class="fs" id="mp-iva"><option value="23">23%</option><option value="6">6%</option></select>
+      </div>
     </div>
 
     <div class="fg">
@@ -5070,53 +5091,27 @@ function renderDashboard(){
   const _mesAtualKey = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
   const _nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const _nomeMesAtual = _nomesMes[_now.getMonth()];
-  const _hojeKeyMes = _now.toISOString().slice(0,10);
-  // ── Faturação do mês: recibos EMITIDOS no mês (recebidos ou não) ──
-  const _recsFatMes  = recs.filter(r=>String(r.date||r.pagoEm||'').startsWith(_mesAtualKey));
-  const _fatNetMes   = _recsFatMes.reduce((a,r)=>a+_fN(r.net),0);
-  const _fatGrossMes = _recsFatMes.reduce((a,r)=>a+_fN(r.total),0);
-  const _ivaReceita  = _recsFatMes.reduce((a,r)=>a+_fN(r.iva),0);
-  // ── Já recebido no mês (por data de pagamento) ──
-  const _recsPagMes  = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
-  const _recebidoMes = _recsPagMes.reduce((a,r)=>a+_fN(r.total),0);
-  // ── Despesas do mês + IVA dedutível (suportado nas compras) ──
-  const _despMesArr  = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey));
-  const _despMes     = _despMesArr.reduce((a,d)=>a+_fN(d.gross),0);
-  const _ivaDesp     = _despMesArr.reduce((a,d)=>a+_fN(d.iva),0);
-  // ── IVA a pagar ao Estado = IVA liquidado (receita) − IVA dedutível (despesas) ──
-  const _ivaPagar    = _ivaReceita - _ivaDesp;
-  const _ivaPagarCor = _ivaPagar>=0 ? 'var(--yellow)' : 'var(--green)';
-  const _ivaPagarSub = _ivaPagar>=0 ? 'IVA receita − IVA despesas' : 'crédito de IVA a recuperar';
-  // ── Faturado hoje (emitido hoje, recebido ou não) ──
-  const _fatHoje     = recs.filter(r=>String(r.date||r.pagoEm||'').startsWith(_hojeKeyMes)).reduce((a,r)=>a+_fN(r.total),0);
-  // ── Guardar dados para o detalhe dos cards (clique) ──
-  window._dashDet = {
-    mesLabel:   `${_nomeMesAtual}/${_now.getFullYear()}`,
-    recsFatMes: _recsFatMes,   // recibos emitidos este mês
-    despMesArr: _despMesArr,    // despesas deste mês
-    recsPagMes: _recsPagMes,    // recebimentos com baixa este mês
-  };
+  const _recsMes = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
+  const _totNetMes = _recsMes.reduce((a,r)=>a+r.net,0);
+  const _totGrossMes = _recsMes.reduce((a,r)=>a+r.total,0);
+  const _totIVAMes = _recsMes.reduce((a,r)=>a+r.iva,0);
+  const _despMes = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey)).reduce((a,d)=>a+_fN(d.gross),0);
+  const _ordensConcMes = getVisibleOrdens().filter(o=>o.estado==='concluida' && String(o.data||'').startsWith(_mesAtualKey)).length;
   _mesBtn.innerHTML = `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-      <div style="font-weight:800;font-size:13px;color:var(--text2);">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
-      <div style="font-size:12px;color:var(--text3);">Faturado hoje: <strong style="color:var(--accent);">€${fmt(_fatHoje)}</strong></div>
-    </div>
+    <div style="font-weight:800;font-size:13px;color:var(--text2);margin-bottom:10px;">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
     <div class="stats">
-      <div class="sc" onclick="dashDetalhe('bruta-mes')" style="cursor:pointer" title="Ver faturas emitidas este mês"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_fatGrossMes)}</div><div class="sc-sub">faturada · ${_recsFatMes.length} fatura${_recsFatMes.length===1?'':'s'}</div></div>
-      <div class="sc" onclick="dashDetalhe('liq-mes')" style="cursor:pointer" title="Ver faturas emitidas este mês (sem IVA)"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_fatNetMes)}</div><div class="sc-sub">sem IVA</div></div>
-      <div class="sc" onclick="dashDetalhe('iva-rec-mes')" style="cursor:pointer" title="Ver IVA liquidado nas faturas deste mês"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA da Receita</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_ivaReceita)}</div><div class="sc-sub">liquidado</div></div>
-      <div class="sc" onclick="dashDetalhe('iva-desp-mes')" style="cursor:pointer" title="Ver IVA dedutível nas despesas deste mês"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">IVA das Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_ivaDesp)}</div><div class="sc-sub">dedutível</div></div>
-      <div class="sc"><div class="sc-glow" style="background:${_ivaPagarCor}"></div><div class="sc-label">IVA a Pagar</div><div class="sc-val" style="color:${_ivaPagarCor}">€${fmt(_ivaPagar)}</div><div class="sc-sub">${_ivaPagarSub}</div></div>
-      <div class="sc" onclick="dashDetalhe('desp-mes')" style="cursor:pointer" title="Ver despesas registadas este mês"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">total c/ IVA</div></div>
-      <div class="sc" onclick="dashDetalhe('recebido-mes')" style="cursor:pointer" title="Ver recebimentos com baixa este mês"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Já Recebido</div><div class="sc-val" style="color:var(--green)">€${fmt(_recebidoMes)}</div><div class="sc-sub">${_recsPagMes.length} recebimento${_recsPagMes.length===1?'':'s'}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_totNetMes)}</div><div class="sc-sub">sem IVA · ${_recsMes.length} recebimento${_recsMes.length===1?'':'s'}</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_totGrossMes)}</div><div class="sc-sub">com IVA incluído</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_totIVAMes)}</div><div class="sc-sub">a entregar ao Estado</div></div>
+      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">${_ordensConcMes} trabalho${_ordensConcMes===1?'':'s'} concluído${_ordensConcMes===1?'':'s'}</div></div>
     </div>
   </div>`;
 
   dashStats.innerHTML=`${pendBanner}<div class="stats">
-    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
-    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
-    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
-    <div class="sc" onclick="navigate('relatorios')" style="cursor:pointer" title="Ver Relatórios"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(despTotal)}</div><div class="sc-sub">total de custos</div></div>
+    <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
+    <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
+    <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
+    <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(despTotal)}</div><div class="sc-sub">total de custos</div></div>
   </div>`;
   // Gráfico mensal
   const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -5138,75 +5133,6 @@ function renderDashboard(){
     </div>`;
   const recent=[...recs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   dashTable.innerHTML=recent.map(r=>recRow(r,true)).join('')||`<tr><td colspan="9" class="empty">Sem recebimentos</td></tr>`;
-}
-
-// ── Detalhe de um card do dashboard (lista as faturas/despesas que compõem o valor) ──
-function dashDetalhe(tipo){
-  const D = window._dashDet;
-  if(!D){ alert('Recarregue o dashboard e tente novamente.'); return; }
-  const _fN = v => parseFloat(String(v||0).replace(',','.')) || 0;
-  const cfg = {
-    'bruta-mes':    { titulo:'Receita Bruta',    sub:`Faturas emitidas em ${D.mesLabel}`,               arr:D.recsFatMes, kind:'rec',  campo:'total', cor:'#2563eb' },
-    'liq-mes':      { titulo:'Receita Líquida',  sub:`Faturas emitidas em ${D.mesLabel} (sem IVA)`,     arr:D.recsFatMes, kind:'rec',  campo:'net',   cor:'#15803d' },
-    'iva-rec-mes':  { titulo:'IVA da Receita',   sub:`IVA liquidado nas faturas de ${D.mesLabel}`,      arr:D.recsFatMes, kind:'rec',  campo:'iva',   cor:'#ca8a04' },
-    'recebido-mes': { titulo:'Já Recebido',      sub:`Recebimentos com baixa em ${D.mesLabel}`,         arr:D.recsPagMes, kind:'rec',  campo:'total', cor:'#15803d' },
-    'desp-mes':     { titulo:'Despesas',         sub:`Despesas registadas em ${D.mesLabel} (c/ IVA)`,   arr:D.despMesArr, kind:'desp', campo:'gross', cor:'#dc2626' },
-    'iva-desp-mes': { titulo:'IVA das Despesas', sub:`IVA dedutível nas despesas de ${D.mesLabel}`,     arr:D.despMesArr, kind:'desp', campo:'iva',   cor:'#dc2626' },
-  };
-  const c = cfg[tipo];
-  if(!c) return;
-  const arr = (c.arr||[]).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  const total = arr.reduce((a,x)=>a+_fN(x[c.campo]),0);
-
-  let thead, linhas, ncols;
-  if(c.kind==='rec'){
-    ncols = 7;
-    thead = `<thead><tr style="text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
-      <th style="padding:8px;">Data</th><th style="padding:8px;">Cliente</th><th style="padding:8px;">Serviço</th><th style="padding:8px;">Técnico</th>
-      <th style="padding:8px;text-align:right;">Líquido</th><th style="padding:8px;text-align:right;">IVA</th><th style="padding:8px;text-align:right;">Total</th></tr></thead>`;
-    linhas = arr.map(r=>`
-      <tr style="border-bottom:1px solid #f1f5f9;">
-        <td style="padding:8px;white-space:nowrap;">${fmtDate(r.date)}</td>
-        <td style="padding:8px;font-weight:600;">${r.client||'—'}</td>
-        <td style="padding:8px;color:#475569;">${r.service||'—'}</td>
-        <td style="padding:8px;color:#475569;">${r.tech||'—'}</td>
-        <td style="padding:8px;text-align:right;color:#15803d;font-family:monospace;">€${fmt(r.net)}</td>
-        <td style="padding:8px;text-align:right;color:#ca8a04;font-family:monospace;">€${fmt(r.iva)}</td>
-        <td style="padding:8px;text-align:right;font-weight:700;font-family:monospace;">€${fmt(r.total)}</td>
-      </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:40px 0;">Sem faturas neste período.</td></tr>`;
-  } else {
-    ncols = 6;
-    thead = `<thead><tr style="text-align:left;color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.4px;">
-      <th style="padding:8px;">Data</th><th style="padding:8px;">Descrição</th><th style="padding:8px;">Fornecedor / Técnico</th>
-      <th style="padding:8px;text-align:right;">Líquido</th><th style="padding:8px;text-align:right;">IVA</th><th style="padding:8px;text-align:right;">Total</th></tr></thead>`;
-    linhas = arr.map(d=>`
-      <tr style="border-bottom:1px solid #f1f5f9;">
-        <td style="padding:8px;white-space:nowrap;">${fmtDate(d.date)}</td>
-        <td style="padding:8px;font-weight:600;">${d.descricao||d.categoria||d.tipo||'—'}</td>
-        <td style="padding:8px;color:#475569;">${d.fornecedor||d.tecnicoNome||'—'}</td>
-        <td style="padding:8px;text-align:right;font-family:monospace;">€${fmt(d.net)}</td>
-        <td style="padding:8px;text-align:right;color:#ca8a04;font-family:monospace;">€${fmt(d.iva)}</td>
-        <td style="padding:8px;text-align:right;font-weight:700;color:#dc2626;font-family:monospace;">€${fmt(d.gross)}</td>
-      </tr>`).join('') || `<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:40px 0;">Sem despesas neste período.</td></tr>`;
-  }
-
-  document.getElementById('mo-dash-det')?.remove();
-  const mo=document.createElement('div');
-  mo.id='mo-dash-det';
-  mo.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;';
-  mo.onclick=(e)=>{ if(e.target===mo) mo.remove(); };
-  mo.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:900px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
-    <div style="padding:16px 20px;background:linear-gradient(135deg,#1e3a5f,#2c5282);color:#fff;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
-      <div><div style="font-size:17px;font-weight:800;">${c.titulo} — €${fmt(total)}</div><div style="font-size:12px;opacity:.85;">${c.sub} · ${arr.length} registo${arr.length===1?'':'s'}</div></div>
-      <button onclick="document.getElementById('mo-dash-det').remove()" style="background:rgba(255,255,255,.2);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;">×</button>
-    </div>
-    <div style="padding:8px 12px 16px;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">${thead}<tbody>${linhas}</tbody>
-      <tfoot><tr style="border-top:2px solid #e2e8f0;"><td colspan="${ncols-1}" style="padding:12px 8px;text-align:right;font-weight:800;">Total</td><td style="padding:12px 8px;text-align:right;font-weight:800;color:${c.cor};font-family:monospace;">€${fmt(total)}</td></tr></tfoot>
-      </table>
-    </div>
-  </div>`;
-  document.body.appendChild(mo);
 }
 
 // ── Lista dos trabalhos de hoje: agendados + concluídos (filtrado por técnico quando aplicável) ──
@@ -29122,20 +29048,34 @@ const PROPOSTA_MODELOS_ALIASES = {
 // Aplica customizações guardadas no Firestore (meta/propostaModelosCustom) sobre os textos por defeito.
 // Chamado no boot, depois de loadMeta(). Como os aliases apontam para o MESMO objeto, basta
 // alterar o modelo base para que todos os aliases fiquem automaticamente actualizados.
+// Um modelo diz-se "personalizado" (criado pelo utilizador) quando não existe
+// no snapshot original do código. Só esses podem ser eliminados.
+function propModeloEhNovo(nome){ return !PROPOSTA_MODELOS_DEFAULT[nome]; }
+
 function propostaAplicarCustomizacoes(){
   const custom = window.DB.propostaModelosCustom || {};
   Object.keys(custom).forEach(nome=>{
-    if(PROPOSTA_MODELOS[nome]) Object.assign(PROPOSTA_MODELOS[nome], custom[nome]);
+    if(PROPOSTA_MODELOS[nome]){
+      // Modelo já existente no código — aplicar apenas as alterações de texto
+      Object.assign(PROPOSTA_MODELOS[nome], custom[nome]);
+    } else {
+      // Modelo NOVO, criado pelo utilizador via Configurações — recriar do zero
+      PROPOSTA_MODELOS[nome] = { ...custom[nome] };
+      if(!PROPOSTA_MODELOS_LISTA.includes(nome)) PROPOSTA_MODELOS_LISTA.push(nome);
+    }
   });
 }
 
 function cfgRenderModelosProposta(){
   const sel = document.getElementById('mp-select');
   if(!sel) return;
-  if(!sel.options.length){
-    sel.innerHTML = PROPOSTA_MODELOS_LISTA.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
-  }
-  cfgCarregarModeloProposta(sel.value || PROPOSTA_MODELOS_LISTA[0]);
+  const anterior = sel.value;
+  sel.innerHTML = PROPOSTA_MODELOS_LISTA.map(n=>{
+    const marca = propModeloEhNovo(n) ? ' ✎' : '';
+    return `<option value="${n.replace(/"/g,'&quot;')}">${n}${marca}</option>`;
+  }).join('');
+  const escolher = (anterior && PROPOSTA_MODELOS[anterior]) ? anterior : PROPOSTA_MODELOS_LISTA[0];
+  cfgCarregarModeloProposta(escolher);
 }
 
 function cfgCarregarModeloProposta(nome){
@@ -29147,9 +29087,23 @@ function cfgCarregarModeloProposta(nome){
   document.getElementById('mp-descritivo').value   = m.descritivo || '';
   document.getElementById('mp-obs').value          = m.obs || '';
   document.getElementById('mp-condicoes').value    = (m.condicoes||[]).join('\n');
+  const tipoEl = document.getElementById('mp-tipo');
+  if(tipoEl) tipoEl.value = m.tipoCobranca || (m.valorFixo ? 'valor_fixo' : 'hora');
+  const ivaEl = document.getElementById('mp-iva');
+  if(ivaEl) ivaEl.value = (m.iva !== undefined ? m.iva : 23);
+
+  const novo = propModeloEhNovo(nome);
+  const btnR = document.getElementById('mp-btn-restaurar');
+  const btnE = document.getElementById('mp-btn-eliminar');
+  if(btnR) btnR.style.display = novo ? 'none' : '';
+  if(btnE) btnE.style.display = novo ? '' : 'none';
+
   const aliases = PROPOSTA_MODELOS_ALIASES[nome] || [];
   const aliasEl = document.getElementById('mp-aliases');
-  if(aliasEl) aliasEl.textContent = aliases.length ? `Também usado para: ${aliases.join(', ')}` : '';
+  if(aliasEl){
+    if(novo) aliasEl.textContent = `Modelo criado por si. Para ser aplicado, o serviço tem de chamar-se exactamente "${nome}".`;
+    else aliasEl.textContent = aliases.length ? `Também usado para: ${aliases.join(', ')}` : '';
+  }
 }
 
 async function cfgGuardarModeloProposta(){
@@ -29161,8 +29115,11 @@ async function cfgGuardarModeloProposta(){
     descritivo:   document.getElementById('mp-descritivo').value,
     obs:          document.getElementById('mp-obs').value,
     condicoes:    document.getElementById('mp-condicoes').value.split('\n').map(s=>s.trim()).filter(Boolean),
+    tipoCobranca: document.getElementById('mp-tipo')?.value || 'hora',
+    iva:          parseInt(document.getElementById('mp-iva')?.value) || 23,
   };
   // Aplicar imediatamente em memória (afecta também todos os aliases, por partilharem o mesmo objeto)
+  if(!PROPOSTA_MODELOS[nome]) PROPOSTA_MODELOS[nome] = {};
   Object.assign(PROPOSTA_MODELOS[nome], override);
   // Persistir no Firestore
   const custom = { ...(window.DB.propostaModelosCustom||{}) };
@@ -29172,12 +29129,61 @@ async function cfgGuardarModeloProposta(){
   toast('✅ Modelo de proposta guardado!','📝');
 }
 
+// ── Criar um modelo de proposta novo (serviços que não existem no código) ──
+async function cfgNovoModeloProposta(){
+  const nome = (prompt('Nome do novo modelo de proposta.\n\nIMPORTANTE: tem de ser EXACTAMENTE igual ao nome do serviço criado em ⚙️ Serviços, senão a proposta não o encontra.') || '').trim();
+  if(!nome) return;
+  if(PROPOSTA_MODELOS[nome]){
+    alert(`Já existe um modelo chamado "${nome}". Selecione-o na lista para o editar.`);
+    cfgCarregarModeloProposta(nome);
+    return;
+  }
+  const novo = {
+    intro: `Apresentamos a seguinte proposta para a realização do serviço de ${nome}.`,
+    procedimento: '',
+    descritivo: '• Mão de obra especializada\n• Deslocação incluída\n• Relatório de intervenção',
+    obs: 'Esta proposta tem validade de 30 dias a partir da data de emissão.',
+    condicoes: ['Validade da proposta: 30 dias','Deslocação incluída'],
+    tipoCobranca: 'hora',
+    iva: 23,
+  };
+  PROPOSTA_MODELOS[nome] = novo;
+  if(!PROPOSTA_MODELOS_LISTA.includes(nome)) PROPOSTA_MODELOS_LISTA.push(nome);
+  // Persistir já, para não se perder se o utilizador sair sem guardar
+  const custom = { ...(window.DB.propostaModelosCustom||{}) };
+  custom[nome] = novo;
+  window.DB.propostaModelosCustom = custom;
+  await window.fsMeta('propostaModelosCustom', custom);
+  cfgRenderModelosProposta();
+  cfgCarregarModeloProposta(nome);
+  toast('✅ Modelo criado! Edite os textos e clique em Guardar.','📝');
+}
+
+async function cfgEliminarModeloProposta(){
+  const nome = document.getElementById('mp-select')?.value;
+  if(!nome) return;
+  if(!propModeloEhNovo(nome)){
+    alert('Só é possível eliminar modelos criados por si. Nos modelos originais, use "Restaurar original".');
+    return;
+  }
+  if(!confirm(`Eliminar definitivamente o modelo "${nome}"?\n\nO serviço continuará a existir, mas as propostas passarão a sair com texto genérico.`)) return;
+  delete PROPOSTA_MODELOS[nome];
+  const i = PROPOSTA_MODELOS_LISTA.indexOf(nome);
+  if(i >= 0) PROPOSTA_MODELOS_LISTA.splice(i,1);
+  const custom = { ...(window.DB.propostaModelosCustom||{}) };
+  delete custom[nome];
+  window.DB.propostaModelosCustom = custom;
+  await window.fsMeta('propostaModelosCustom', custom);
+  cfgRenderModelosProposta();
+  toast('🗑 Modelo eliminado.','📝');
+}
+
 async function cfgRestaurarModeloProposta(){
   const nome = document.getElementById('mp-select')?.value;
   if(!nome) return;
-  if(!confirm(`Restaurar o texto original de "${nome}"? Esta ação substitui o texto personalizado.`)) return;
   const def = PROPOSTA_MODELOS_DEFAULT[nome];
-  if(!def) return;
+  if(!def){ alert('Este modelo foi criado por si e não tem versão original. Use "Eliminar modelo".'); return; }
+  if(!confirm(`Restaurar o texto original de "${nome}"? Esta ação substitui o texto personalizado.`)) return;
   Object.assign(PROPOSTA_MODELOS[nome], def);
   const custom = { ...(window.DB.propostaModelosCustom||{}) };
   delete custom[nome];

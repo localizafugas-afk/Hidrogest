@@ -31437,5 +31437,709 @@ function altvalRender(){
   cont.innerHTML = h;
 }
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   HIDROGEST — MÓDULO DE CONFORMIDADE DO TÉCNICO  (v1.0)
+   ───────────────────────────────────────────────────────────────────────────
+   Este bloco corre DEPOIS de todos os outros. Não altera nenhuma função
+   existente: envolve-as ("wrapping"). Se algo aqui falhar, a app continua
+   a funcionar exactamente como antes.
+
+   REGRAS
+   1. Chega ao cliente e NÃO inicia a OS (GPS: 150m durante 5 min)
+        → BLOQUEIA o ecrã. Só liberta quando carregar em "Iniciar trabalho".
+   2. Fecha a OS sem NUNCA ter carregado em "Iniciar" (horas metidas à mão)
+        → OCORRÊNCIA "cronómetro não iniciado".
+   3. Abandona o local com a OS aberta e sem assinatura (300m durante 5 min)
+        → BLOQUEIA o ecrã + ALARME. Só liberta no ecrã de fecho da OS.
+   4. Relatório pendente há mais de 24h
+        → AVISA e deixa trabalhar, mas regista ocorrência e escala.
+   5. Todas as ocorrências entram no cálculo da comissão (escala já existente).
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+/* ── Configuração ─────────────────────────────────────────────────────── */
+const CONF = {
+  GEO_RAIO_M:        150,      // raio para considerar "está no cliente"
+  GEO_MIN:           5,        // minutos no local antes de bloquear
+  ABANDONO_M:        300,      // distância que conta como "foi-se embora"
+  ABANDONO_MIN:      5,        // minutos afastado antes de bloquear
+  PRECISAO_MAX_M:    150,      // leituras GPS piores que isto são ignoradas
+  RELATORIO_H:       24,       // horas até o relatório contar como pendente
+  ESCALA_SUPERVISOR: 3,        // 3ª ocorrência do mês → avisa supervisor
+  ESCALA_ADMIN:      5,        // 5ª ocorrência do mês → avisa administração
+};
+
+const CONF_TIPOS = {
+  CRONO_NAO_INICIADO:   { peso:1, label:'Cronómetro não iniciado' },
+  RELATORIO_ATRASADO:   { peso:2, label:'Relatório em atraso (+24h)' },
+  ABANDONO_SEM_FECHO:   { peso:2, label:'Saiu do local sem fechar a OS' },
+  GPS_OS_NAO_INICIADA:  { peso:1, label:'No cliente sem iniciar a OS' },
+  BYPASS_BLOQUEIO:      { peso:3, label:'Desbloqueio de emergência usado' },
+};
+
+const cfMes  = () => new Date().toISOString().slice(0,7);
+const cfUser = () => window.currentUser;
+const cfEhTec= () => window.currentUser?.role === 'tecnico';
+const cfOS   = (id) => (window.DB.ordens||[]).find(o=>o.id===id);
+
+/* ═══ 1. ESTADO DO RELATÓRIO ═══════════════════════════════════════════ */
+window.confEstadoRelatorio = function(osId){
+  const rel = (window.DB.relatorios_pesquisa||[]).find(r=>r.id===osId);
+  const os  = cfOS(osId) || {};
+  const temCampos     = !!(rel && rel.campos && rel.campos.tipoProblema);
+  const temAssinatura = !!(os.assinaturaCliente);
+  if(rel?.estado === 'enviado')          return 'concluido';
+  if(temCampos && temAssinatura)         return 'concluido';
+  if(temAssinatura && !temCampos)        return 'em_elaboracao';
+  if(temCampos && !temAssinatura)        return 'em_elaboracao';
+  return 'sem_relatorio';
+};
+
+/* ═══ 2. OCORRÊNCIAS ═══════════════════════════════════════════════════ */
+window.confRegistar = async function(tipo, osId, detalhe){
+  try{
+    const u = cfUser(); if(!u) return null;
+    const def = CONF_TIPOS[tipo]; if(!def) return null;
+    const mes = cfMes();
+
+    // Evitar duplicados: mesma OS + mesmo tipo só conta uma vez
+    const chave = `${tipo}_${osId}`;
+    const uDoc  = (window.DB.users||[]).find(x=>x.id===u.id) || {};
+    const conf  = uDoc.conformidade || {};
+    if((conf.registadas||[]).includes(chave)) return null;
+
+    const mesObj = (conf.ocorrenciasMes && conf.ocorrenciasMes[mes]) || {total:0, pontos:0, tipos:{}};
+    mesObj.total  = (mesObj.total||0) + 1;
+    mesObj.pontos = (mesObj.pontos||0) + def.peso;
+    mesObj.tipos[tipo] = (mesObj.tipos[tipo]||0) + 1;
+
+    await window.fsSetMerge('users', u.id, {
+      conformidade: {
+        ocorrenciasMes: { [mes]: mesObj },
+        registadas: [...(conf.registadas||[]), chave].slice(-300),
+      }
+    });
+
+    // Registo detalhado (para o painel do admin)
+    const oid = `${u.id}_${Date.now()}`;
+    await window.fsSet('ocorrencias', oid, {
+      id: oid, tecnicoId: u.id, tecnicoNome: u.name||'', tipo, osId: osId||'',
+      label: def.label, peso: def.peso, detalhe: detalhe||'', mes,
+      criadoEm: new Date().toISOString(), resolvido: false,
+    });
+
+    if(typeof auditLog==='function')
+      auditLog('conformidade', `${u.name}: ${def.label} — OS ${osId} — ${detalhe||''} (${mesObj.total}ª do mês)`);
+
+    await confEscalar(mesObj.total, def.label, osId);
+    confMostrarAviso(mesObj.total, def.label);
+    return mesObj;
+  }catch(e){ console.warn('[CONF] confRegistar falhou:', e); return null; }
+};
+
+async function confEscalar(total, label, osId){
+  const u = cfUser();
+  const alvos = [];
+  if(total >= CONF.ESCALA_SUPERVISOR)
+    alvos.push(...(window.DB.users||[]).filter(x=>['supervisor','gerente'].includes(x.role)).map(x=>x.id));
+  if(total >= CONF.ESCALA_ADMIN)
+    alvos.push(...(window.DB.users||[]).filter(x=>x.role==='admin').map(x=>x.id));
+
+  if(alvos.length && typeof window.pushEnviarParaTecnicos==='function'){
+    window.pushEnviarParaTecnicos(
+      [...new Set(alvos)],
+      `⚠️ Conformidade — ${u?.name||''}`,
+      `${label} (${total}ª ocorrência este mês) — OS ${osId}`,
+      osId
+    );
+  }
+}
+
+/* Mensagem que o técnico vê. Informa — não anuncia sanções. */
+function confMostrarAviso(total, label){
+  let msg;
+  if(total >= CONF.ESCALA_ADMIN){
+    msg = `${label}.\n\nEsta é a ${total}ª ocorrência registada este mês. `
+        + `A administração foi notificada e a situação será analisada.\n\n`
+        + `As ocorrências entram no cálculo da comissão mensal.`;
+  } else if(total >= CONF.ESCALA_SUPERVISOR){
+    msg = `${label}.\n\n${total}ª ocorrência este mês. O supervisor foi notificado.\n\n`
+        + `As ocorrências reduzem a comissão.`;
+  } else {
+    msg = `${label}.\n\nOcorrência registada (${total} este mês).\n\n`
+        + `As ocorrências reduzem a comissão mensal.`;
+  }
+  alert('⚠️ ' + msg);
+}
+
+/* ═══ 3. BLOQUEIO (persistido no Firestore) ════════════════════════════ */
+window.confBloquear = async function(motivo, osId, ecra){
+  const u = cfUser(); if(!u) return;
+  const bloqueio = { ativo:true, motivo, osId:osId||'', ecra, criadoEm:new Date().toISOString() };
+  try{ await window.fsSetMerge('users', u.id, { bloqueio }); }catch(e){ console.warn('[CONF]', e); }
+  confRenderBloqueio(bloqueio);
+};
+
+window.confDesbloquear = async function(justificacao){
+  const u = cfUser(); if(!u) return;
+  const b = window._confBloqueioAtivo;
+  if(justificacao) await window.confRegistar('BYPASS_BLOQUEIO', b?.osId||'-', justificacao);
+  try{
+    await window.fsSetMerge('users', u.id, {
+      bloqueio: { ativo:false, fechadoEm:new Date().toISOString(), justificacao: justificacao||'' }
+    });
+  }catch(e){ console.warn('[CONF]', e); }
+  window._confBloqueioAtivo = null;
+  confAlarmeParar();
+  document.getElementById('conf-overlay')?.remove();
+};
+
+window._confBloqueioAtivo = null;
+
+function confRenderBloqueio(b){
+  window._confBloqueioAtivo = b;
+  if(document.getElementById('conf-overlay')){ confAlarmeTocar(); return; }
+
+  const labelAcao = b.ecra==='iniciar' ? '▶️ INICIAR TRABALHO' : '✍️ IR PARA O FECHO DA OS';
+  const el = document.createElement('div');
+  el.id = 'conf-overlay';
+  el.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:linear-gradient(160deg,#991b1b,#7f1d1d);'
+    + 'color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;'
+    + 'text-align:center;font-family:system-ui,-apple-system,sans-serif;-webkit-user-select:none;user-select:none;';
+  el.innerHTML =
+      '<div style="font-size:58px;line-height:1;margin-bottom:14px;">⚠️</div>'
+    + '<h2 style="margin:0 0 14px;font-size:21px;letter-spacing:.5px;">SISTEMA BLOQUEADO</h2>'
+    + '<p style="font-size:15px;line-height:1.55;margin:0 0 30px;max-width:400px;white-space:pre-line;opacity:.95;">'
+    +   String(b.motivo||'').replace(/</g,'&lt;')
+    + '</p>'
+    + '<button id="conf-btn-acao" style="width:100%;max-width:330px;padding:17px;margin-bottom:12px;background:#fff;'
+    +   'color:#7f1d1d;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;">'
+    +   labelAcao + '</button>'
+    + '<button id="conf-btn-emerg" style="width:100%;max-width:330px;padding:13px;background:transparent;'
+    +   'color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.35);border-radius:12px;font-size:12px;cursor:pointer;">'
+    +   'Desbloqueio de emergência (fica registado)</button>';
+  document.body.appendChild(el);
+
+  document.getElementById('conf-btn-acao').onclick = () => {
+    confAlarmeParar();
+    el.style.display = 'none';           // esconde, NÃO desbloqueia
+    if(typeof navigate==='function') navigate('minhas-os');
+    setTimeout(()=>{
+      if(b.osId && typeof osAbrirDetalhe==='function') osAbrirDetalhe(b.osId);
+    }, 250);
+    // Se em 90s não cumpriu, o bloqueio volta.
+    setTimeout(()=>{ confVerificar(); }, 90000);
+  };
+
+  document.getElementById('conf-btn-emerg').onclick = async () => {
+    const j = prompt(
+      'Justificação obrigatória (mínimo 20 caracteres).\n\n'
+      + 'Este desbloqueio fica registado, é comunicado à administração e reduz a comissão.'
+    );
+    if(!j || j.trim().length < 20){ alert('Justificação insuficiente. O bloqueio mantém-se.'); return; }
+    await window.confDesbloquear(j.trim());
+    alert('Desbloqueio registado. A administração foi notificada.');
+  };
+
+  confTrancarVoltar();
+  confAlarmeTocar();
+}
+
+function confTrancarVoltar(){
+  try{
+    history.pushState({conf:1},'');
+    window.addEventListener('popstate', function(){
+      if(window._confBloqueioAtivo) history.pushState({conf:1},'');
+    });
+  }catch(e){}
+}
+
+/* Reavalia: se a condição já foi cumprida, desbloqueia sozinho. */
+window.confVerificar = async function(){
+  if(!cfEhTec()) return;
+  const u   = cfUser(); if(!u) return;
+  const doc = (window.DB.users||[]).find(x=>x.id===u.id) || {};
+  const b   = doc.bloqueio;
+
+  if(!b || !b.ativo){
+    if(window._confBloqueioAtivo){ window._confBloqueioAtivo=null; confAlarmeParar(); document.getElementById('conf-overlay')?.remove(); }
+    return;
+  }
+
+  const os = cfOS(b.osId);
+  const cumpriu =
+      (b.ecra==='iniciar' && os && (os.estado==='em_curso' || os.iniciadoEm))
+   || (b.ecra==='fecho'   && os && (os.assinaturaCliente || ['concluida','os_fechada','cancelada'].includes(os.estado)));
+
+  if(cumpriu){ await window.confDesbloquear(null); return; }   // cumpriu → sem penalização
+  confRenderBloqueio(b);                                        // não cumpriu → volta
+};
+
+/* ═══ 4. ALARME (com o unlock obrigatório do iOS) ══════════════════════ */
+let confAudio = null, confAlarmeTimer = null;
+
+window.confAudioUnlock = function(){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    confAudio = confAudio || new AC();
+    if(confAudio.state === 'suspended') confAudio.resume();
+    const o = confAudio.createOscillator(), g = confAudio.createGain();
+    g.gain.value = 0;                       // silencioso — só acorda o contexto
+    o.connect(g); g.connect(confAudio.destination);
+    o.start(); o.stop(confAudio.currentTime + 0.01);
+  }catch(e){ console.warn('[CONF] audio unlock:', e.message); }
+};
+
+function confAlarmeTocar(){
+  confAlarmeParar();
+  const beep = ()=>{
+    try{
+      if(confAudio && confAudio.state==='running'){
+        const o=confAudio.createOscillator(), g=confAudio.createGain();
+        o.frequency.value = 880; o.type='square';
+        o.connect(g); g.connect(confAudio.destination);
+        g.gain.setValueAtTime(0.25, confAudio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, confAudio.currentTime+0.3);
+        o.start(); o.stop(confAudio.currentTime + 0.3);
+      }
+    }catch(e){}
+    try{ if(navigator.vibrate) navigator.vibrate([250,120,250]); }catch(e){}
+  };
+  beep();
+  confAlarmeTimer = setInterval(beep, 1800);   // toca até ir ao ecrã correcto
+}
+
+function confAlarmeParar(){
+  if(confAlarmeTimer){ clearInterval(confAlarmeTimer); confAlarmeTimer = null; }
+  try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){}
+}
+
+/* ═══ 5. GEOFENCE — liga-se ao GPS que já existe ═══════════════════════ */
+window._confGeoDesde  = {};   // OS não iniciada: desde quando está no local
+window._confAbandDesde= {};   // OS aberta: desde quando está longe
+
+async function confCoordCliente(os){
+  if(!os) return null;
+  if(isFinite(os.cliLat) && isFinite(os.cliLng)) return {lat:os.cliLat, lng:os.cliLng};
+  const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId);
+  if(!cli || typeof rotGeocode!=='function') return null;
+  const morada = [cli.srvRua||cli.rua||'', cli.srvCp||cli.cp||'', cli.srvLocalidade||cli.localidade||'']
+                 .filter(Boolean).join(', ');
+  if(!morada) return null;
+  const c = await rotGeocode(morada);
+  if(c && isFinite(c.lat)){
+    window.fsSetMerge('ordens', os.id, {cliLat:c.lat, cliLng:c.lng}).catch(()=>{});
+    return c;
+  }
+  return null;
+}
+
+window.confGeofence = async function(pos){
+  try{
+    if(!cfEhTec() || !pos?.coords) return;
+    const {latitude:lat, longitude:lng, accuracy:acc} = pos.coords;
+    if(!isFinite(lat) || acc > CONF.PRECISAO_MAX_M) return;   // leitura má → ignora
+    if(window._confBloqueioAtivo) return;                     // já bloqueado
+
+    const u = cfUser();
+    const hoje = new Date().toISOString().slice(0,10);
+    const minhas = (window.DB.ordens||[]).filter(o=>
+      (o.tecnicos||[]).includes(u.id) && String(o.data||'').slice(0,10)===hoje && o.estado!=='cancelada'
+    );
+
+    for(const os of minhas){
+
+      /* ── A) OS aberta, sem assinatura, e o técnico foi-se embora ────── */
+      if(os.estado==='em_curso' && !os.assinaturaCliente && isFinite(os.iniLat)){
+        const d = rotDistKm(os.iniLat, os.iniLng, lat, lng) * 1000;
+        if(d > CONF.ABANDONO_M){
+          if(!window._confAbandDesde[os.id]) window._confAbandDesde[os.id] = Date.now();
+          const min = (Date.now() - window._confAbandDesde[os.id]) / 60000;
+          if(min >= CONF.ABANDONO_MIN){
+            delete window._confAbandDesde[os.id];
+            await window.confRegistar('ABANDONO_SEM_FECHO', os.id,
+              `${Math.round(d)}m do local, ${Math.round(min)} min, sem assinatura do cliente`);
+            await window.confBloquear(
+              `A Ordem de Serviço ${os.id} está aberta e SEM a assinatura do cliente.\n\n`
+              + `Está a ${Math.round(d)} m do local há ${Math.round(min)} minutos.\n\n`
+              + `Feche a OS com a assinatura do cliente.`,
+              os.id, 'fecho'
+            );
+            return;
+          }
+        } else {
+          delete window._confAbandDesde[os.id];
+        }
+        continue;
+      }
+
+      /* ── B) Chegou ao cliente e não iniciou a OS ─────────────────────── */
+      if(os.estado==='agendada' && !os.iniciadoEm){
+        const c = await confCoordCliente(os);
+        if(!c) continue;
+        const d = rotDistKm(c.lat, c.lng, lat, lng) * 1000;
+        if(d <= CONF.GEO_RAIO_M){
+          if(!window._confGeoDesde[os.id]) window._confGeoDesde[os.id] = Date.now();
+          const min = (Date.now() - window._confGeoDesde[os.id]) / 60000;
+          if(min >= CONF.GEO_MIN){
+            delete window._confGeoDesde[os.id];
+            await window.confRegistar('GPS_OS_NAO_INICIADA', os.id,
+              `${Math.round(d)}m do cliente durante ${Math.round(min)} min sem iniciar a OS`);
+            await window.confBloquear(
+              `Está no local do cliente há ${Math.round(min)} minutos e a Ordem de Serviço ${os.id} `
+              + `ainda não foi iniciada.\n\nO tempo de trabalho não está a ser contado.\n\n`
+              + `Inicie o trabalho para continuar.`,
+              os.id, 'iniciar'
+            );
+            return;
+          }
+        } else {
+          delete window._confGeoDesde[os.id];
+        }
+      }
+    }
+  }catch(e){ console.warn('[CONF] geofence:', e); }
+};
+
+/* ═══ 6. RELATÓRIOS PENDENTES > 24h ════════════════════════════════════ */
+window.confVerificarRelatorios = async function(){
+  if(!cfEhTec()) return;
+  const u = cfUser(); if(!u) return;
+  const limite = Date.now() - CONF.RELATORIO_H*3600*1000;
+
+  const pendentes = (window.DB.ordens||[]).filter(os=>{
+    if(!(os.tecnicos||[]).includes(u.id)) return false;
+    if(!['concluida','os_fechada'].includes(os.estado)) return false;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return false;
+    const base = os.concluidoEm || os.fechadoEm || os.data;
+    if(!base || new Date(base).getTime() > limite) return false;
+    return window.confEstadoRelatorio(os.id) !== 'concluido';
+  });
+
+  for(const os of pendentes){
+    await window.confRegistar('RELATORIO_ATRASADO', os.id,
+      `Relatório da OS ${os.id} pendente há mais de ${CONF.RELATORIO_H}h`);
+  }
+};
+
+/* ═══ 6B. BANNER DO TÉCNICO — "acompanhamento em tempo real" ════════════ */
+window.confBannerTecnico = function(){
+  if(!cfEhTec()) return;
+  const ancora = document.getElementById('tec-resumo-dia')
+              || document.getElementById('os-minhas-list');
+  if(!ancora) return;
+
+  let el = document.getElementById('conf-banner-tec');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'conf-banner-tec';
+    ancora.parentNode.insertBefore(el, ancora);
+  }
+
+  // Ocorrências do próprio técnico este mês
+  const u = cfUser();
+  const doc = (window.DB.users||[]).find(x=>x.id===u.id) || {};
+  const m = doc.conformidade?.ocorrenciasMes?.[cfMes()] || {total:0, pontos:0};
+
+  const aviso = m.total > 0
+    ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.35);border-radius:8px;font-size:12px;color:#7f1d1d;font-weight:600;">
+         ⚠️ ${m.total} ocorrência${m.total>1?'s':''} registada${m.total>1?'s':''} este mês — reduz${m.total>1?'em':''} a tua comissão.
+       </div>`
+    : '';
+
+  el.style.cssText = 'margin-bottom:10px;border-radius:10px;padding:11px 14px;'
+    + 'background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid #334155;color:#e2e8f0;';
+  el.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;">'
+    +   '<span style="position:relative;display:inline-flex;width:10px;height:10px;flex-shrink:0;">'
+    +     '<span style="position:absolute;inset:0;border-radius:50%;background:#22c55e;animation:confPulse 1.6s ease-out infinite;"></span>'
+    +     '<span style="position:relative;display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>'
+    +   '</span>'
+    +   '<div style="flex:1;line-height:1.4;">'
+    +     '<div style="font-weight:800;font-size:13px;">Trabalho acompanhado em tempo real</div>'
+    +     '<div style="font-size:11px;color:#94a3b8;">Localização, tempos e relatórios são registados. Procedimentos incorrectos ficam registados e são comunicados à administração.</div>'
+    +   '</div>'
+    + '</div>'
+    + aviso;
+
+  if(!document.getElementById('conf-pulse-style')){
+    const st = document.createElement('style');
+    st.id = 'conf-pulse-style';
+    st.textContent = '@keyframes confPulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.6);opacity:0}}';
+    document.head.appendChild(st);
+  }
+};
+
+/* ═══ 6C. CARD DO DASHBOARD — ocorrências por técnico (admin) ═══════════ */
+window.confRenderPainelDashboard = function(){
+  const u = cfUser();
+  if(!u || !['admin','gerente','supervisor'].includes(u.role)) return;
+  const dashStats = document.getElementById('dash-stats');
+  if(!dashStats) return;
+
+  let card = document.getElementById('conf-dash-card');
+  if(!card){
+    card = document.createElement('div');
+    card.id = 'conf-dash-card';
+    card.style.cssText = 'margin-bottom:14px;';
+    dashStats.parentNode.insertBefore(card, dashStats);
+  }
+
+  const mes  = cfMes();
+  const tecs = (window.DB.users||[]).filter(x=>x.role==='tecnico');
+  const comOcorr = tecs.map(x=>{
+    const m = x.conformidade?.ocorrenciasMes?.[mes] || {total:0, pontos:0};
+    return {id:x.id, nome:x.name, total:m.total||0, pontos:m.pontos||0, bloqueado:!!x.bloqueio?.ativo};
+  }).filter(x=>x.total>0 || x.bloqueado).sort((a,b)=>b.pontos-a.pontos);
+
+  const totalMes = comOcorr.reduce((a,x)=>a+x.total,0);
+  const bloqueados = comOcorr.filter(x=>x.bloqueado);
+
+  const chips = comOcorr.slice(0,6).map(x=>{
+    const cor = x.total>=CONF.ESCALA_ADMIN ? '#dc2626' : x.total>=CONF.ESCALA_SUPERVISOR ? '#d97706' : '#475569';
+    const blq = x.bloqueado
+      ? `<button onclick="event.stopPropagation();confDesbloquearTecnico('${x.id}')" style="margin-left:6px;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;cursor:pointer;">🔒 desbloquear</button>`
+      : '';
+    return `<span style="display:inline-flex;align-items:center;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:14px;padding:3px 10px;font-size:12px;margin:2px;">
+      <strong style="color:${cor};">${x.nome}</strong>
+      <span style="margin-left:6px;color:${cor};font-weight:800;">${x.total}</span>${blq}</span>`;
+  }).join('');
+
+  const corTopo = totalMes===0 ? '#16a34a' : bloqueados.length ? '#dc2626' : '#d97706';
+
+  card.innerHTML = `<div onclick="confAbrirModalOcorrencias()" style="cursor:pointer;background:#fff;border:1px solid var(--border);border-left:4px solid ${corTopo};border-radius:10px;padding:12px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">🛡️</span>
+          <span style="font-weight:800;font-size:14px;">Conformidade dos técnicos</span>
+        </span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          ${bloqueados.length?`<span style="background:#dc2626;color:#fff;font-size:11px;font-weight:800;padding:2px 9px;border-radius:12px;">🔒 ${bloqueados.length} bloqueado${bloqueados.length>1?'s':''}</span>`:''}
+          <span style="background:${totalMes?'#fef3c7':'#dcfce7'};color:${totalMes?'#92400e':'#166534'};font-size:11px;font-weight:800;padding:2px 9px;border-radius:12px;">${totalMes} ocorrência${totalMes===1?'':'s'} este mês</span>
+          <span style="opacity:.5;font-size:14px;">›</span>
+        </span>
+      </div>
+      ${chips?`<div style="margin-top:8px;">${chips}</div>`:'<div style="margin-top:6px;font-size:12px;color:#16a34a;">Sem ocorrências este mês. 👏</div>'}
+    </div>`;
+};
+
+/* Modal detalhado — reutiliza confPainelOcorrencias() */
+window.confAbrirModalOcorrencias = function(){
+  let mo = document.getElementById('conf-modal-ocorr');
+  if(!mo){
+    mo = document.createElement('div');
+    mo.id = 'conf-modal-ocorr';
+    mo.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(15,23,42,.6);display:flex;align-items:flex-end;justify-content:center;padding:0;';
+    mo.onclick = (e)=>{ if(e.target===mo) mo.remove(); };
+    document.body.appendChild(mo);
+  }
+  mo.innerHTML = `<div style="background:#fff;width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h3 style="margin:0;font-size:16px;">🛡️ Ocorrências de conformidade — ${cfMes()}</h3>
+        <button onclick="document.getElementById('conf-modal-ocorr').remove()" style="background:#f1f5f9;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;">✕</button>
+      </div>
+      ${window.confPainelOcorrencias()}
+      <div style="margin-top:14px;font-size:11px;color:#94a3b8;line-height:1.5;">
+        As ocorrências entram no cálculo da comissão (mesma escala dos relatórios atrasados).
+        A 3ª ocorrência do mês notifica o supervisor; a 5ª notifica a administração.
+      </div>
+    </div>`;
+};
+
+/* ═══ 7. GANCHOS NAS FUNÇÕES EXISTENTES ════════════════════════════════ */
+function confLigarGanchos(){
+
+  /* A) Iniciar trabalho → desbloqueia o AudioContext (essencial no iOS) */
+  if(typeof window.osIniciarTrabalho === 'function'){
+    const orig = window.osIniciarTrabalho;
+    window.osIniciarTrabalho = async function(id){
+      window.confAudioUnlock();
+      const r = await orig.apply(this, arguments);
+      delete window._confGeoDesde[id];
+      setTimeout(()=>window.confVerificar(), 600);
+      return r;
+    };
+  }
+
+  /* B) Concluir com assinaturas → ocorrência se nunca iniciou o cronómetro */
+  if(typeof window.osConcluirComAssinaturas === 'function'){
+    const orig = window.osConcluirComAssinaturas;
+    window.osConcluirComAssinaturas = async function(){
+      const osId = window._osConcluirId;
+      const antes = cfOS(osId);
+      const semCrono = antes && !antes.iniciadoEm;
+      const r = await orig.apply(this, arguments);
+      const depois = cfOS(osId);
+      if(depois && depois.estado === 'concluida'){         // só se fechou mesmo
+        if(semCrono) await window.confRegistar('CRONO_NAO_INICIADO', osId,
+          'OS fechada sem nunca ter carregado em "Iniciar trabalho" — horas introduzidas manualmente');
+        await window.fsSetMerge('relatorios_pesquisa', osId,
+          { estadoConformidade: window.confEstadoRelatorio(osId) }).catch(()=>{});
+        delete window._confAbandDesde[osId];
+        await window.confVerificar();
+      }
+      return r;
+    };
+  }
+
+  /* C) Fechar sem relatório → mesma verificação */
+  if(typeof window.osFecharSemRelatorio === 'function'){
+    const orig = window.osFecharSemRelatorio;
+    window.osFecharSemRelatorio = async function(osId){
+      const antes = cfOS(osId);
+      const semCrono = antes && !antes.iniciadoEm;
+      const r = await orig.apply(this, arguments);
+      const depois = cfOS(osId);
+      if(depois && depois.estado === 'os_fechada'){
+        if(semCrono) await window.confRegistar('CRONO_NAO_INICIADO', osId,
+          'OS fechada sem nunca ter carregado em "Iniciar trabalho" — horas introduzidas manualmente');
+        delete window._confAbandDesde[osId];
+        await window.confVerificar();
+      }
+      return r;
+    };
+  }
+
+  /* D) GPS → correr o geofence a cada posição recebida */
+  if(typeof window.locEnviar === 'function'){
+    const orig = window.locEnviar;
+    window.locEnviar = async function(pos){
+      const r = await orig.apply(this, arguments);
+      window.confGeofence(pos);
+      return r;
+    };
+  }
+
+  /* E) Comissões → somar os pontos de conformidade aos relatórios atrasados */
+  if(typeof window._commCalcularTecnico === 'function'){
+    const orig = window._commCalcularTecnico;
+    window._commCalcularTecnico = function(t, uid, periodo){
+      const c = orig.apply(this, arguments);
+      try{
+        const doc = (window.DB.users||[]).find(x=>x.id===uid);
+        const pts = doc?.conformidade?.ocorrenciasMes?.[periodo]?.pontos || 0;
+        if(pts > 0 && typeof _commTaxaNormal === 'function'){
+          c.pontosConformidade = pts;
+          c.lateCount   = (c.lateCount||0) + pts;      // pontos entram na escala
+          c.taxaNormal  = _commTaxaNormal(c.lateCount);
+          c.comNormal   = Math.max(0, (c.netOut - c.limiar)) * c.taxaNormal;
+          c.total       = c.comNormal + c.comCipp + c.comImp;
+        }
+      }catch(e){ console.warn('[CONF] comissão:', e); }
+      return c;
+    };
+  }
+
+  /* F) Login → arrancar a vigilância para técnicos */
+  if(typeof window.doLogin === 'function'){
+    const orig = window.doLogin;
+    window.doLogin = function(uid){
+      const r = orig.apply(this, arguments);
+      setTimeout(()=>{ if(cfEhTec()) confArrancar(); }, 2500);
+      return r;
+    };
+  }
+
+  /* G) Dashboard → injectar o card de conformidade (admin/gerente/supervisor) */
+  if(typeof window.renderDashboard === 'function'){
+    const orig = window.renderDashboard;
+    window.renderDashboard = function(){
+      const r = orig.apply(this, arguments);
+      try{ window.confRenderPainelDashboard(); }catch(e){ console.warn('[CONF] card dashboard:', e); }
+      return r;
+    };
+  }
+
+  /* H) Área do técnico → injectar o banner de acompanhamento */
+  if(typeof window.osRenderMinhas === 'function'){
+    const orig = window.osRenderMinhas;
+    window.osRenderMinhas = function(){
+      const r = orig.apply(this, arguments);
+      try{ window.confBannerTecnico(); }catch(e){ console.warn('[CONF] banner técnico:', e); }
+      return r;
+    };
+  }
+}
+
+/* ═══ 8. ARRANQUE ══════════════════════════════════════════════════════ */
+function confArrancar(){
+  if(!cfEhTec()) return;
+  console.log('[CONF] Módulo de conformidade activo.');
+
+  // Qualquer toque do técnico serve para desbloquear o áudio (iOS)
+  document.addEventListener('click', function unlockOnce(){
+    window.confAudioUnlock();
+    document.removeEventListener('click', unlockOnce);
+  }, {once:true});
+
+  window.confVerificar();
+  window.confVerificarRelatorios();
+
+  // Reverificar periodicamente e ao voltar do background:
+  // é isto que impede o técnico de fugir ao bloqueio fechando a app.
+  setInterval(()=>{ window.confVerificar(); }, 20000);
+  setInterval(()=>{ window.confVerificarRelatorios(); }, 30*60*1000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') window.confVerificar();
+  });
+}
+
+if(document.readyState === 'complete' || document.readyState === 'interactive'){
+  setTimeout(()=>{ confLigarGanchos(); if(cfEhTec()) confArrancar(); }, 1200);
+} else {
+  window.addEventListener('load', ()=>{
+    setTimeout(()=>{ confLigarGanchos(); if(cfEhTec()) confArrancar(); }, 1200);
+  });
+}
+
+/* ═══ 9. PAINEL DO ADMIN — ocorrências do mês por técnico ══════════════ */
+window.confPainelOcorrencias = function(){
+  const mes = cfMes();
+  const tecs = (window.DB.users||[]).filter(u=>u.role==='tecnico');
+  const linhas = tecs.map(u=>{
+    const m = u.conformidade?.ocorrenciasMes?.[mes] || {total:0, pontos:0, tipos:{}};
+    return {nome:u.name, total:m.total||0, pontos:m.pontos||0, tipos:m.tipos||{}};
+  }).filter(x=>x.total>0).sort((a,b)=>b.pontos-a.pontos);
+
+  if(!linhas.length) return '<div class="empty">Sem ocorrências este mês. 👏</div>';
+
+  return '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    + '<thead><tr style="background:#f8fafc;text-align:left;">'
+    + '<th style="padding:8px;">Técnico</th><th style="padding:8px;">Ocorrências</th>'
+    + '<th style="padding:8px;">Pontos</th><th style="padding:8px;">Detalhe</th></tr></thead><tbody>'
+    + linhas.map(l=>{
+        const det = Object.entries(l.tipos)
+          .map(([k,v])=>`${CONF_TIPOS[k]?.label||k}: ${v}`).join(' · ');
+        const cor = l.total>=CONF.ESCALA_ADMIN ? '#dc2626' : l.total>=CONF.ESCALA_SUPERVISOR ? '#d97706' : '#64748b';
+        return `<tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:8px;font-weight:600;">${l.nome}</td>
+          <td style="padding:8px;color:${cor};font-weight:800;">${l.total}</td>
+          <td style="padding:8px;color:${cor};font-weight:800;">${l.pontos}</td>
+          <td style="padding:8px;font-size:11px;color:#64748b;">${det}</td></tr>`;
+      }).join('')
+    + '</tbody></table>';
+};
+
+/* Admin/gerente pode levantar um bloqueio remotamente */
+window.confDesbloquearTecnico = async function(uid){
+  if(!['admin','gerente','supervisor'].includes(cfUser()?.role)){
+    if(typeof toast==='function') toast('Sem permissão.','🔒'); return;
+  }
+  const u = (window.DB.users||[]).find(x=>x.id===uid);
+  if(!confirm(`Levantar o bloqueio de ${u?.name||uid}?`)) return;
+  await window.fsSetMerge('users', uid, {
+    bloqueio: { ativo:false, fechadoEm:new Date().toISOString(), levantadoPor: cfUser()?.name||'' }
+  });
+  if(typeof auditLog==='function') auditLog('conformidade_desbloqueio', `Bloqueio de ${u?.name||uid} levantado por ${cfUser()?.name}`);
+  if(typeof toast==='function') toast('Bloqueio levantado.','🔓');
+};
+
+})();
+
+</script>
 </body>
 </html>

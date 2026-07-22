@@ -22006,11 +22006,61 @@ async function rpEnviarRelacaoTecnicos(auto){
     }catch(e){ falhas++; console.error('Brevo relação técnico (rede):',e); }
   }
 
-  // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
+  // ── Resumo diário de AGENDAMENTOS para a empresa ──────────────
+  // (substitui a antiga "relação consolidada de relatórios pendentes")
   let copiaOk=false;
-  if(consolidado.trim()){
-    const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} a realizar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
-    const assuntoC = `📋 Relação consolidada — ${totalGlobalOS} OS pendentes (${new Date().toLocaleDateString('pt-PT')})`;
+  {
+    const hoje = today();
+    const nomeUser = (uid)=> (window.DB.users||[]).find(u=>u.id===uid)?.name || '—';
+    const nomeCli  = (o)=> (window.DB.clientes||[]).find(c=>c.id===o.clienteId)?.nome || o.clienteNomeSnapshot || '—';
+    const nomeSrv  = (o)=> (window.DB.servicos||[]).find(s=>s.id===o.servicoId)?.nome || 'serviço';
+    const nomesTec = (o)=> (o.tecnicos||[]).map(id=>nomeUser(id)).filter(x=>x&&x!=='—').join(', ') || '—';
+    const foiFeito = (o)=> ['concluida','os_fechada'].includes(o.estado) || !!o.concluidoEm;
+    const labelPag = (m)=> ({mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',numerario:'Numerário',transferencia:'Transferência',cheque:'Cheque',entidade:'Entidade'})[m] || m;
+    const dataOS   = (o)=> o.data ? fmtDate(o.data) : '—';
+
+    // Agendamentos CRIADOS hoje (com quem os fez)
+    const criadosHoje = (window.DB.ordens||[]).filter(o=> String(o.criadoEm||'').slice(0,10) === hoje)
+      .sort((a,b)=> String(a.criadoEm||'').localeCompare(String(b.criadoEm||'')));
+    const dataCriacao = (o)=> o.criadoEm ? fmtDate(String(o.criadoEm).slice(0,10)) : '—';
+    const secCriados = criadosHoje.length
+      ? criadosHoje.map(o=>
+          `• OS ${o.id} — ${nomeCli(o)}\n`+
+          `   Data de criação: ${dataCriacao(o)}\n`+
+          `   Data do agendamento: ${dataOS(o)}\n`+
+          `   Valor previsto: €${fmt(o.total)}\n`+
+          `   Criado por: ${nomeUser(o.agendadoPor||o.criadoPor)}\n`+
+          `   Técnico alocado: ${nomesTec(o)}`
+        ).join('\n\n')
+      : '— Nenhum agendamento criado hoje —';
+
+    // Agendamentos PROGRAMADOS para hoje (nº OS, feito?, quem fez, valor, modalidade)
+    const programadosHoje = (window.DB.ordens||[]).filter(o=> String(o.data||'').slice(0,10) === hoje)
+      .sort((a,b)=> String(a.horaIni||'').localeCompare(String(b.horaIni||'')));
+    let totalReceberHoje = 0;
+    const secProgramados = programadosHoje.length
+      ? programadosHoje.map(o=>{
+          totalReceberHoje += (parseFloat(o.total)||0);
+          const feito = foiFeito(o) ? '✅ Feito' : '❌ Não feito';
+          const modal = o.pagamento?.metodo ? labelPag(o.pagamento.metodo) : '— por definir';
+          return `• OS ${o.id} — ${nomeCli(o)} — ${feito} — quem fez: ${nomesTec(o)} — a receber: €${fmt(o.total)} — recebimento: ${modal}`;
+        }).join('\n')
+      : '— Nenhum agendamento programado para hoje —';
+
+    const corpoC =
+`Resumo diário de agendamentos — ${new Date().toLocaleDateString('pt-PT')}
+
+🆕 AGENDAMENTOS CRIADOS HOJE (${criadosHoje.length})
+${secCriados}
+
+📅 AGENDAMENTOS PROGRAMADOS PARA HOJE (${programadosHoje.length})
+${secProgramados}
+
+Total a receber (programados para hoje): €${fmt(totalReceberHoje)}
+
+— ${nomeRem}`;
+    const assuntoC = `📅 Resumo diário — ${criadosHoje.length} criado(s), ${programadosHoje.length} programado(s) (${new Date().toLocaleDateString('pt-PT')})`;
+
     try{
       const rc = await fetch('https://api.brevo.com/v3/smtp/email',{
         method:'POST',
@@ -22023,15 +22073,15 @@ async function rpEnviarRelacaoTecnicos(auto){
         })
       });
       copiaOk = (rc.ok||rc.status===201);
-      if(!copiaOk) console.error('Brevo cópia consolidada:', rc.status, await rc.text().catch(()=>''));
-    }catch(e){ console.error('Brevo cópia consolidada (rede):',e); }
+      if(!copiaOk) console.error('Brevo resumo diário agendamentos:', rc.status, await rc.text().catch(()=>''));
+    }catch(e){ console.error('Brevo resumo diário agendamentos (rede):',e); }
   }
 
   let msg = `${enviados} email(s) enviado(s)`;
   if(semOS)  msg += ` · ${semOS} técnico(s) sem OS pendentes`;
-  if(copiaOk) msg += ` · cópia consolidada → localizafugas@gmail.com`;
+  if(copiaOk) msg += ` · resumo diário de agendamentos → localizafugas@gmail.com`;
   if(falhas) msg += ` · ${falhas} falha(s)`;
-  if(auto){ if(enviados||copiaOk) toast(`📧 Relação diária enviada automaticamente${enviados?` a ${enviados} técnico(s)`:''}${copiaOk?' + cópia consolidada':''}.`,'📧'); }
+  if(auto){ if(enviados||copiaOk) toast(`📧 Relação diária enviada automaticamente${enviados?` a ${enviados} técnico(s)`:''}${copiaOk?' + resumo de agendamentos':''}.`,'📧'); }
   else { toast(msg, (enviados||copiaOk)?'📧':'⚠️'); }
   if(typeof auditLog==='function') auditLog('relacao_relatorios_tecnicos', `Relação de relatórios enviada a ${enviados} técnico(s) (${falhas} falhas) por ${window.currentUser?.name}`);
 }

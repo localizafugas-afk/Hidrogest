@@ -22554,7 +22554,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Tipologia da Instalação</label>
-        <select class="fs" id="rp-tipologia" style="font-size:13px;">
+        <select class="fs" id="rp-tipologia" style="font-size:13px;" onchange="rpToggleLocalWrap(this.value)">
           <option value="">— Não especificada —</option>
           <option value="Moradia" ${(c.localProblema||os.tipologia||'')==='Moradia'?'selected':''}>Moradia</option>
           <option value="Apartamento" ${(c.localProblema||os.tipologia||'')==='Apartamento'?'selected':''}>Apartamento</option>
@@ -22601,14 +22601,11 @@ function rpAbrirFormulario(osId, preserveTemp){
       </div>
     </div>
 
-    <!-- Localização específica (OBRIGATÓRIA para fechar a OS) -->
-    <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px;">📍 Localização (obrigatório)</div>
-      <div style="font-size:11px;color:#9a3412;margin-bottom:10px;line-height:1.5;">Identifique de forma <strong>específica</strong>. Se houver mais do que uma casa de banho ou quarto, diga <strong>qual</strong> (ex.: &quot;WC da suite&quot;, &quot;quarto das crianças&quot;). Indique sempre a <strong>fração ou local</strong>.</div>
-      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local / fração onde o problema se manifesta</label>
-      <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;margin-bottom:10px;">${c.localManifestacao||''}</textarea>
-      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local(is) / fração onde se fez a pesquisa</label>
-      <textarea class="fta" id="rp-locais-pesquisados" rows="2" placeholder="Ex.: WC social do 3.º Dto (por cima); cozinha do 3.º Dto; terraço de cobertura..." style="font-size:13px;">${c.locaisPesquisados||''}</textarea>
+    <!-- Localização específica — só relevante em frações (apartamento/condomínio) -->
+    <div id="rp-local-wrap" style="display:${['Apartamento','Condomínio Área Comum'].includes(c.localProblema||os.tipologia||'')?'block':'none'};background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:800;color:#475569;margin-bottom:4px;">📍 Fração onde o problema se manifesta</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.5;">Num prédio o dano aparece muitas vezes numa fração diferente daquela onde está a fuga. Indique qual. As zonas onde se pesquisou já ficam registadas em <strong>Zonas Inspeccionadas</strong>, acima.</div>
+      <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;">${c.localManifestacao||String(c.reclamacao||c.descritivo||'').split(/[.;\n]/)[0].slice(0,120)}</textarea>
     </div>
 
     ${secTit(2,'Reclamação do Cliente','O que o cliente reportou')}
@@ -22866,6 +22863,14 @@ function rpAdicionarAnexos(evt, osId){
     reader.readAsDataURL(file);
   });
   evt.target.value = '';
+}
+
+// Mostra o campo "fração onde o problema se manifesta" apenas em tipologias
+// com múltiplas frações. Numa moradia a morada do cliente já identifica o local.
+function rpToggleLocalWrap(tipologia){
+  const wrap = document.getElementById('rp-local-wrap');
+  if(!wrap) return;
+  wrap.style.display = ['Apartamento','Condomínio Área Comum'].includes(tipologia) ? 'block' : 'none';
 }
 
 function rpRemoverAnexo(idx){
@@ -24584,7 +24589,7 @@ async function rpGerarDocxBase64(osId){
           width:{size:100,type:WidthType.PERCENTAGE},
           rows:[
             linhaEtiqueta('Local da Manifestação:',   c.localManifestacao||localAfetado||'—'),
-            linhaEtiqueta('Locais Pesquisados:',       c.locaisPesquisados||'—'),
+            linhaEtiqueta('Zonas Inspeccionadas:',     (Array.isArray(c.divisoes)&&c.divisoes.length?c.divisoes.join(', '):'')||c.locaisPesquisados||'—'),
             linhaEtiqueta('Tipo de Dano:',            tipoDano),
             linhaEtiqueta('Extensão Estimada:',       c.medidas||'—'),
             new TableRow({children:[
@@ -25937,8 +25942,9 @@ async function osConcluirComAssinaturas(){
   }
 
   // ── Validação obrigatória para fechar a OS ──────────────────
-  // Exige: relatório com mínimos preenchidos, localização específica,
+  // Exige: relatório com mínimos preenchidos,
   // pelo menos 4 fotos do problema, e (mais abaixo) assinaturas de cliente e técnico.
+  // A localização específica é recomendada mas NÃO bloqueia o fecho.
   // No fecho PRELIMINAR dispensa-se apenas o diagnóstico/conclusão escrito.
   const _estadoFecho = (window._rpEstadoFecho==='preliminar') ? 'preliminar' : 'definitivo';
   {
@@ -25947,8 +25953,6 @@ async function osConcluirComAssinaturas(){
     const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;
     const _faltam = [];
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
-    if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
-    if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
     if(_estadoFecho==='definitivo' && !((_cps.conclusao&&_cps.conclusao.trim())||(_cps.trabalho&&_cps.trabalho.trim()))) _faltam.push('descrição do trabalho / conclusão (obrigatória num relatório definitivo)');
     if(_nFotos < 4) _faltam.push('mínimo de 4 fotos do problema (tem '+_nFotos+')');
     if(_faltam.length){

@@ -5035,6 +5035,21 @@ function _trabFeitoHoje(o, hoje){
 }
 
 function renderDashboard(){
+  try{
+    if(!window.currentUser){
+      const el=document.getElementById('dash-stats');
+      if(el) el.innerHTML='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:12px;font-size:13px;color:#92400e;">⚠️ Sessão sem utilizador ativo — o dashboard não carrega. Volte a entrar.</div>';
+      return;
+    }
+    return _renderDashboardCore();
+  }catch(e){
+    console.error('renderDashboard falhou:', e);
+    const el=document.getElementById('dash-stats');
+    if(el) el.innerHTML='<div style="background:#fee2e2;border:1px solid #dc2626;border-radius:10px;padding:12px;font-size:12px;color:#991b1b;"><b>⚠️ Erro no dashboard</b><br>'+String(e && e.message ? e.message : e)+'</div>';
+  }
+}
+
+function _renderDashboardCore(){
   if(!window.currentUser) return; // aguardar login
   // Verificar que os elementos existem antes de renderizar
   const dashStats = document.getElementById('dash-stats');
@@ -22633,8 +22648,12 @@ function rpAbrirFormulario(osId, preserveTemp){
     ${secTit(6,'Registo Fotográfico','Mínimo 4 fotos')}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:10px;">
       ${fotosHTML}
+      <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #2c5282;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#eff6ff;color:#1e3a5f;font-size:12px;font-weight:700;">
+        <span style="font-size:24px;">📷</span>Tirar foto
+        <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
+      </label>
       <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#f8fafc;color:#64748b;font-size:12px;">
-        <span style="font-size:24px;">📷</span>Adicionar
+        <span style="font-size:24px;">🖼️</span>Galeria
         <input type="file" accept="image/*" multiple style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
       </label>
     </div>

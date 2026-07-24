@@ -1215,7 +1215,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.18<br>
+      HidroGest v15.21<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1226,7 +1226,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.12 · Mai 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.21 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1240,7 +1240,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.18<br>
+      HidroGest v15.21<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -5035,21 +5035,6 @@ function _trabFeitoHoje(o, hoje){
 }
 
 function renderDashboard(){
-  try{
-    if(!window.currentUser){
-      const el=document.getElementById('dash-stats');
-      if(el) el.innerHTML='<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:12px;font-size:13px;color:#92400e;">⚠️ Sessão sem utilizador ativo — o dashboard não carrega. Volte a entrar.</div>';
-      return;
-    }
-    return _renderDashboardCore();
-  }catch(e){
-    console.error('renderDashboard falhou:', e);
-    const el=document.getElementById('dash-stats');
-    if(el) el.innerHTML='<div style="background:#fee2e2;border:1px solid #dc2626;border-radius:10px;padding:12px;font-size:12px;color:#991b1b;"><b>⚠️ Erro no dashboard</b><br>'+String(e && e.message ? e.message : e)+'</div>';
-  }
-}
-
-function _renderDashboardCore(){
   if(!window.currentUser) return; // aguardar login
   // Verificar que os elementos existem antes de renderizar
   const dashStats = document.getElementById('dash-stats');
@@ -22021,61 +22006,11 @@ async function rpEnviarRelacaoTecnicos(auto){
     }catch(e){ falhas++; console.error('Brevo relação técnico (rede):',e); }
   }
 
-  // ── Resumo diário de AGENDAMENTOS para a empresa ──────────────
-  // (substitui a antiga "relação consolidada de relatórios pendentes")
+  // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
   let copiaOk=false;
-  {
-    const hoje = today();
-    const nomeUser = (uid)=> (window.DB.users||[]).find(u=>u.id===uid)?.name || '—';
-    const nomeCli  = (o)=> (window.DB.clientes||[]).find(c=>c.id===o.clienteId)?.nome || o.clienteNomeSnapshot || '—';
-    const nomeSrv  = (o)=> (window.DB.servicos||[]).find(s=>s.id===o.servicoId)?.nome || 'serviço';
-    const nomesTec = (o)=> (o.tecnicos||[]).map(id=>nomeUser(id)).filter(x=>x&&x!=='—').join(', ') || '—';
-    const foiFeito = (o)=> ['concluida','os_fechada'].includes(o.estado) || !!o.concluidoEm;
-    const labelPag = (m)=> ({mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',numerario:'Numerário',transferencia:'Transferência',cheque:'Cheque',entidade:'Entidade'})[m] || m;
-    const dataOS   = (o)=> o.data ? fmtDate(o.data) : '—';
-
-    // Agendamentos CRIADOS hoje (com quem os fez)
-    const criadosHoje = (window.DB.ordens||[]).filter(o=> String(o.criadoEm||'').slice(0,10) === hoje)
-      .sort((a,b)=> String(a.criadoEm||'').localeCompare(String(b.criadoEm||'')));
-    const dataCriacao = (o)=> o.criadoEm ? fmtDate(String(o.criadoEm).slice(0,10)) : '—';
-    const secCriados = criadosHoje.length
-      ? criadosHoje.map(o=>
-          `• OS ${o.id} — ${nomeCli(o)}\n`+
-          `   Data de criação: ${dataCriacao(o)}\n`+
-          `   Data do agendamento: ${dataOS(o)}\n`+
-          `   Valor previsto: €${fmt(o.total)}\n`+
-          `   Criado por: ${nomeUser(o.agendadoPor||o.criadoPor)}\n`+
-          `   Técnico alocado: ${nomesTec(o)}`
-        ).join('\n\n')
-      : '— Nenhum agendamento criado hoje —';
-
-    // Agendamentos PROGRAMADOS para hoje (nº OS, feito?, quem fez, valor, modalidade)
-    const programadosHoje = (window.DB.ordens||[]).filter(o=> String(o.data||'').slice(0,10) === hoje)
-      .sort((a,b)=> String(a.horaIni||'').localeCompare(String(b.horaIni||'')));
-    let totalReceberHoje = 0;
-    const secProgramados = programadosHoje.length
-      ? programadosHoje.map(o=>{
-          totalReceberHoje += (parseFloat(o.total)||0);
-          const feito = foiFeito(o) ? '✅ Feito' : '❌ Não feito';
-          const modal = o.pagamento?.metodo ? labelPag(o.pagamento.metodo) : '— por definir';
-          return `• OS ${o.id} — ${nomeCli(o)} — ${feito} — quem fez: ${nomesTec(o)} — a receber: €${fmt(o.total)} — recebimento: ${modal}`;
-        }).join('\n')
-      : '— Nenhum agendamento programado para hoje —';
-
-    const corpoC =
-`Resumo diário de agendamentos — ${new Date().toLocaleDateString('pt-PT')}
-
-🆕 AGENDAMENTOS CRIADOS HOJE (${criadosHoje.length})
-${secCriados}
-
-📅 AGENDAMENTOS PROGRAMADOS PARA HOJE (${programadosHoje.length})
-${secProgramados}
-
-Total a receber (programados para hoje): €${fmt(totalReceberHoje)}
-
-— ${nomeRem}`;
-    const assuntoC = `📅 Resumo diário — ${criadosHoje.length} criado(s), ${programadosHoje.length} programado(s) (${new Date().toLocaleDateString('pt-PT')})`;
-
+  if(consolidado.trim()){
+    const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} a realizar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
+    const assuntoC = `📋 Relação consolidada — ${totalGlobalOS} OS pendentes (${new Date().toLocaleDateString('pt-PT')})`;
     try{
       const rc = await fetch('https://api.brevo.com/v3/smtp/email',{
         method:'POST',
@@ -22088,15 +22023,15 @@ Total a receber (programados para hoje): €${fmt(totalReceberHoje)}
         })
       });
       copiaOk = (rc.ok||rc.status===201);
-      if(!copiaOk) console.error('Brevo resumo diário agendamentos:', rc.status, await rc.text().catch(()=>''));
-    }catch(e){ console.error('Brevo resumo diário agendamentos (rede):',e); }
+      if(!copiaOk) console.error('Brevo cópia consolidada:', rc.status, await rc.text().catch(()=>''));
+    }catch(e){ console.error('Brevo cópia consolidada (rede):',e); }
   }
 
   let msg = `${enviados} email(s) enviado(s)`;
   if(semOS)  msg += ` · ${semOS} técnico(s) sem OS pendentes`;
-  if(copiaOk) msg += ` · resumo diário de agendamentos → localizafugas@gmail.com`;
+  if(copiaOk) msg += ` · cópia consolidada → localizafugas@gmail.com`;
   if(falhas) msg += ` · ${falhas} falha(s)`;
-  if(auto){ if(enviados||copiaOk) toast(`📧 Relação diária enviada automaticamente${enviados?` a ${enviados} técnico(s)`:''}${copiaOk?' + resumo de agendamentos':''}.`,'📧'); }
+  if(auto){ if(enviados||copiaOk) toast(`📧 Relação diária enviada automaticamente${enviados?` a ${enviados} técnico(s)`:''}${copiaOk?' + cópia consolidada':''}.`,'📧'); }
   else { toast(msg, (enviados||copiaOk)?'📧':'⚠️'); }
   if(typeof auditLog==='function') auditLog('relacao_relatorios_tecnicos', `Relação de relatórios enviada a ${enviados} técnico(s) (${falhas} falhas) por ${window.currentUser?.name}`);
 }
@@ -22554,7 +22489,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       </div>
       <div>
         <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Tipologia da Instalação</label>
-        <select class="fs" id="rp-tipologia" style="font-size:13px;" onchange="rpToggleLocalWrap(this.value)">
+        <select class="fs" id="rp-tipologia" style="font-size:13px;">
           <option value="">— Não especificada —</option>
           <option value="Moradia" ${(c.localProblema||os.tipologia||'')==='Moradia'?'selected':''}>Moradia</option>
           <option value="Apartamento" ${(c.localProblema||os.tipologia||'')==='Apartamento'?'selected':''}>Apartamento</option>
@@ -22601,11 +22536,14 @@ function rpAbrirFormulario(osId, preserveTemp){
       </div>
     </div>
 
-    <!-- Localização específica — só relevante em frações (apartamento/condomínio) -->
-    <div id="rp-local-wrap" style="display:${['Apartamento','Condomínio Área Comum'].includes(c.localProblema||os.tipologia||'')?'block':'none'};background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-      <div style="font-size:12px;font-weight:800;color:#475569;margin-bottom:4px;">📍 Fração onde o problema se manifesta</div>
-      <div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.5;">Num prédio o dano aparece muitas vezes numa fração diferente daquela onde está a fuga. Indique qual. As zonas onde se pesquisou já ficam registadas em <strong>Zonas Inspeccionadas</strong>, acima.</div>
-      <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;">${c.localManifestacao||String(c.reclamacao||c.descritivo||'').split(/[.;\n]/)[0].slice(0,120)}</textarea>
+    <!-- Localização específica (OBRIGATÓRIA para fechar a OS) -->
+    <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px;">📍 Localização (obrigatório)</div>
+      <div style="font-size:11px;color:#9a3412;margin-bottom:10px;line-height:1.5;">Identifique de forma <strong>específica</strong>. Se houver mais do que uma casa de banho ou quarto, diga <strong>qual</strong> (ex.: &quot;WC da suite&quot;, &quot;quarto das crianças&quot;). Indique sempre a <strong>fração ou local</strong>.</div>
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local / fração onde o problema se manifesta</label>
+      <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;margin-bottom:10px;">${c.localManifestacao||''}</textarea>
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local(is) / fração onde se fez a pesquisa</label>
+      <textarea class="fta" id="rp-locais-pesquisados" rows="2" placeholder="Ex.: WC social do 3.º Dto (por cima); cozinha do 3.º Dto; terraço de cobertura..." style="font-size:13px;">${c.locaisPesquisados||''}</textarea>
     </div>
 
     ${secTit(2,'Reclamação do Cliente','O que o cliente reportou')}
@@ -22645,12 +22583,8 @@ function rpAbrirFormulario(osId, preserveTemp){
     ${secTit(6,'Registo Fotográfico','Mínimo 4 fotos')}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:10px;">
       ${fotosHTML}
-      <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #2c5282;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#eff6ff;color:#1e3a5f;font-size:12px;font-weight:700;">
-        <span style="font-size:24px;">📷</span>Tirar foto
-        <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
-      </label>
       <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#f8fafc;color:#64748b;font-size:12px;">
-        <span style="font-size:24px;">🖼️</span>Galeria
+        <span style="font-size:24px;">📷</span>Adicionar
         <input type="file" accept="image/*" multiple style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
       </label>
     </div>
@@ -22863,14 +22797,6 @@ function rpAdicionarAnexos(evt, osId){
     reader.readAsDataURL(file);
   });
   evt.target.value = '';
-}
-
-// Mostra o campo "fração onde o problema se manifesta" apenas em tipologias
-// com múltiplas frações. Numa moradia a morada do cliente já identifica o local.
-function rpToggleLocalWrap(tipologia){
-  const wrap = document.getElementById('rp-local-wrap');
-  if(!wrap) return;
-  wrap.style.display = ['Apartamento','Condomínio Área Comum'].includes(tipologia) ? 'block' : 'none';
 }
 
 function rpRemoverAnexo(idx){
@@ -24589,7 +24515,7 @@ async function rpGerarDocxBase64(osId){
           width:{size:100,type:WidthType.PERCENTAGE},
           rows:[
             linhaEtiqueta('Local da Manifestação:',   c.localManifestacao||localAfetado||'—'),
-            linhaEtiqueta('Zonas Inspeccionadas:',     (Array.isArray(c.divisoes)&&c.divisoes.length?c.divisoes.join(', '):'')||c.locaisPesquisados||'—'),
+            linhaEtiqueta('Locais Pesquisados:',       c.locaisPesquisados||'—'),
             linhaEtiqueta('Tipo de Dano:',            tipoDano),
             linhaEtiqueta('Extensão Estimada:',       c.medidas||'—'),
             new TableRow({children:[
@@ -25942,9 +25868,8 @@ async function osConcluirComAssinaturas(){
   }
 
   // ── Validação obrigatória para fechar a OS ──────────────────
-  // Exige: relatório com mínimos preenchidos,
+  // Exige: relatório com mínimos preenchidos, localização específica,
   // pelo menos 4 fotos do problema, e (mais abaixo) assinaturas de cliente e técnico.
-  // A localização específica é recomendada mas NÃO bloqueia o fecho.
   // No fecho PRELIMINAR dispensa-se apenas o diagnóstico/conclusão escrito.
   const _estadoFecho = (window._rpEstadoFecho==='preliminar') ? 'preliminar' : 'definitivo';
   {
@@ -25953,6 +25878,8 @@ async function osConcluirComAssinaturas(){
     const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;
     const _faltam = [];
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
+    if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
+    if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
     if(_estadoFecho==='definitivo' && !((_cps.conclusao&&_cps.conclusao.trim())||(_cps.trabalho&&_cps.trabalho.trim()))) _faltam.push('descrição do trabalho / conclusão (obrigatória num relatório definitivo)');
     if(_nFotos < 4) _faltam.push('mínimo de 4 fotos do problema (tem '+_nFotos+')');
     if(_faltam.length){
@@ -32225,6 +32152,559 @@ window.cliHistoricoImprimir = function(cliId){
 };
 
 })();
+</script>
+
+
+<script id="hg-correcoes-v1521">
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Módulo de Correções v15.20
+   ──────────────────────────────────────────────────────────────────────────
+   COMO INSTALAR
+   Cole este bloco no FIM do index.html, imediatamente antes de </body>,
+   envolvido em <script> ... <\/script>. Não substitui nada — só acrescenta
+   e substitui funções em tempo de execução.
+
+   O QUE RESOLVE
+   1. Assinaturas do técnico e do cliente deixam de se perder ao corrigir
+      relatórios (proteção + cópia de segurança automática).
+   2. PDF do relatório deixa de sair desconfigurado (regras de impressão).
+   3. O técnico passa a poder gerar um PDF de consulta sem qualquer dado
+      da empresa, sem assinaturas e sem o nome do técnico.
+   4. O admin passa a poder corrigir a data e o horário do relatório e da OS,
+      com registo de quem alterou — e a correção deixa de ser apagada na
+      gravação seguinte.
+
+   NÃO resolve (precisa de edição direta no gerador Word — ver notas):
+   • Fotos no anexo enviado ao cliente.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1520) return;
+  window._hgV1520 = true;
+
+  const log = (...a)=>console.log('[v15.20]',...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const _audit = (t,m)=>{ try{ if(typeof auditLog==='function') auditLog(t,m); }catch(_){}; };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     1. PROTEÇÃO DAS ASSINATURAS
+     ──────────────────────────────────────────────────────────────────────
+     As assinaturas vivem dentro do documento da OS, e TODAS as gravações
+     de OS usam fsSet (substituição total do documento). Basta uma gravação
+     partir de uma cópia em memória desatualizada para as apagar.
+
+     Aqui embrulhamos o fsSet: nunca deixa gravar uma OS com assinatura
+     vazia quando já existe uma assinatura guardada, e mantém uma cópia
+     de segurança na coleção relatorios_assinaturas (que já existia e que
+     o rpGetAssinaturas já sabe ler).
+     ══════════════════════════════════════════════════════════════════════ */
+  const _fsSetOriginal = window.fsSet;
+
+  window.fsSet = async function(col, id, data){
+    if(col === 'ordens' && data && typeof data === 'object' && id){
+      const copia = Object.assign({}, data);
+
+      // Fonte A — o que está em memória
+      const emMemoria = (window.DB.ordens||[]).find(x=>x.id===id) || {};
+      // Fonte B — a cópia de segurança
+      const bak = (window.DB.relatorios_assinaturas||[])
+                    .find(x=>x.osId===id || x._firebaseId===id) || {};
+
+      let recuperada = false;
+      if(!copia.assinaturaTecnico){
+        const s = emMemoria.assinaturaTecnico || bak.assinaturaTecnico || '';
+        if(s){ copia.assinaturaTecnico = s; recuperada = true; }
+      }
+      if(!copia.assinaturaCliente){
+        const s = emMemoria.assinaturaCliente || bak.assinaturaCliente || '';
+        if(s){ copia.assinaturaCliente = s; recuperada = true; }
+      }
+      if(recuperada) log('assinatura recuperada na OS', id);
+
+      const r = await _fsSetOriginal(col, id, copia);
+
+      // Guardar cópia de segurança fora da OS (assim nenhuma gravação de OS
+      // lhe pode tocar). Falha em silêncio — nunca bloqueia a operação.
+      if(copia.assinaturaTecnico || copia.assinaturaCliente){
+        const jaIgual = bak.assinaturaTecnico === copia.assinaturaTecnico &&
+                        bak.assinaturaCliente === copia.assinaturaCliente;
+        if(!jaIgual){
+          try{
+            await window.fsSetMerge('relatorios_assinaturas', id, {
+              osId: id,
+              assinaturaTecnico: copia.assinaturaTecnico || '',
+              assinaturaCliente: copia.assinaturaCliente || '',
+              guardadoEm: new Date().toISOString(),
+            });
+          }catch(e){ console.warn('[v15.20] cópia de assinaturas falhou:', e); }
+        }
+      }
+      return r;
+    }
+    return _fsSetOriginal(col, id, data);
+  };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     2. DATA E HORÁRIO — a correção do admin deixa de ser apagada
+     ──────────────────────────────────────────────────────────────────────
+     O rpRecolherCampos volta sempre a buscar a data e as horas à OS. Se o
+     admin corrigir, a gravação seguinte desfaz. Aqui respeitamos a marca
+     dataManual gravada pelo painel de correção (ponto 5).
+     ══════════════════════════════════════════════════════════════════════ */
+  const _recolherOriginal = window.rpRecolherCampos;
+  if(typeof _recolherOriginal === 'function'){
+    window.rpRecolherCampos = function(){
+      const campos = _recolherOriginal.apply(this, arguments);
+      const osId = window._rpEditOsId;
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId);
+      const ant = rel && rel.campos;
+      if(ant && ant.dataManual){
+        campos.dataManual     = true;
+        campos.dataExecucao   = ant.dataExecucao   || campos.dataExecucao;
+        campos.horaIniInterv  = ant.horaIniInterv  || campos.horaIniInterv;
+        campos.horaFimInterv  = ant.horaFimInterv  || campos.horaFimInterv;
+      }
+      return campos;
+    };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     3. IMPRESSÃO / PDF — regras corretas de quebra de página
+     ──────────────────────────────────────────────────────────────────────
+     O CSS anterior usava page-break-inside:auto em div/table/tr/td, ou seja,
+     autorizava o browser a partir tabelas e blocos a meio. Aqui trocamos
+     por avoid nos blocos que não devem partir.
+     ══════════════════════════════════════════════════════════════════════ */
+  const CSS_IMPRESSAO = `
+    *{margin:0;padding:0;box-sizing:border-box;
+      -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+    body{font-family:'Segoe UI',Calibri,Arial,sans-serif;background:#fff;color:#1e293b;}
+    @page{size:A4 portrait;margin:12mm 12mm 14mm 12mm;}
+    @media print{
+      .no-print{display:none!important;}
+      body{background:#fff;}
+      #rp-doc{border-radius:0!important;box-shadow:none!important;max-width:none!important;width:100%!important;}
+      /* nada de blocos partidos a meio */
+      table,tr,td,th{page-break-inside:avoid!important;break-inside:avoid!important;}
+      thead{display:table-header-group;}
+      img{max-width:100%!important;height:auto!important;display:block;
+          page-break-inside:avoid!important;break-inside:avoid!important;}
+      h1,h2,h3,h4{page-break-after:avoid!important;break-after:avoid-page;}
+      p,li{orphans:3;widows:3;}
+      /* o flexbox parte mal na impressão — forçar blocos */
+      [style*="display:flex"],[style*="display: flex"]{display:block!important;}
+      [style*="display:grid"],[style*="display: grid"]{display:block!important;}
+      /* margens laterais fixas em mm, não em % */
+      #rp-doc > *{max-width:186mm;}
+    }
+    @media screen{
+      body{padding:20px;background:#e5e7eb;}
+      #rp-doc{max-width:800px;margin:0 auto;box-shadow:0 4px 32px rgba(0,0,0,.18);border-radius:8px;overflow:hidden;}
+    }
+  `;
+
+  function abrirJanelaImpressao(titulo, htmlCorpo, avisoTopo){
+    const full = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8">
+      <title>${titulo}</title><style>${CSS_IMPRESSAO}</style></head><body>
+      <div class="no-print" style="text-align:center;padding:16px;background:#1e3a5f;">
+        <button onclick="window.print()" style="background:#fff;color:#1e3a5f;border:none;padding:10px 28px;border-radius:8px;font-size:14px;font-weight:800;cursor:pointer;margin-right:8px;">🖨️ Imprimir / Guardar PDF</button>
+        <button onclick="window.close()" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);padding:10px 20px;border-radius:8px;font-size:14px;cursor:pointer;">✕ Fechar</button>
+        <div style="color:rgba(255,255,255,.65);font-size:11px;margin-top:8px;">${avisoTopo||'Nas opções de impressão active "Gráficos de fundo" para manter as cores.'}</div>
+      </div>${htmlCorpo}</body></html>`;
+    const blob = new Blob([full], {type:'text/html;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(()=>URL.revokeObjectURL(url), 8000);
+  }
+
+  window.rpImprimirRelatorio = function(){
+    const osId = window._rpVerOsId || window._rpEditOsId;
+    const os  = osId ? (window.DB.ordens||[]).find(x=>x.id===osId) : null;
+    if(!os){ _toast('OS não encontrada.','⚠️'); return; }
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    const c   = rel.campos||{};
+    const tecs= (os.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+    const html = rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs);
+    abrirJanelaImpressao(`Relatório — ${osId}`, html);
+  };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     4. PDF DO TÉCNICO — versão de consulta, sem dados da empresa
+     ──────────────────────────────────────────────────────────────────────
+     Documento construído de raiz (não é o relatório oficial filtrado), para
+     garantir que não sai daqui nada da empresa, nem assinaturas, nem o nome
+     do técnico, nem valores.
+     Chamar: hgPdfTecnico('OS0177')
+     ══════════════════════════════════════════════════════════════════════ */
+  const esc = s => String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  const bloco = (titulo, conteudo) => !conteudo ? '' :
+    `<div style="page-break-inside:avoid;margin-bottom:16px;">
+       <div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;
+                   color:#334155;border-bottom:2px solid #cbd5e1;padding-bottom:4px;margin-bottom:8px;">${esc(titulo)}</div>
+       <div style="font-size:12.5px;line-height:1.55;color:#1e293b;white-space:pre-wrap;">${conteudo}</div>
+     </div>`;
+
+  const lista = arr => (Array.isArray(arr)&&arr.length)
+    ? '<ul style="margin:0 0 0 18px;padding:0;">'+arr.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>' : '';
+
+  window.hgPdfTecnico = function(osId){
+    osId = osId || window._rpVerOsId || window._rpEditOsId;
+    const os = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(!os){ _toast('OS não encontrada.','⚠️'); return; }
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId);
+    if(!rel || !rel.campos){ _toast('Relatório ainda não preenchido.','ℹ️'); return; }
+    const c = rel.campos;
+
+    // Só o próprio técnico (o admin/gestão usa o relatório oficial)
+    const role = window.currentUser?.role;
+    if(role === 'tecnico' && !(os.tecnicos||[]).includes(window.currentUser?.id)){
+      _toast('Só pode consultar relatórios das suas OS.','🔒'); return;
+    }
+
+    const fotos = (typeof rpGetFotos==='function' ? rpGetFotos(osId, c, rel) : (c.fotos||rel.fotos||[])) || [];
+    const fotosHtml = !fotos.length ? '' :
+      '<div style="display:block;">'+fotos.map((f,i)=>{
+        const src = (typeof f==='string') ? f : (f.url || f.dataUrl || '');
+        if(!src) return '';
+        const cap = (typeof f==='object' && f.legenda) ? f.legenda : '';
+        return `<div style="page-break-inside:avoid;margin-bottom:14px;">
+            <img src="${esc(src)}" style="width:100%;max-width:150mm;border:1px solid #cbd5e1;border-radius:4px;">
+            <div style="font-size:11px;color:#475569;margin-top:4px;font-style:italic;">Foto ${i+1}${cap?' — '+esc(cap):''}</div>
+          </div>`;
+      }).join('')+'</div>';
+
+    const dataStr = c.dataExecucao ? (typeof fmtDate==='function' ? fmtDate(c.dataExecucao) : c.dataExecucao)
+                  : (os.concluidoEm ? new Date(os.concluidoEm).toLocaleDateString('pt-PT') : '—');
+    const horas = [c.horaIniInterv, c.horaFimInterv].filter(Boolean).join(' – ') || '—';
+
+    const corpo = `
+      <div id="rp-doc" style="background:#fff;padding:14mm 10mm;">
+        <div style="border-bottom:3px solid #334155;padding-bottom:10px;margin-bottom:18px;">
+          <div style="font-size:17px;font-weight:800;color:#0f172a;">Relatório de Intervenção</div>
+          <div style="font-size:11.5px;color:#64748b;margin-top:4px;">
+            ${esc(osId)} &nbsp;·&nbsp; ${esc(dataStr)} &nbsp;·&nbsp; ${esc(horas)}
+          </div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:6px;font-style:italic;">
+            Cópia de consulta interna. Não substitui o relatório oficial e não constitui documento a entregar ao cliente.
+          </div>
+        </div>
+        ${bloco('Tipo de anomalia', esc(c.tipoProblema))}
+        ${bloco('Tipologia do local', esc(c.localProblema))}
+        ${bloco('Local da manifestação', esc(c.localManifestacao))}
+        ${bloco('Zonas inspeccionadas', lista(c.divisoes))}
+        ${bloco('Reclamação do cliente', esc(c.reclamacao||c.descritivo))}
+        ${bloco('Trabalho realizado', esc(c.trabalho||c.detalhamento))}
+        ${bloco('Metodologias', lista(c.metodologias))}
+        ${bloco('Equipamentos', lista(c.equipamentos))}
+        ${bloco('Conclusão', esc(c.conclusao))}
+        ${bloco('Sugestão / recomendações', esc(c.sugestao))}
+        ${bloco('Registo fotográfico', fotosHtml)}
+      </div>`;
+
+    abrirJanelaImpressao(`Consulta — ${osId}`, corpo,
+      'Documento de consulta — sem dados da empresa e sem assinaturas.');
+  };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     5. ADMIN — corrigir data e horário do relatório e da OS
+     ──────────────────────────────────────────────────────────────────────
+     Chamar: hgEditarDataHora('OS0177')
+     Grava na OS (data, horaIniReal, horaFimReal) e no relatório
+     (campos.dataExecucao / horaIniInterv / horaFimInterv), marca dataManual
+     para a correção não ser desfeita, e regista quem alterou.
+     ══════════════════════════════════════════════════════════════════════ */
+  window.hgEditarDataHora = function(osId){
+    const role = window.currentUser?.role||'';
+    if(!['admin','gerente'].includes(role)){
+      _toast('Só o admin ou o gerente podem corrigir datas e horários.','🔒'); return;
+    }
+    const os = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(!os){ _toast('OS não encontrada.','⚠️'); return; }
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    const c = rel.campos||{};
+
+    document.getElementById('hg-mo-dh')?.remove();
+    const dataAtual = c.dataExecucao || (os.concluidoEm ? os.concluidoEm.slice(0,10) : (os.data||''));
+    const iniAtual  = (c.horaIniInterv || os.horaIniReal || os.horaIni || '').slice(0,5);
+    const fimAtual  = (c.horaFimInterv || os.horaFimReal || os.horaFim || '').slice(0,5);
+
+    const ov = document.createElement('div');
+    ov.id = 'hg-mo-dh';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:20px;font-family:inherit;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+        <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px;">Corrigir data e horário</div>
+        <div style="font-size:12px;color:#64748b;margin-bottom:16px;">${esc(osId)} — altera a OS e o relatório em simultâneo.</div>
+
+        <label style="font-size:12px;font-weight:700;color:#334155;">Data da execução</label>
+        <input id="hg-dh-data" type="date" value="${esc(dataAtual)}"
+          style="width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;margin:4px 0 12px;font-size:14px;">
+
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;font-weight:700;color:#334155;">Hora de início</label>
+            <input id="hg-dh-ini" type="time" value="${esc(iniAtual)}"
+              style="width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-top:4px;font-size:14px;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;font-weight:700;color:#334155;">Hora de fim</label>
+            <input id="hg-dh-fim" type="time" value="${esc(fimAtual)}"
+              style="width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-top:4px;font-size:14px;">
+          </div>
+        </div>
+
+        <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-top:12px;">Motivo da correção</label>
+        <input id="hg-dh-motivo" type="text" placeholder="ex.: cronómetro esquecido ligado"
+          style="width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-top:4px;font-size:14px;">
+
+        <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px;margin-top:12px;line-height:1.45;">
+          A alteração fica registada na auditoria com o seu nome. Não recalcula valores faturados —
+          para isso use "Guardar horas" no detalhe da OS.
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button id="hg-dh-cancel" style="flex:1;padding:11px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;">Cancelar</button>
+          <button id="hg-dh-ok" style="flex:1;padding:11px;border:none;background:#1e3a5f;color:#fff;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;">Guardar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    ov.querySelector('#hg-dh-cancel').onclick = ()=>ov.remove();
+    ov.querySelector('#hg-dh-ok').onclick = async ()=>{
+      const nData = ov.querySelector('#hg-dh-data').value;
+      const nIni  = ov.querySelector('#hg-dh-ini').value;
+      const nFim  = ov.querySelector('#hg-dh-fim').value;
+      const motivo= ov.querySelector('#hg-dh-motivo').value.trim();
+      if(!nData){ _toast('Indique a data.','⚠️'); return; }
+      if(!motivo){ _toast('Indique o motivo da correção.','⚠️'); return; }
+
+      const btn = ov.querySelector('#hg-dh-ok');
+      btn.disabled = true; btn.textContent = '⏳ A guardar...';
+      const quem = window.currentUser?.name || window.currentUser?.id || '';
+      const agora = new Date().toISOString();
+
+      try{
+        await window.fsSetMerge('ordens', osId, {
+          data: nData,
+          horaIniReal: nIni || '',
+          horaFimReal: nFim || '',
+          dataHoraCorrigidaPor: quem,
+          dataHoraCorrigidaEm: agora,
+          dataHoraCorrigidaMotivo: motivo,
+        });
+        const i = (window.DB.ordens||[]).findIndex(x=>x.id===osId);
+        if(i>=0) Object.assign(window.DB.ordens[i], {data:nData, horaIniReal:nIni||'', horaFimReal:nFim||''});
+
+        const camposNovos = Object.assign({}, c, {
+          dataExecucao: nData,
+          horaIniInterv: nIni || '',
+          horaFimInterv: nFim || '',
+          dataManual: true,
+        });
+        await window.fsSetMerge('relatorios_pesquisa', osId, {
+          campos: camposNovos,
+          dataHoraCorrigidaPor: quem,
+          dataHoraCorrigidaEm: agora,
+        });
+        const r = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId);
+        if(r) r.campos = camposNovos;
+
+        _audit('os_data_hora_corrigida',
+          `OS ${osId}: data ${nData}, ${nIni||'?'}–${nFim||'?'} — por ${quem} — motivo: ${motivo}`);
+        _toast('✅ Data e horário corrigidos.','✅');
+        ov.remove();
+        if(typeof osRenderAgenda==='function') osRenderAgenda();
+        if(typeof rpRender==='function') rpRender();
+      }catch(e){
+        console.error('[v15.20] correção data/hora falhou:', e);
+        _toast('❌ Não foi possível guardar: '+(e?.message||'erro de ligação'),'❌');
+        btn.disabled = false; btn.textContent = 'Guardar';
+      }
+    };
+  };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     6. PRÉ-CARREGAMENTO DAS FOTOS PARA O WORD
+     ──────────────────────────────────────────────────────────────────────
+     Prepara window._hgFotosBin com as fotos já em bytes, para o gerador
+     Word as poder embutir. Só faz efeito depois da edição manual descrita
+     nas notas de acompanhamento.
+     Requer CORS ativo no bucket do Firebase Storage.
+     ══════════════════════════════════════════════════════════════════════ */
+  async function carregarFotosBinarias(osId){
+    window._hgFotosBin = [];
+    try{
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+      const fotos = (typeof rpGetFotos==='function'
+        ? rpGetFotos(osId, rel.campos||{}, rel) : (rel.fotos||[])) || [];
+      for(let i=0;i<Math.min(fotos.length,6);i++){
+        const f = fotos[i];
+        const src = (typeof f==='string') ? f : (f?.url || f?.dataUrl || '');
+        if(!src){ window._hgFotosBin[i]=null; continue; }
+        if(src.startsWith('data:')){
+          const b64 = src.split(',')[1]||'';
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for(let k=0;k<bin.length;k++) arr[k]=bin.charCodeAt(k);
+          window._hgFotosBin[i] = arr;
+        } else {
+          const r = await fetch(src);
+          window._hgFotosBin[i] = new Uint8Array(await r.arrayBuffer());
+        }
+      }
+    }catch(e){
+      console.warn('[v15.20] fotos para Word indisponíveis (CORS?):', e);
+    }
+  }
+
+  const _docxOriginal = window.rpGerarDocxBase64;
+  if(typeof _docxOriginal === 'function'){
+    window.rpGerarDocxBase64 = async function(osId){
+      await carregarFotosBinarias(osId);
+      return _docxOriginal.call(this, osId);
+    };
+  }
+
+  log('módulo carregado — hgPdfTecnico() e hgEditarDataHora() disponíveis');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 7 (v15.21)
+   RELATÓRIO NO CORPO DO EMAIL, COM FOTOS
+   ──────────────────────────────────────────────────────────────────────────
+   Antes: o Brevo enviava o relatório como anexo .docx — o mesmo ficheiro que
+   usam internamente, em que as células de foto estão vazias. O cliente recebia
+   um Word com "Insira as fotos directamente nas células indicadas abaixo".
+
+   Agora: o relatório completo vai no CORPO do email. As fotos guardadas no
+   Storage são URLs https normais e aparecem no Gmail e no Outlook sem o
+   cliente descarregar nada. Fotos antigas em base64 (que o Gmail apaga)
+   passam a seguir como anexo, para não se perderem.
+
+   O Word continua disponível para uso interno — botão "Download Word".
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1521) return;
+  window._hgV1521 = true;
+
+  const LIMITE_ANEXOS = 8 * 1024 * 1024;   // margem para o limite do Brevo
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+
+  window.brevoEnviarRelatorio = async function(osId){
+    const cfg = window._emailCfg || window.DB?.emailConfig || {};
+    const apiKey = cfg.brevoApiKey || '';
+    if(!apiKey){
+      _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️');
+      return {ok:false, motivo:'sem-api-key'};
+    }
+
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os?.clienteId)||{};
+    const srv = (window.DB.servicos||[]).find(x=>x.id===os?.servicoId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+
+    if(!cli.email){ _toast('⚠️ Cliente sem email registado.','⚠️'); return {ok:false}; }
+    if(!rel.campos){ _toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
+
+    const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
+    const empEmail = cfg.remetenteRelatorio || 'localizafugas@gmail.com';
+    const empTel   = cfg.tel || '253 000 000';
+    const tecs = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+
+    // ── Relatório completo, tal como é visto no sistema ──────────────
+    let htmlRel = '';
+    try{
+      htmlRel = rpGerarHTMLRelatorio(os, cli, srv, rel, rel.campos||{}, tecs);
+    }catch(e){
+      console.error('[v15.21] falha a gerar o relatório:', e);
+      _toast('❌ Não foi possível gerar o relatório para envio.','❌');
+      return {ok:false, motivo:'html-erro'};
+    }
+
+    // ── Imagens em base64: o Gmail apaga-as. Passam a anexo. ─────────
+    const anexosImg = [];
+    let bytes = 0, nImg = 0, descartadas = 0;
+    htmlRel = htmlRel.replace(/src="(data:image\/([a-z]+);base64,([^"]+))"/gi, (m, _full, ext, b64)=>{
+      const tamanho = Math.floor(b64.length * 0.75);
+      if(bytes + tamanho > LIMITE_ANEXOS){ descartadas++; return 'src="" data-removido="1"'; }
+      bytes += tamanho; nImg++;
+      const nome = `imagem_${nImg}.${ext==='jpeg'?'jpg':ext}`;
+      anexosImg.push({content:b64, name:nome});
+      return `src="" alt="${nome}" data-anexo="${nome}"`;
+    });
+    if(descartadas>0){
+      _toast(`⚠️ ${descartadas} imagem(ns) antiga(s) demasiado pesada(s) ficaram de fora. Volte a guardar o relatório para as migrar para o servidor de imagens.`,'⚠️',9000);
+    }
+    if(nImg>0){
+      htmlRel = htmlRel.replace(/<img([^>]*)data-anexo="([^"]+)"([^>]*)>/gi,
+        (m,a,nome)=>`<div style="border:1px dashed #cbd5e1;border-radius:6px;padding:10px;font-size:12px;color:#64748b;text-align:center;">📎 ${nome} — em anexo</div>`);
+      htmlRel = htmlRel.replace(/<img([^>]*)data-removido="1"([^>]*)>/gi, '');
+    }
+
+    const intro = `
+      <div style="font-family:Arial,sans-serif;max-width:820px;margin:0 auto 18px;color:#1e293b;">
+        <p style="margin:0 0 12px;font-size:14px;">Exmo(a) Sr(a) <strong>${cli.nome||''}</strong>,</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.55;">
+          Segue o relatório de peritagem não destrutiva referente ao serviço prestado nas suas instalações (OS ${osId}).
+        </p>
+        <p style="margin:0 0 16px;font-size:13px;color:#64748b;">
+          Para qualquer questão: 📞 <a href="tel:${empTel}" style="color:#1e3a5f;">${empTel}</a>
+          &nbsp;·&nbsp; ✉️ <a href="mailto:${empEmail}" style="color:#1e3a5f;">${empEmail}</a>
+        </p>
+      </div>`;
+
+    const rodape = `
+      <div style="font-family:Arial,sans-serif;max-width:820px;margin:20px auto 0;padding-top:14px;
+                  border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+        Com os melhores cumprimentos,<br><strong style="color:#1e3a5f;">${empNome}</strong>
+      </div>`;
+
+    // Anexos que o admin juntou ao relatório
+    const anexosAdmin = (rel.anexos||[]).filter(a=>a.base64).map(a=>({content:a.base64, name:a.nome}));
+    const todosAnexos = [...anexosImg, ...anexosAdmin];
+
+    const [ano,mes,dia] = (os.data||'').split('-');
+    const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const dataAssunto = os.data ? `${dia} ${meses[parseInt(mes)-1]} ${ano}` : '';
+
+    const payload = {
+      sender:  {name:empNome, email:empEmail},
+      replyTo: {email: cfg.replyTo||'localizafugas@gmail.com', name:empNome},
+      to:      [{email:cli.email, name:cli.nome||''}],
+      subject: `Relatório de Peritagem — OS ${osId}${dataAssunto?' — '+dataAssunto:''}`,
+      htmlContent: `<div style="background:#f8fafc;padding:18px;">${intro}${htmlRel}${rodape}</div>`,
+      ...(todosAnexos.length?{attachment:todosAnexos}:{}),
+    };
+
+    try{
+      _toast('⏳ A enviar o relatório ao cliente...','📧');
+      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+        method:'POST',
+        headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        _toast(`❌ Erro Brevo: ${err.message||r.status}`,'❌');
+        return {ok:false, motivo:'brevo-erro', status:r.status};
+      }
+      _toast('✅ Relatório enviado — com as fotografias no corpo do email.','✅');
+      return {ok:true};
+    }catch(e){
+      _toast(`❌ Erro de ligação ao Brevo: ${e.message}`,'❌');
+      return {ok:false, motivo:'ligacao-erro'};
+    }
+  };
+
+  console.log('[v15.21] envio de relatório por Brevo substituído — relatório no corpo do email');
+})();
+
 </script>
 
 </body>

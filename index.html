@@ -491,6 +491,13 @@ window._db = db;
 window._fsDoc = (col, id) => doc(db, col, id);
 window._setDoc = setDoc;
 window._deleteDoc = deleteDoc;
+// v15.38 — window._firestoreOps era usado em vários sítios (ex.: o marcador
+// diário do rpAutoRelacaoTecnicos) mas NUNCA era atribuído. A leitura falhava
+// sempre em silêncio, o marcador ficava vazio e o email diário podia sair
+// várias vezes por dia, uma por browser aberto.
+window._firestoreOps = { collection, doc, getDoc, getDocs, setDoc, deleteDoc,
+                         onSnapshot, writeBatch, runTransaction, query,
+                         orderBy, limit, where };
 
 // ── Recalcular badge do ícone sempre que a app volta ao 1º plano ──
 // (cobre o caso de a app ter ficado em segundo plano e o técnico
@@ -1229,7 +1236,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.37<br>
+      HidroGest v15.39<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1240,7 +1247,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.37 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.39 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1254,7 +1261,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.37<br>
+      HidroGest v15.39<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -35409,8 +35416,26 @@ window.cliHistoricoImprimir = function(cliId){
     });
   }
 
+  // Pagos e prontos mas SEM email do cliente — ficavam invisíveis em todo o lado
+  function semEmail(){
+    return (window.DB.ordens||[]).filter(o=>{
+      if(o.estado === 'cancelada') return false;
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+      if(!rel?.campos || rel.estado === 'enviado') return false;
+      const pagoOk = (typeof rpPagamentoConfirmado==='function')
+        ? rpPagamentoConfirmado(o, rel) : o.pago===true;
+      if(!pagoOk) return false;
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+      return !cli?.email;
+    }).map(o=>{
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      return {id:o.id, clienteId:o.clienteId, cliente:cli.nome||'—', total:parseFloat(o.total)||0};
+    });
+  }
+
   window.relAbrirPainelEnvio = function(){
     const l = lista();
+    const sem = semEmail();
     document.getElementById('mo-rel-envio')?.remove();
 
     const mo = document.createElement('div');
@@ -35457,6 +35482,17 @@ window.cliHistoricoImprimir = function(cliId){
                 </tbody>
               </table>`}
         </div>
+        ${!sem.length ? '' : `
+        <div style="border-top:1px solid #e2e8f0;padding:14px 20px;background:#fffbeb;">
+          <div style="font-size:13px;font-weight:800;color:#b45309;margin-bottom:6px;">⚠️ ${sem.length} relatório(s) pagos e prontos, mas sem email do cliente</div>
+          <div style="font-size:12px;color:#92400e;margin-bottom:9px;line-height:1.5;">Sem email não há para onde enviar — estes ficariam esquecidos. Adiciona o email na ficha do cliente.</div>
+          ${sem.map(x=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #fde68a;font-size:12.5px;">
+              <span><strong>${esc(x.id)}</strong> · ${esc(x.cliente)} · €${eur(x.total)}</span>
+              <button onclick="document.getElementById('mo-rel-envio').remove();if(typeof osEditarCliente==='function')osEditarCliente('${esc(x.clienteId)}')"
+                      style="background:#b45309;color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;">Adicionar email</button>
+            </div>`).join('')}
+        </div>`}
         <div style="padding:12px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;">
           <button onclick="document.getElementById('mo-rel-envio').remove()"
                   style="background:#f1f5f9;color:#475569;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Fechar</button>
@@ -35488,7 +35524,13 @@ window.cliHistoricoImprimir = function(cliId){
         }
 
         const l = lista();
-        if(!l.length){ btn.innerHTML=''; return r; }
+        const nSem = semEmail().length;
+        if(!l.length && !nSem){ btn.innerHTML=''; return r; }
+        if(!l.length){
+          btn.innerHTML = `<button onclick="relAbrirPainelEnvio()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#b45309,#d97706);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;gap:8px;font-family:inherit;">
+            <span style="font-weight:800;">⚠️ ${nSem} relatório(s) pagos sem email do cliente</span><span style="opacity:.7;">›</span></button>`;
+          return r;
+        }
         const total  = l.reduce((s,x)=>s+x.total,0);
         const antigos= l.filter(x=>x.dias>=5).length;
         btn.innerHTML = `<button onclick="relAbrirPainelEnvio()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;font-family:inherit;">
@@ -35506,6 +35548,98 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   log('contador de relatórios prontos a enviar activo');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 21 (v15.39)
+   FATURAS POR EMITIR NO DASHBOARD
+   ──────────────────────────────────────────────────────────────────────────
+   Os avisos de fatura (mensagens_internas · pedido_fatura) só apareciam no
+   menu lateral, como "🔔 Avisos Fatura", e só quando havia algum. Quem
+   trabalha a partir do dashboard nunca os via.
+
+   Passam a ter contador próprio, ao lado dos outros dois. Os três juntos
+   contam a história do dinheiro pela ordem em que acontece:
+
+     💰 Pagamentos por dar baixa   → o cliente pagou, falta confirmar
+     🧾 Faturas por emitir          → confirmado, falta o documento
+     📨 Relatórios prontos a enviar → falta entregar o relatório
+
+   Expõe: window.fatPendentesEmitir()
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1539) return;
+  window._hgV1539 = true;
+
+  const log = (...a)=>console.log('[v15.39]', ...a);
+  const eur = v=>{ try{ return fmt(parseFloat(v)||0); }catch(_){ return (parseFloat(v)||0).toFixed(2); } };
+
+  window.fatPendentesEmitir = function(){
+    return (window.DB.mensagens_internas||[]).filter(m=>
+      m.tipo === 'pedido_fatura' &&
+      !m.documentoEmitido &&
+      !m.arquivado &&
+      !(typeof osMsgNaoFaturavel==='function' && osMsgNaoFaturavel(m))
+    );
+  };
+
+  function dias(m){
+    const d = (m.criadoEm||'').slice(0,10);
+    if(!d) return 0;
+    return Math.max(0, Math.floor((Date.now() - new Date(d+'T12:00:00').getTime())/86400000));
+  }
+
+  const _dash = window.renderDashboard;
+  if(typeof _dash === 'function'){
+    window.renderDashboard = function(){
+      const r = _dash.apply(this, arguments);
+      try{
+        const role = window.currentUser?.role||'';
+        if(!['admin','gerente','supervisor','comercial'].includes(role)) return r;
+        const stats = document.getElementById('dash-stats');
+        if(!stats) return r;
+
+        let btn = document.getElementById('dash-faturas-btn');
+        if(!btn){
+          btn = document.createElement('div');
+          btn.id = 'dash-faturas-btn';
+          btn.style.cssText = 'margin-bottom:12px;';
+          // Ordem: baixas → faturas → relatórios prontos
+          const envio  = document.getElementById('dash-envio-btn');
+          const baixas = document.getElementById('dash-baixas-btn');
+          if(envio)        envio.parentNode.insertBefore(btn, envio);
+          else if(baixas)  baixas.parentNode.insertBefore(btn, baixas.nextSibling);
+          else             stats.parentNode.insertBefore(btn, stats);
+        }
+
+        let lista = window.fatPendentesEmitir();
+        // O comercial vê só os pedidos que lhe foram dirigidos (v15.33)
+        if(!['admin','gerente'].includes(role)){
+          const uid = window.currentUser?.id;
+          lista = lista.filter(m=>!m.destinatarioId || m.destinatarioId === uid);
+        }
+        if(!lista.length){ btn.innerHTML=''; return r; }
+
+        const total   = lista.reduce((s,m)=>s+(parseFloat(m.valorTotal)||0), 0);
+        const antigos = lista.filter(m=>dias(m)>=5).length;
+
+        btn.innerHTML = `<button onclick="adminAbrirPainelMensagens()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#7c3aed,#9333ea);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;font-family:inherit;">
+          <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:17px;">🧾</span><span style="font-weight:800;">Faturas por emitir</span></span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:12px;font-weight:700;">${lista.length}</span>
+            ${antigos?`<span style="background:rgba(254,202,202,.3);padding:3px 10px;border-radius:12px;font-weight:700;">🔴 ${antigos} +5d</span>`:''}
+            ${total?`<span style="font-weight:800;">€${eur(total)}</span>`:''}
+            <span style="opacity:.7;font-size:14px;">›</span>
+          </span>
+        </button>`;
+      }catch(e){ console.warn('[v15.39] botão de faturas:', e); }
+      return r;
+    };
+  }
+
+  log('contador de faturas por emitir no dashboard');
 })();
 
 </script>

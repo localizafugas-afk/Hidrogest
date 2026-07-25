@@ -1236,7 +1236,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.41<br>
+      HidroGest v15.43<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1247,7 +1247,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.41 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.43 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1261,7 +1261,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.41<br>
+      HidroGest v15.43<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -35568,7 +35568,13 @@ window.cliHistoricoImprimir = function(cliId){
 
         const l = lista();
         const nSem = semEmail().length;
-        if(!l.length && !nSem){ btn.innerHTML=''; return r; }
+        if(!l.length && !nSem){
+          // Fica visível mesmo a zero — é um dos números que a gestão quer ver
+          btn.innerHTML = `<div style="width:100%;padding:10px 16px;background:#f0fdf4;border:1px solid #86efac;color:#15803d;border-radius:10px;display:flex;align-items:center;justify-content:space-between;font-size:13px;">
+            <span style="display:flex;align-items:center;gap:10px;"><span>📨</span><span style="font-weight:700;">Relatórios prontos a enviar</span></span>
+            <span style="font-weight:800;">0</span></div>`;
+          return r;
+        }
         if(!l.length){
           btn.innerHTML = `<button onclick="relAbrirPainelEnvio()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#b45309,#d97706);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;gap:8px;font-family:inherit;">
             <span style="font-weight:800;">⚠️ ${nSem} relatório(s) pagos sem email do cliente</span><span style="opacity:.7;">›</span></button>`;
@@ -35663,7 +35669,12 @@ window.cliHistoricoImprimir = function(cliId){
           const uid = window.currentUser?.id;
           lista = lista.filter(m=>!m.destinatarioId || m.destinatarioId === uid);
         }
-        if(!lista.length){ btn.innerHTML=''; return r; }
+        if(!lista.length){
+          btn.innerHTML = `<div style="width:100%;padding:10px 16px;background:#faf5ff;border:1px solid #c4b5fd;color:#6d28d9;border-radius:10px;display:flex;align-items:center;justify-content:space-between;font-size:13px;">
+            <span style="display:flex;align-items:center;gap:10px;"><span>🧾</span><span style="font-weight:700;">Faturas por emitir</span></span>
+            <span style="font-weight:800;">0</span></div>`;
+          return r;
+        }
 
         const total   = lista.reduce((s,m)=>s+(parseFloat(m.valorTotal)||0), 0);
         const antigos = lista.filter(m=>dias(m)>=5).length;
@@ -35849,6 +35860,138 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   log('contador de OS por fechar activo');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 23 (v15.42)
+   O TÉCNICO SÓ VÊ O QUE É DELE, E SEM NÚMEROS DA EMPRESA
+   ──────────────────────────────────────────────────────────────────────────
+   Duas regras:
+
+   1) Só processos onde esteve envolvido.
+      A lista "Minhas OS" já filtrava, mas a ficha da OS abria por ID e o
+      histórico do cliente (v15.34) mostrava as intervenções de todos os
+      técnicos naquele cliente. Passa a mostrar só as dele.
+
+   2) Os valores da PRÓPRIA OS mantêm-se: o cartão de faturação, o total a
+      cobrar e os euros na agenda continuam à vista. O técnico precisa deles
+      para cobrar no local e para saber o que está a fazer.
+      O que ele não pode ver é o dinheiro da EMPRESA — isso trata-se na v15.43.
+
+   Nada disto muda o que é gravado — só o que aparece no ecrã do técnico.
+   As regras a sério têm de ficar nas Firestore Security Rules (ver o
+   ficheiro firestore.rules).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1542) return;
+  window._hgV1542 = true;
+
+  const log    = (...a)=>console.log('[v15.42]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const isTec  = ()=>window.currentUser?.role === 'tecnico';
+  const minha  = os => (os?.tecnicos||[]).includes(window.currentUser?.id);
+
+  /* ── 2. Ficha da OS: só as suas ───────────────────────────────────── */
+  const _detalhe = window.osAbrirDetalhe;
+  if(typeof _detalhe === 'function'){
+    window.osAbrirDetalhe = function(id){
+      if(isTec()){
+        const os = (window.DB.ordens||[]).find(x=>x.id===id);
+        if(os && !minha(os)){
+          _toast('Só podes abrir as OS em que estiveste envolvido.','🔒');
+          return;
+        }
+      }
+      return _detalhe.apply(this, arguments);
+    };
+  }
+
+  /* ── 3. Histórico do cliente: só as intervenções dele ─────────────── */
+  const _hist = window.hgHistoricoCliente;
+  if(typeof _hist === 'function'){
+    window.hgHistoricoCliente = function(cliId, excluirOsId){
+      if(!isTec()) return _hist.apply(this, arguments);
+      const todas = window.DB.ordens||[];
+      window.DB.ordens = todas.filter(o=>minha(o));
+      try{ return _hist.call(this, cliId, excluirOsId); }
+      finally{ window.DB.ordens = todas; }
+    };
+  }
+
+  log('técnico limitado às OS em que esteve envolvido');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 24 (v15.43)
+   O TÉCNICO NÃO VÊ O DINHEIRO DA EMPRESA
+   ──────────────────────────────────────────────────────────────────────────
+   Fica tudo como estava no que toca à OS dele: o cartão de faturação, o
+   valor a cobrar e os euros na agenda voltaram — precisa deles para
+   trabalhar e para receber no local.
+
+   O que se fecha é o nível da EMPRESA:
+     · faturamento global, receita do mês, IVA, despesas gerais
+     · quem deve dinheiro — clientes em atraso ou bloqueados
+     · recebimentos, faturas por emitir, ordens de compra, comissões
+       de outros, propostas, relatórios financeiros
+
+   O menu do técnico já não tinha essas páginas, mas nada impedia lá chegar
+   por outro caminho (um navigate() de um botão partilhado, um link antigo).
+   Agora a navegação recusa, e o estado financeiro dos clientes deixa de ser
+   calculado para ele — não aparece em vista nenhuma, nem por engano.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1543) return;
+  window._hgV1543 = true;
+
+  const log    = (...a)=>console.log('[v15.43]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const isTec  = ()=>window.currentUser?.role === 'tecnico';
+
+  // Páginas de dinheiro da empresa — fora do alcance do técnico
+  const FECHADAS = new Set([
+    'dashboard','recebimentos','despesas','faturas-desp','relatorios',
+    'comissoes','clientes-os','mensagens','produtos','ordens-compra',
+    'fornecedores','prop-calendario','propostas','administradoras',
+    'funcionarios','utilizadores','arquivo','lista-os','agenda-os',
+  ]);
+
+  const _navigate = window.navigate;
+  if(typeof _navigate === 'function'){
+    window.navigate = function(page, el){
+      if(isTec() && FECHADAS.has(page)){
+        _toast('Esta área é da gestão. A tua app tem as OS, os relatórios, as despesas e a tua comissão.','🔒',5000);
+        return _navigate.call(this, 'minhas-os');
+      }
+      return _navigate.apply(this, arguments);
+    };
+  }
+
+  // Estado financeiro dos clientes: não se calcula para o técnico
+  ['clienteTemAtrasoFinanceiro','clienteBloqueadoManualmente'].forEach(nome=>{
+    const orig = window[nome];
+    if(typeof orig !== 'function') return;
+    window[nome] = function(){
+      if(isTec()) return false;
+      return orig.apply(this, arguments);
+    };
+  });
+
+  // Recibos da empresa: o técnico não tem uso legítimo para eles.
+  // (As páginas que os usam já lhe estão fechadas; isto fecha a porta dos fundos.)
+  const _recs = window.getVisibleRecs;
+  if(typeof _recs === 'function'){
+    window.getVisibleRecs = function(){
+      if(isTec()) return [];
+      return _recs.apply(this, arguments);
+    };
+  }
+
+  log('técnico sem acesso a faturamento geral nem a clientes em atraso');
 })();
 
 </script>

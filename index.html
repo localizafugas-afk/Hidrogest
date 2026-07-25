@@ -217,10 +217,24 @@ const DEMO_NAMES    = ['Carlos Silva','Pedro Almeida','João Santos','Ana Costa'
 async function seedIfEmpty() {
   const batch = writeBatch(db);
   let cleaned = false;
+  // ⚠️ v15.22 — CORRECÇÃO: R001–R004 e D001–D002 são também os IDs dos
+  // PRIMEIROS registos reais ('R'+nextRec com 3 dígitos). A limpeza antiga
+  // apagava-os em cada arranque da app. Agora só apaga se o registo tiver
+  // mesmo cara de demonstração (cliente de demo / sem criadoEm).
   const rsnap = await getDocs(COLS.recibos);
-  rsnap.forEach(d=>{ if(DEMO_RECIBOS.includes(d.id)){batch.delete(doc(db,'recibos',d.id));cleaned=true;} });
+  rsnap.forEach(d=>{
+    const r = d.data()||{};
+    if(DEMO_RECIBOS.includes(d.id) && DEMO_NAMES.includes(r.client)){
+      batch.delete(doc(db,'recibos',d.id)); cleaned=true;
+    }
+  });
   const dsnap = await getDocs(COLS.despesas);
-  dsnap.forEach(d=>{ if(DEMO_DESPESAS.includes(d.id)){batch.delete(doc(db,'despesas',d.id));cleaned=true;} });
+  dsnap.forEach(d=>{
+    const x = d.data()||{};
+    if(DEMO_DESPESAS.includes(d.id) && !x.criadoEm && !x.criadoPor){
+      batch.delete(doc(db,'despesas',d.id)); cleaned=true;
+    }
+  });
   // Utilizadores e funcionários: NUNCA sobrescrever — geridos exclusivamente pelo admin via UI
   // Apenas garantir que o utilizador admin (u0) existe se a base estiver completamente vazia
   const usnap = await getDocs(COLS.users);
@@ -1215,7 +1229,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.21<br>
+      HidroGest v15.25<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1226,7 +1240,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.21 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.25 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1240,7 +1254,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.21<br>
+      HidroGest v15.25<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -21276,7 +21290,8 @@ function agRecEditarSimples(id){
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-        <button class="btn btn-sm" onclick="rpImprimirRelatorio()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);font-size:12px;" title="Imprimir / guardar PDF">🖨️ PDF</button>
+        <button class="btn btn-sm" onclick="rpImprimirRelatorio()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);font-size:12px;" title="Imprimir">🖨️ Imprimir</button>
+        <button class="btn btn-sm" onclick="rpDownloadPdf(window._rpVerOsId)" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);font-size:12px;" title="Gerar o mesmo PDF que o cliente recebe">📕 PDF</button>
         <button class="btn btn-sm" onclick="rpDownloadWord(window._rpVerOsId)" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);font-size:12px;" title="Download Word">📄 Word</button>
         <button class="btn btn-sm" id="btn-enviar-relatorio" onclick="rpEnviarEmail()" style="display:none;background:#22c55e;color:#fff;border:none;font-size:12px;">📧 Enviar</button>
         <button class="mc" onclick="closeMo('mo-relat-ver')" style="color:#fff;opacity:.8;font-size:22px;background:none;">×</button>
@@ -25087,7 +25102,7 @@ async function rpEnviarEmailDireto(osId){
       });
     }
 
-    toast(`✅ Word (.docx) enviado para ${cli.email}!${imediato?' Emita o '+docType+'.':''}`, '✅');
+    toast(`✅ Relatório em PDF enviado para ${cli.email}!${imediato?' Emita o '+docType+'.':''}`, '✅');
     auditLog('relatorio_enviado',`OS ${osId} → ${cli.email} — ${pagLabel} — €${total} — por ${window.currentUser?.name}`);
 
     if('Notification' in window && Notification.permission==='granted'){
@@ -32704,6 +32719,1219 @@ window.cliHistoricoImprimir = function(cliId){
   };
 
   console.log('[v15.21] envio de relatório por Brevo substituído — relatório no corpo do email');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 8 (v15.22)
+   RELATÓRIO AO CLIENTE EM PDF (ANEXO)
+   ──────────────────────────────────────────────────────────────────────────
+   Antes (v15.21): o relatório ia todo no CORPO do email e as fotos antigas em
+   base64 seguiam como anexos soltos (imagem_1.jpg, imagem_2.jpg...). O
+   resultado no Gmail/Outlook variava de cliente para cliente.
+
+   Agora: gera-se um PDF A4 do relatório oficial — o mesmo HTML que o sistema
+   mostra em rpGerarHTMLRelatorio — com as fotos já embutidas e comprimidas,
+   e envia-se como anexo único. O corpo do email fica com uma nota curta e o
+   resumo do serviço.
+
+   Porquê PDF e não Word: o cliente abre em qualquer telemóvel, o layout não
+   se desconfigura e as fotos vão dentro do ficheiro.
+
+   Expõe:
+     window.brevoEnviarRelatorio(osId)  → substituído (envia o PDF em anexo)
+     window.rpGerarPdfBase64(osId)      → devolve o PDF em base64, sem enviar
+     window.rpDownloadPdf(osId)         → descarrega o PDF para o dispositivo
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1522) return;
+  window._hgV1522 = true;
+
+  const LIB          = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+  const LIMITE_BREVO = 9 * 1024 * 1024;   // Brevo aceita ~10 MB por email
+  const MAX_PX       = 1400;              // maior lado de cada foto dentro do PDF
+  const QUALIDADE    = 0.72;              // compressão das fotos
+
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const log    = (...a)=>console.log('[v15.22]', ...a);
+
+  /* ── 1. Carregar html2pdf (jsPDF + html2canvas) só quando é preciso ── */
+  function carregarLib(){
+    if(window.html2pdf) return Promise.resolve();
+    return new Promise((res,rej)=>{
+      const s = document.createElement('script');
+      s.src = LIB;
+      s.onload  = ()=>res();
+      s.onerror = ()=>rej(new Error('Não foi possível carregar a biblioteca de PDF (sem internet?)'));
+      document.head.appendChild(s);
+    });
+  }
+
+  /* ── 2. Fotos ────────────────────────────────────────────────────────
+     O html2canvas não consegue "fotografar" imagens remotas: a canvas fica
+     suja e o PDF sai em branco. Por isso cada foto é descarregada, reduzida
+     e convertida para dataURL antes de gerar o PDF.                      */
+  function reduzir(dataUrl){
+    return new Promise(res=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const f = Math.min(1, MAX_PX/Math.max(img.width, img.height));
+        if(f >= 1 && dataUrl.length < 400000) return res(dataUrl);
+        const cv = document.createElement('canvas');
+        cv.width  = Math.max(1, Math.round(img.width  * f));
+        cv.height = Math.max(1, Math.round(img.height * f));
+        const cx = cv.getContext('2d');
+        cx.fillStyle = '#ffffff';
+        cx.fillRect(0, 0, cv.width, cv.height);
+        cx.drawImage(img, 0, 0, cv.width, cv.height);
+        try{ res(cv.toDataURL('image/jpeg', QUALIDADE)); }catch(_){ res(dataUrl); }
+      };
+      img.onerror = ()=>res(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  async function paraDataUrl(src){
+    if(src.startsWith('data:')) return reduzir(src);
+    const r = await fetch(src, {mode:'cors'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const blob = await r.blob();
+    const du = await new Promise((res,rej)=>{
+      const fr = new FileReader();
+      fr.onload = ()=>res(fr.result);
+      fr.onerror = ()=>rej(new Error('leitura falhou'));
+      fr.readAsDataURL(blob);
+    });
+    return reduzir(du);
+  }
+
+  async function prepararImagens(el){
+    const imgs = Array.from(el.querySelectorAll('img'));
+    let falhas = 0;
+    await Promise.all(imgs.map(async img=>{
+      const src = img.getAttribute('src') || '';
+      if(!src){ img.remove(); return; }
+      try{
+        img.setAttribute('src', await paraDataUrl(src));
+      }catch(e){
+        falhas++;
+        console.warn('[v15.22] foto não embutida no PDF:', src, e);
+        const aviso = document.createElement('div');
+        aviso.style.cssText = 'border:1px dashed #cbd5e1;border-radius:6px;padding:18px;font-size:11px;color:#94a3b8;text-align:center;';
+        aviso.textContent = 'Imagem indisponível';
+        img.replaceWith(aviso);
+      }
+    }));
+    // garantir que estão descodificadas antes de fotografar o DOM
+    await Promise.all(Array.from(el.querySelectorAll('img')).map(i=>{
+      try{ return i.decode ? i.decode().catch(()=>{}) : Promise.resolve(); }
+      catch(_){ return Promise.resolve(); }
+    }));
+    return falhas;
+  }
+
+  /* ── 3. Gerar o PDF ─────────────────────────────────────────────────── */
+  async function gerarPdf(osId, opc){
+    opc = opc || {};
+    await carregarLib();
+
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(!os) throw new Error('OS não encontrada');
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    if(!rel.campos) throw new Error('Relatório ainda não preenchido');
+    const tecs = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+
+    const html = rpGerarHTMLRelatorio(os, cli, srv, rel, rel.campos||{}, tecs);
+
+    // Contentor A4 fora do ecrã — largura fixa = layout previsível no PDF
+    const box = document.createElement('div');
+    box.setAttribute('data-hg-pdf','1');
+    box.style.cssText = 'position:fixed;left:-20000px;top:0;width:800px;background:#fff;margin:0;padding:0;z-index:-1;';
+    box.innerHTML = html;
+
+    const doc = box.querySelector('#rp-doc') || box.firstElementChild;
+    if(doc){
+      doc.style.width       = '800px';
+      doc.style.maxWidth    = '800px';
+      doc.style.margin      = '0';
+      doc.style.boxShadow   = 'none';
+      doc.style.borderRadius= '0';
+      doc.style.background  = '#fff';
+    }
+    document.body.appendChild(box);
+
+    try{
+      const falhas = await prepararImagens(box);
+      if(falhas) _toast(`⚠️ ${falhas} foto(s) não entraram no PDF (sem permissão de acesso ao servidor de imagens).`,'⚠️',8000);
+
+      const dataUri = await window.html2pdf().set({
+        margin:      [8, 8, 10, 8],
+        filename:    `Relatorio_OS_${osId}.pdf`,
+        image:       {type:'jpeg', quality: opc.qualidade || 0.9},
+        html2canvas: {
+          scale: opc.escala || 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: 800,
+          scrollX: 0, scrollY: 0,
+        },
+        jsPDF:       {unit:'mm', format:'a4', orientation:'portrait', compress:true},
+        pagebreak:   {mode:['css','legacy'], avoid:['img','tr']},
+      }).from(doc || box).outputPdf('datauristring');
+
+      return String(dataUri).split(',')[1] || '';
+    } finally {
+      box.remove();
+    }
+  }
+
+  // PDF em base64, já com repetição em menor resolução se ficar pesado
+  window.rpGerarPdfBase64 = async function(osId){
+    let b64 = await gerarPdf(osId);
+    if(b64.length * 0.75 > LIMITE_BREVO){
+      log('PDF acima do limite do Brevo — a repetir com menos resolução');
+      b64 = await gerarPdf(osId, {escala:1.4, qualidade:0.7});
+    }
+    return b64;
+  };
+
+  // Download directo do PDF (mesmo ficheiro que o cliente recebe)
+  window.rpDownloadPdf = async function(osId){
+    osId = osId || window._rpVerOsId || window._rpEditOsId;
+    if(!osId){ _toast('Nenhum relatório seleccionado','⚠️'); return; }
+    try{
+      _toast('⏳ A gerar o PDF do relatório...','📄');
+      const b64 = await window.rpGerarPdfBase64(osId);
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([arr], {type:'application/pdf'}));
+      const a = document.createElement('a');
+      a.href = url; a.download = `Relatorio_OS_${osId}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+      _toast('✅ PDF gerado e descarregado.','📄');
+    }catch(e){
+      console.error('[v15.22] erro no PDF:', e);
+      _toast('❌ Erro ao gerar o PDF: '+e.message,'❌');
+    }
+  };
+
+  /* ── 4. Envio ao cliente — PDF em anexo ─────────────────────────────── */
+  window.brevoEnviarRelatorio = async function(osId){
+    const cfg    = window._emailCfg || window.DB?.emailConfig || {};
+    const apiKey = cfg.brevoApiKey || '';
+    if(!apiKey){
+      _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️');
+      return {ok:false, motivo:'sem-api-key'};
+    }
+
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os?.clienteId)||{};
+    const srv = (window.DB.servicos||[]).find(x=>x.id===os?.servicoId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+
+    if(!cli.email)   { _toast('⚠️ Cliente sem email registado.','⚠️'); return {ok:false, motivo:'sem-email'}; }
+    if(!rel.campos)  { _toast('⚠️ Relatório sem dados.','⚠️');        return {ok:false, motivo:'sem-dados'}; }
+
+    const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
+    const empEmail = cfg.remetenteRelatorio || 'localizafugas@gmail.com';
+    const empTel   = cfg.tel || '253 000 000';
+    const tecs = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+
+    // ── PDF do relatório ──────────────────────────────────────────────
+    let pdfBase64 = '';
+    try{
+      _toast('⏳ A gerar o PDF do relatório...','📄');
+      pdfBase64 = await window.rpGerarPdfBase64(osId);
+      if(!pdfBase64) throw new Error('PDF vazio');
+    }catch(e){
+      console.error('[v15.22] falha a gerar o PDF:', e);
+      _toast('❌ Não foi possível gerar o PDF — email não enviado. '+e.message,'❌', 9000);
+      return {ok:false, motivo:'pdf-erro'};
+    }
+
+    const anexos = [{content: pdfBase64, name: `Relatorio_OS_${osId}.pdf`}];
+    let bytes = pdfBase64.length * 0.75;
+
+    // Anexos que o admin juntou ao relatório (cabem se houver espaço)
+    (rel.anexos||[]).filter(a=>a.base64).forEach(a=>{
+      const t = a.base64.length * 0.75;
+      if(bytes + t > LIMITE_BREVO){
+        console.warn('[v15.22] anexo fora por limite de tamanho:', a.nome);
+        return;
+      }
+      bytes += t;
+      anexos.push({content:a.base64, name:a.nome});
+    });
+
+    // ── Corpo do email: nota curta + resumo ───────────────────────────
+    const [ano,mes,dia] = (os.data||'').split('-');
+    const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const dataAssunto = os.data ? `${dia} ${meses[parseInt(mes)-1]} ${ano}` : '';
+    const dataFmt = os.data ? `${dia}/${mes}/${ano}` : '—';
+    const c = rel.campos || {};
+    const esc = s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const par = s=>esc(s).split('\n').join('<br>');
+
+    const htmlEmail = `
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:620px;margin:0 auto;color:#1e293b;">
+        <div style="background:#1e3a5f;padding:20px 24px;border-radius:8px 8px 0 0;">
+          <div style="color:#fff;font-size:19px;font-weight:800;">💧 ${esc(empNome)}</div>
+          <div style="color:#93c5fd;font-size:13px;margin-top:4px;">Relatório de Peritagem Não Destrutiva</div>
+        </div>
+        <div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+          <p style="margin:0 0 14px;font-size:14px;">Exmo(a) Sr(a) <strong>${esc(cli.nome||'')}</strong>,</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.6;">
+            Segue <strong>em anexo, em PDF</strong>, o relatório de peritagem referente ao serviço prestado
+            nas suas instalações. O documento inclui o registo fotográfico e as conclusões técnicas.
+          </p>
+
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+            <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:.5px;margin-bottom:10px;">Resumo do serviço</div>
+            <table style="width:100%;font-size:13px;border-collapse:collapse;">
+              <tr><td style="padding:4px 0;color:#64748b;width:130px;">Nº OS</td><td style="font-weight:700;">${esc(osId)}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b;">Serviço</td><td>${esc(srv.nome||'—')}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b;">Técnico(s)</td><td>${esc(tecs||'—')}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b;">Data</td><td>${esc(dataFmt)}</td></tr>
+            </table>
+          </div>
+
+          ${c.conclusao?`
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:14px;margin:16px 0;">
+            <div style="font-size:12px;color:#166534;font-weight:700;margin-bottom:6px;">✅ Conclusão técnica</div>
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#14532d;">${par(c.conclusao)}</p>
+          </div>`:''}
+
+          ${c.sugestao?`
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px;margin:16px 0;">
+            <div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:6px;">🔧 Recomendação</div>
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#92400e;">${par(c.sugestao)}</p>
+          </div>`:''}
+
+          <p style="margin:18px 0 0;font-size:13px;">Para qualquer questão:<br>
+            📞 <a href="tel:${esc(empTel)}" style="color:#1e3a5f;">${esc(empTel)}</a> &nbsp;·&nbsp;
+            ✉️ <a href="mailto:${esc(empEmail)}" style="color:#1e3a5f;">${esc(empEmail)}</a>
+          </p>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+            Com os melhores cumprimentos,<br><strong style="color:#1e3a5f;">${esc(empNome)}</strong>
+          </div>
+        </div>
+      </div>`;
+
+    const payload = {
+      sender:  {name: empNome, email: empEmail},
+      replyTo: {email: cfg.replyTo || 'localizafugas@gmail.com', name: empNome},
+      to:      [{email: cli.email, name: cli.nome||''}],
+      subject: `Relatório de Peritagem — OS ${osId}${dataAssunto?' — '+dataAssunto:''}`,
+      htmlContent: htmlEmail,
+      attachment: anexos,
+    };
+
+    try{
+      _toast('⏳ A enviar o relatório em PDF ao cliente...','📧');
+      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+        method:'POST',
+        headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        _toast(`❌ Erro Brevo: ${err.message||r.status}`,'❌');
+        return {ok:false, motivo:'brevo-erro', status:r.status};
+      }
+      _toast('✅ Relatório enviado em PDF para '+cli.email,'✅');
+      return {ok:true};
+    }catch(e){
+      _toast(`❌ Erro de ligação ao Brevo: ${e.message}`,'❌');
+      return {ok:false, motivo:'ligacao-erro'};
+    }
+  };
+
+  log('envio do relatório substituído — PDF em anexo (rpDownloadPdf / rpGerarPdfBase64 disponíveis)');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 9 (v15.23)
+   1) FORMA DE PAGAMENTO SEMPRE LANÇADA PELO TÉCNICO
+   2) PEDIDO MATINAL DE BAIXAS AOS COMERCIAIS
+   ──────────────────────────────────────────────────────────────────────────
+   1) O fecho com assinaturas (osConcluirComAssinaturas) já exigia a
+      modalidade de pagamento. O fecho "sem relatório"
+      (osFecharSemRelatorio) não exigia nada — era por aí que as OS ficavam
+      sem saber como o cliente pagou. Passa a pedir a modalidade antes de
+      fechar, com as mesmas opções do fecho normal.
+
+   2) Todas as manhãs, no primeiro arranque num browser de gestão, é enviado
+      um email aos comerciais e à administração com a lista de OS que já têm
+      modalidade de pagamento lançada pelo técnico mas continuam por dar
+      baixa (os.pago !== true). No dashboard fica também um botão com a
+      contagem, que abre a lista com acesso directo à baixa.
+
+   Expõe:
+     window.pagPendentesBaixa()      → array das OS por dar baixa
+     window.pagAbrirPainelBaixas()   → painel com a lista e baixa directa
+     window.pagEnviarPedidoBaixas()  → envia o email agora (manual)
+     window.pagAutoPedidoBaixas()    → envio automático, 1x por dia
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1523) return;
+  window._hgV1523 = true;
+
+  const HORA_MINIMA = 7;   // não envia antes das 07:00 locais
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const log    = (...a)=>console.log('[v15.23]', ...a);
+  const esc    = s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const eur    = v=>{ try{ return fmt(parseFloat(v)||0); }catch(_){ return (parseFloat(v)||0).toFixed(2); } };
+
+  const METODOS = [
+    {v:'mb',            l:'💳 Multibanco (MB)',        imediato:true},
+    {v:'mbway',         l:'📱 MBWay',                  imediato:true},
+    {v:'dinheiro',      l:'💵 Numerário',              imediato:true},
+    {v:'transferencia', l:'🏦 Transferência Bancária', imediato:false},
+    {v:'cheque',        l:'📝 Cheque',                 imediato:true},
+    {v:'entidade',      l:'🏢 Entidade Pagadora',      imediato:false},
+  ];
+  const LABEL = v=>(METODOS.find(m=>m.v===v)?.l||v||'—').replace(/^[^\s]+\s/,'');
+
+  /* ══════════════════════════════════════════════════════════════════
+     1. FORMA DE PAGAMENTO NO FECHO SEM RELATÓRIO
+     ══════════════════════════════════════════════════════════════════ */
+
+  // Modal simples de escolha da modalidade — devolve {metodo, ref} ou null
+  function pedirModalidade(os){
+    return new Promise(resolve=>{
+      const mo = document.createElement('div');
+      mo.id = 'mo-pag-fecho';
+      mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      mo.innerHTML = `
+        <div style="background:#fff;border-radius:14px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+          <div style="background:#1e3a5f;color:#fff;padding:16px 20px;">
+            <div style="font-size:16px;font-weight:800;">💰 Como é que o cliente pagou?</div>
+            <div style="font-size:12px;opacity:.85;margin-top:3px;">OS ${esc(os.id)} · €${eur(os.total)}</div>
+          </div>
+          <div style="padding:18px 20px;">
+            <div style="font-size:12.5px;color:#475569;margin-bottom:12px;line-height:1.5;">
+              A modalidade de pagamento é obrigatória para fechar a OS, mesmo sem o relatório escrito.
+            </div>
+            <div id="pag-fecho-ops" style="display:flex;flex-direction:column;gap:7px;">
+              ${METODOS.map(m=>`
+                <button data-met="${m.v}" style="text-align:left;padding:11px 14px;border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;font-size:14px;font-weight:600;color:#1e293b;cursor:pointer;">
+                  ${m.l}
+                </button>`).join('')}
+            </div>
+            <input id="pag-fecho-ref" placeholder="Referência / nº de cheque (opcional)"
+                   style="width:100%;margin-top:12px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;box-sizing:border-box;">
+            <button id="pag-fecho-cancelar"
+                    style="width:100%;margin-top:10px;padding:10px;border:none;background:#f1f5f9;color:#475569;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;">
+              Cancelar
+            </button>
+          </div>
+        </div>`;
+      document.body.appendChild(mo);
+
+      const fechar = v=>{ mo.remove(); resolve(v); };
+      mo.querySelector('#pag-fecho-cancelar').onclick = ()=>fechar(null);
+      mo.addEventListener('click', e=>{ if(e.target===mo) fechar(null); });
+      mo.querySelectorAll('#pag-fecho-ops button').forEach(b=>{
+        b.onclick = ()=>fechar({
+          metodo: b.getAttribute('data-met'),
+          ref: (mo.querySelector('#pag-fecho-ref')?.value||'').trim(),
+        });
+      });
+    });
+  }
+
+  const _fecharOriginal = window.osFecharSemRelatorio;
+  if(typeof _fecharOriginal === 'function'){
+    window.osFecharSemRelatorio = async function(osId){
+      const os = (window.DB.ordens||[]).find(x=>x.id===osId);
+      if(!os) return _fecharOriginal.call(this, osId);
+
+      const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
+      const jaTem  = !!(os.pagamento && os.pagamento.metodo);
+
+      if(!naoFat && !jaTem){
+        const escolha = await pedirModalidade(os);
+        if(!escolha){ _toast('OS não fechada — falta indicar como o cliente pagou.','⚠️'); return; }
+        const met = escolha.metodo;
+        const imediato = !!METODOS.find(m=>m.v===met)?.imediato;
+        try{
+          await window.fsSetMerge('ordens', osId, {
+            pagamento:{
+              metodo: met, ref: escolha.ref||'', imediato,
+              metLabel: LABEL(met),
+              confirmadoEm: new Date().toISOString(),
+              confirmadoPor: window.currentUser?.id,
+              lancadoPor: window.currentUser?.name||'',
+            },
+          });
+          const _o=(window.DB.ordens||[]).find(x=>x.id===osId);
+          if(_o) _o.pagamento={metodo:met, ref:escolha.ref||'', imediato, metLabel:LABEL(met)};
+          if(typeof auditLog==='function') auditLog('pagamento_lancado_fecho', `OS ${osId} — ${LABEL(met)} — lançado por ${window.currentUser?.name}`);
+        }catch(e){
+          console.error('[v15.23] falha a gravar a modalidade:', e);
+          _toast('❌ Não foi possível guardar a forma de pagamento. Tente de novo.','❌');
+          return;
+        }
+      }
+      return _fecharOriginal.call(this, osId);
+    };
+    log('osFecharSemRelatorio passa a exigir a forma de pagamento');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     2. BAIXAS PENDENTES — lista, painel e email matinal
+     ══════════════════════════════════════════════════════════════════ */
+
+  // OS já executadas, com modalidade lançada, mas ainda sem baixa (pago!==true)
+  window.pagPendentesBaixa = function(){
+    return (window.DB.ordens||[])
+      .filter(o=>{
+        if(!['concluida','os_fechada'].includes(o.estado)) return false;
+        if(o.pago === true) return false;
+        if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return false;
+        return !!(o.pagamento && o.pagamento.metodo);
+      })
+      .sort((a,b)=>String(a.concluidoEm||a.fechadoEm||a.data||'').localeCompare(String(b.concluidoEm||b.fechadoEm||b.data||'')));
+  };
+
+  function linhasResumo(lista){
+    return lista.map(o=>{
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      const tec = (o.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+      const dt  = (o.concluidoEm||o.fechadoEm||'').slice(0,10) || o.data || '';
+      const dias = dt ? Math.max(0, Math.floor((Date.now()-new Date(dt+'T12:00:00').getTime())/86400000)) : 0;
+      return {
+        id:o.id,
+        cliente: cli.nome || o.clienteNomeSnapshot || '—',
+        metodo: o.pagamento?.metLabel || LABEL(o.pagamento?.metodo),
+        ref: o.pagamento?.ref||'',
+        tecnico: tec||'—',
+        data: dt ? dt.split('-').reverse().join('/') : '—',
+        dias,
+        total: parseFloat(o.total)||0,
+      };
+    });
+  }
+
+  // ── Painel no ecrã, com baixa directa ──────────────────────────────
+  window.pagAbrirPainelBaixas = function(){
+    const lista = linhasResumo(window.pagPendentesBaixa());
+    const total = lista.reduce((s,l)=>s+l.total,0);
+    document.getElementById('mo-pag-baixas')?.remove();
+
+    const mo = document.createElement('div');
+    mo.id = 'mo-pag-baixas';
+    mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:14px;';
+    mo.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+        <div style="background:linear-gradient(135deg,#1e3a5f,#2c5282);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">💰 Pagamentos por dar baixa</div>
+            <div style="font-size:12px;opacity:.85;margin-top:3px;">${lista.length} OS · €${eur(total)} por confirmar</div>
+          </div>
+          <button onclick="document.getElementById('mo-pag-baixas').remove()"
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0;">×</button>
+        </div>
+        <div style="overflow:auto;padding:0;">
+          ${!lista.length
+            ? '<div style="padding:48px 20px;text-align:center;color:#16a34a;font-weight:600;">✅ Não há pagamentos por dar baixa.</div>'
+            : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;position:sticky;top:0;">
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">OS / Cliente</th>
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Modalidade</th>
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Técnico</th>
+                  <th style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Dias</th>
+                  <th style="padding:9px 12px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Valor</th>
+                  <th style="padding:9px 12px;"></th>
+                </tr></thead>
+                <tbody>
+                ${lista.map((l,i)=>`
+                  <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                    <td style="padding:10px 12px;">
+                      <div style="font-weight:700;">${esc(l.id)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">${esc(l.cliente)} · ${esc(l.data)}</div>
+                    </td>
+                    <td style="padding:10px 12px;">${esc(l.metodo)}${l.ref?`<div style="font-size:11px;color:#94a3b8;">${esc(l.ref)}</div>`:''}</td>
+                    <td style="padding:10px 12px;color:#475569;">${esc(l.tecnico)}</td>
+                    <td style="padding:10px 12px;text-align:center;">
+                      <span style="background:${l.dias>=5?'#fef2f2':l.dias>=3?'#fffbeb':'#f0fdf4'};color:${l.dias>=5?'#b91c1c':l.dias>=3?'#b45309':'#15803d'};font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px;">${l.dias}d</span>
+                    </td>
+                    <td style="padding:10px 12px;text-align:right;font-weight:800;">€${eur(l.total)}</td>
+                    <td style="padding:10px 12px;text-align:right;">
+                      <button onclick="document.getElementById('mo-pag-baixas').remove();osAbrirModalPagamento('${esc(l.id)}')"
+                              style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Dar baixa</button>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>`}
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+          <button onclick="pagEnviarPedidoBaixas()"
+                  style="background:#1e3a5f;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;">📧 Enviar pedido aos comerciais</button>
+          <button onclick="document.getElementById('mo-pag-baixas').remove()"
+                  style="background:#f1f5f9;color:#475569;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mo);
+  };
+
+  // ── Email matinal aos comerciais ───────────────────────────────────
+  function destinatarios(){
+    const users = window.DB.users||[];
+    const alvo = users.filter(u=>u.active!==false && u.email && ['comercial','admin','gerente','supervisor'].includes(u.role));
+    const vistos = new Set();
+    return alvo.filter(u=>{ const e=String(u.email).toLowerCase(); if(vistos.has(e)) return false; vistos.add(e); return true; })
+               .map(u=>({email:u.email, name:u.name||''}));
+  }
+
+  window.pagEnviarPedidoBaixas = async function(auto){
+    const cfg = window._emailCfg || window.DB?.emailConfig || {};
+    const apiKey = cfg.brevoApiKey||'';
+    if(!apiKey){ if(!auto) _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️'); return {ok:false}; }
+
+    const lista = linhasResumo(window.pagPendentesBaixa());
+    if(!lista.length){
+      if(!auto) _toast('✅ Não há pagamentos por dar baixa — não foi enviado nada.','✅');
+      return {ok:true, vazio:true};
+    }
+
+    const para = destinatarios();
+    if(!para.length){ if(!auto) _toast('⚠️ Nenhum comercial/admin com email registado.','⚠️'); return {ok:false}; }
+
+    const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
+    const empEmail = cfg.remetenteRelatorio || cfg.remetente || 'localizafugas@gmail.com';
+    const total    = lista.reduce((s,l)=>s+l.total,0);
+    const hoje     = new Date().toLocaleDateString('pt-PT',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+    // Agrupar por modalidade — ajuda a saber onde procurar o dinheiro
+    const porMet = {};
+    lista.forEach(l=>{ const k=l.metodo||'—'; if(!porMet[k]) porMet[k]={n:0,total:0}; porMet[k].n++; porMet[k].total+=l.total; });
+
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:0 auto;color:#1e293b;">
+        <div style="background:linear-gradient(135deg,#1e3a5f,#2c5282);padding:20px 24px;border-radius:10px 10px 0 0;color:#fff;">
+          <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:1px;">Rotina da manhã</div>
+          <div style="font-size:20px;font-weight:800;margin-top:2px;">💰 Pagamentos por dar baixa</div>
+          <div style="font-size:13px;opacity:.85;margin-top:4px;text-transform:capitalize;">${esc(hoje)}</div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:18px 24px;">
+          <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
+            Bom dia. Estas ${lista.length} ordens de serviço já têm a modalidade de pagamento lançada pelo técnico,
+            mas continuam <strong>por confirmar no sistema</strong>. Confirmem, por favor, quais já entraram
+            e dêem baixa em HidroGest → OS → 💳 Confirmar pagamento.
+          </p>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;font-size:13px;color:#92400e;margin-bottom:16px;">
+            ⚠️ Enquanto o pagamento não tiver baixa, o relatório <strong>não pode ser enviado ao cliente</strong>.
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">OS</th>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Cliente</th>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Modalidade</th>
+              <th style="padding:8px 10px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Técnico</th>
+              <th style="padding:8px 10px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Data</th>
+              <th style="padding:8px 10px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Dias</th>
+              <th style="padding:8px 10px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Valor</th>
+            </tr></thead>
+            <tbody>
+              ${lista.map((l,i)=>`
+                <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                  <td style="padding:8px 10px;font-weight:700;">${esc(l.id)}</td>
+                  <td style="padding:8px 10px;">${esc(l.cliente)}</td>
+                  <td style="padding:8px 10px;">${esc(l.metodo)}${l.ref?` <span style="color:#94a3b8;">(${esc(l.ref)})</span>`:''}</td>
+                  <td style="padding:8px 10px;color:#475569;">${esc(l.tecnico)}</td>
+                  <td style="padding:8px 10px;text-align:center;color:#475569;">${esc(l.data)}</td>
+                  <td style="padding:8px 10px;text-align:center;font-weight:700;color:${l.dias>=5?'#b91c1c':l.dias>=3?'#b45309':'#15803d'};">${l.dias}</td>
+                  <td style="padding:8px 10px;text-align:right;font-weight:700;">€${eur(l.total)}</td>
+                </tr>`).join('')}
+            </tbody>
+            <tfoot><tr style="background:#f0fdf4;border-top:2px solid #86efac;">
+              <td colspan="6" style="padding:10px;font-weight:800;color:#15803d;">TOTAL POR CONFIRMAR</td>
+              <td style="padding:10px;text-align:right;font-weight:800;font-size:15px;color:#15803d;">€${eur(total)}</td>
+            </tr></tfoot>
+          </table>
+
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;">
+            <div style="font-size:12px;font-weight:800;color:#1e3a5f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Por modalidade</div>
+            ${Object.entries(porMet).sort((a,b)=>b[1].total-a[1].total).map(([m,v])=>`
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #f1f5f9;">
+                <span>${esc(m)} <span style="color:#94a3b8;">(${v.n})</span></span>
+                <strong>€${eur(v.total)}</strong>
+              </div>`).join('')}
+          </div>
+
+          <div style="margin-top:18px;font-size:12px;color:#94a3b8;">
+            Email automático do HidroGest · ${esc(empNome)}
+          </div>
+        </div>
+      </div>`;
+
+    try{
+      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+        method:'POST',
+        headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
+        body: JSON.stringify({
+          sender:{name:empNome, email:empEmail},
+          to: para,
+          subject: `💰 Baixas por confirmar — ${lista.length} OS · €${eur(total)}`,
+          htmlContent: html,
+        }),
+      });
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        if(!auto) _toast(`❌ Erro Brevo: ${err.message||r.status}`,'❌');
+        return {ok:false, status:r.status};
+      }
+      if(!auto) _toast(`✅ Pedido enviado a ${para.length} destinatário(s).`,'📧');
+      if(typeof auditLog==='function') auditLog('pedido_baixas', `${lista.length} OS · €${eur(total)} · ${auto?'automático':'manual'}`);
+      return {ok:true};
+    }catch(e){
+      if(!auto) _toast('❌ Erro de ligação ao Brevo: '+e.message,'❌');
+      return {ok:false};
+    }
+  };
+
+  // ── Envio automático: 1x por dia, no primeiro browser de gestão ────
+  window.pagAutoPedidoBaixas = async function(){
+    try{
+      if(window._pagBaixasTentado) return;
+      const role = window.currentUser?.role||'';
+      if(!['admin','gerente','supervisor'].includes(role)) return;
+      if(new Date().getHours() < HORA_MINIMA) return;
+      const cfg = window._emailCfg||{};
+      if(!cfg.brevoApiKey) return;
+      if(!(window.DB?.ordens||[]).length || !(window.DB?.users||[]).length) return;
+      window._pagBaixasTentado = true;
+
+      const hoje = new Date().toISOString().slice(0,10);
+      // Marcador partilhado em meta/pedidoBaixas — o onSnapshot de COLS.meta
+      // publica-o em window.DB.pedidoBaixas, por isso a leitura é imediata e
+      // vale para todos os browsers (nota: window._firestoreOps não existe
+      // nesta app, por isso não se usa aqui o padrão do getDoc directo).
+      if(window.DB?.pedidoBaixas === hoje) return;
+
+      // marcar ANTES de enviar, para não duplicar entre browsers
+      await window.fsMeta('pedidoBaixas', hoje);
+      window.DB.pedidoBaixas = hoje;
+      const r = await window.pagEnviarPedidoBaixas(true);
+      log('pedido matinal de baixas:', r);
+    }catch(e){ console.warn('[v15.23] envio automático de baixas falhou:', e); }
+  };
+
+  /* ── 3. Botão no dashboard com a contagem ────────────────────────── */
+  const _dashOriginal = window.renderDashboard;
+  if(typeof _dashOriginal === 'function'){
+    window.renderDashboard = function(){
+      const r = _dashOriginal.apply(this, arguments);
+      try{
+        const role = window.currentUser?.role||'';
+        if(!['admin','gerente','supervisor','comercial'].includes(role)) return r;
+        const stats = document.getElementById('dash-stats');
+        if(!stats) return r;
+        let btn = document.getElementById('dash-baixas-btn');
+        if(!btn){
+          btn = document.createElement('div');
+          btn.id = 'dash-baixas-btn';
+          btn.style.cssText = 'margin-bottom:12px;';
+          stats.parentNode.insertBefore(btn, stats);
+        }
+        const lista = window.pagPendentesBaixa();
+        if(!lista.length){ btn.innerHTML=''; return r; }
+        const total = lista.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
+        const antigos = lista.filter(o=>{
+          const dt=(o.concluidoEm||o.fechadoEm||'').slice(0,10)||o.data||'';
+          return dt && (Date.now()-new Date(dt+'T12:00:00').getTime())/86400000 >= 5;
+        }).length;
+        btn.innerHTML = `<button onclick="pagAbrirPainelBaixas()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#b45309,#d97706);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;">
+          <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:17px;">💰</span><span style="font-weight:800;">Pagamentos por dar baixa</span></span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:12px;font-weight:700;">${lista.length} OS</span>
+            ${antigos?`<span style="background:rgba(254,202,202,.3);padding:3px 10px;border-radius:12px;font-weight:700;">🔴 ${antigos} +5d</span>`:''}
+            <span style="font-weight:800;">€${eur(total)}</span>
+            <span style="opacity:.7;font-size:14px;">›</span>
+          </span>
+        </button>`;
+      }catch(e){ console.warn('[v15.23] botão de baixas:', e); }
+      return r;
+    };
+  }
+
+  // Arranque: tentar o envio matinal quando os dados já estiverem carregados
+  setTimeout(()=>{ window.pagAutoPedidoBaixas(); }, 12000);
+  setInterval(()=>{ window._pagBaixasTentado = false; window.pagAutoPedidoBaixas(); }, 60*60*1000);
+
+  log('módulo carregado — pagamento obrigatório no fecho sem relatório + rotina matinal de baixas');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 10 (v15.24)
+   1) O TÉCNICO DEIXA DE VER O ESTADO DO PAGAMENTO
+   2) FECHO DE OS MAIS FÁCIL — LISTA DE VERIFICAÇÃO AO VIVO
+   ──────────────────────────────────────────────────────────────────────────
+   1) O técnico só informa COMO o cliente vai pagar. Deixa de ver se o
+      dinheiro entrou, que documento será emitido ou se falta confirmação:
+        · a "luz" verde/amarela do fecho (Fatura vs Fatura-Recibo) some
+        · as notificações "Pagamento recebido / Recibo criado" deixam de
+          aparecer no telemóvel do técnico
+        · na lista "Minhas OS" o selo "💳 Confirmar pag." passa a "✅ Entregue"
+      Nada disto muda o que é gravado — só o que o técnico vê.
+
+   2) Antes, o técnico preenchia tudo, assinava as duas assinaturas, carregava
+      em "Concluir OS" e só então recebia um aviso a dizer o que faltava, tendo
+      de voltar atrás. Agora, no topo do fecho, há uma lista sempre visível com
+      o que falta e o que já está feito; cada item em falta é clicável e leva
+      directamente ao sítio onde se resolve.
+
+   Expõe: window.osConcCheckRender()
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1524) return;
+  window._hgV1524 = true;
+
+  const log   = (...a)=>console.log('[v15.24]', ...a);
+  const isTec = ()=>window.currentUser?.role === 'tecnico';
+
+  /* ══════════════════════════════════════════════════════════════════
+     1. BLINDAGEM: o técnico não recebe estado de pagamento
+     ══════════════════════════════════════════════════════════════════ */
+
+  // 1.1 Notificações de pagamento/recibo — não vão ao técnico
+  const _notifOriginal = window.osNotifPagamento;
+  if(typeof _notifOriginal === 'function'){
+    window.osNotifPagamento = function(){
+      if(isTec()) return;                       // técnico não é notificado
+      return _notifOriginal.apply(this, arguments);
+    };
+  }
+
+  // 1.2 "Luz" do fecho (Fatura vs Fatura-Recibo) — escondida para o técnico
+  const _calcOriginal = window.osCalcHorasConc;
+  if(typeof _calcOriginal === 'function'){
+    window.osCalcHorasConc = function(){
+      const r = _calcOriginal.apply(this, arguments);
+      try{
+        if(isTec()){
+          const luz = document.getElementById('os-conc-pag-luz');
+          if(luz) luz.style.display = 'none';
+        }
+      }catch(_){}
+      try{ window.osConcCheckRender(); }catch(_){}
+      return r;
+    };
+  }
+
+  // 1.3 Selo de estado nas listas — o técnico vê o relatório, não o dinheiro
+  const _badgeOriginal = window.rpContadorDiasLabel;
+  if(typeof _badgeOriginal === 'function'){
+    window.rpContadorDiasLabel = function(os){
+      if(isTec()){
+        const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+        if(rel?.estado === 'enviado')
+          return '<span style="font-size:10px;background:#d1fae5;color:#065f46;font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;">✅ Enviado</span>';
+        // dias===null significa "à espera da confirmação do pagamento" — assunto do escritório
+        if(typeof rpDiasParaEnvio === 'function' && rpDiasParaEnvio(os) === null)
+          return '<span style="font-size:10px;background:#f1f5f9;color:#475569;font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;">✅ Entregue</span>';
+      }
+      return _badgeOriginal.apply(this, arguments);
+    };
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     2. LISTA DE VERIFICAÇÃO AO VIVO NO FECHO DA OS
+     ══════════════════════════════════════════════════════════════════ */
+
+  function estadoFecho(){
+    return (window._rpEstadoFecho === 'preliminar') ? 'preliminar' : 'definitivo';
+  }
+
+  function assinado(id){
+    const c = document.getElementById(id);
+    return !!(c && c.dataset.signed === 'true');
+  }
+
+  // Mesmos critérios que osConcluirComAssinaturas usa para deixar fechar
+  function itensFecho(){
+    const osId = window._osConcluirId;
+    const os   = (window.DB.ordens||[]).find(x=>x.id===osId) || {};
+    const rel  = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId) || {};
+    const c    = rel.campos || {};
+    const nFotos = (rel.fotos || window._rpFotosTemp || []).length;
+    const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
+    const metSel = document.getElementById('os-conc-pag-met')?.value || os.pagamento?.metodo || '';
+    const definitivo = estadoFecho() === 'definitivo';
+
+    const itens = [
+      {k:'tipo',  ok:!!c.tipoProblema,
+       l:'Tipo de anomalia', falta:'Escolher o tipo de anomalia', acao:'relatorio'},
+      {k:'local', ok:!!(c.localManifestacao && c.localManifestacao.trim()),
+       l:'Local onde o problema se manifesta', falta:'Indicar a fracção/divisão', acao:'relatorio'},
+      {k:'pesq',  ok:!!(c.locaisPesquisados && c.locaisPesquisados.trim()),
+       l:'Locais pesquisados', falta:'Indicar onde se fez a pesquisa', acao:'relatorio'},
+      {k:'fotos', ok:nFotos >= 4,
+       l:`Fotografias (${nFotos}/4)`, falta:`Faltam ${Math.max(0,4-nFotos)} foto(s)`, acao:'relatorio'},
+    ];
+    if(definitivo){
+      itens.push({k:'concl',
+        ok:!!((c.conclusao&&c.conclusao.trim())||(c.trabalho&&c.trabalho.trim())),
+        l:'Trabalho realizado / conclusão', falta:'Escrever a conclusão técnica', acao:'relatorio'});
+    }
+    if(!naoFat){
+      itens.push({k:'pag', ok:!!metSel,
+        l:'Forma de pagamento', falta:'Indicar como o cliente vai pagar', acao:'pagamento'});
+    }
+    itens.push({k:'assTec', ok:assinado('canvas-tec'),
+      l:'Assinatura do técnico', falta:'Assinar', acao:'canvas-tec'});
+    itens.push({k:'assCli', ok:assinado('canvas-cli'),
+      l:'Assinatura do cliente', falta:'Recolher a assinatura do cliente', acao:'canvas-cli'});
+
+    return itens;
+  }
+
+  window.osConcCheckAcao = function(acao){
+    if(acao === 'relatorio'){
+      const osId = window._osConcluirId;
+      if(typeof rpAbrirFormulario === 'function' && osId){
+        try{ closeMo('mo-os-concluir'); }catch(_){}
+        rpAbrirFormulario(osId);
+      }
+      return;
+    }
+    const alvo = acao === 'pagamento'
+      ? document.getElementById('os-conc-pag-met')
+      : document.getElementById(acao);
+    if(alvo){
+      alvo.scrollIntoView({behavior:'smooth', block:'center'});
+      alvo.style.outline = '3px solid #f59e0b';
+      setTimeout(()=>{ alvo.style.outline=''; }, 1800);
+    }
+  };
+
+  function garantirCaixa(){
+    const mb = document.querySelector('#mo-os-concluir .mb');
+    if(!mb) return null;
+    let box = document.getElementById('os-conc-check');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'os-conc-check';
+      box.style.cssText = 'margin-bottom:16px;';
+      mb.insertBefore(box, mb.firstChild);
+    }
+    return box;
+  }
+
+  window.osConcCheckRender = function(){
+    const modal = document.getElementById('mo-os-concluir');
+    if(!modal || !modal.classList.contains('open')) return;
+    const box = garantirCaixa();
+    if(!box) return;
+
+    const itens = itensFecho();
+    const feitos = itens.filter(i=>i.ok).length;
+    const total  = itens.length;
+    const pronto = feitos === total;
+    const pct    = Math.round(feitos/total*100);
+
+    box.innerHTML = `
+      <div style="border:2px solid ${pronto?'#86efac':'#fed7aa'};background:${pronto?'#f0fdf4':'#fffbeb'};border-radius:10px;overflow:hidden;">
+        <div style="padding:11px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="font-size:13px;font-weight:800;color:${pronto?'#15803d':'#b45309'};">
+            ${pronto ? '✅ Pronto a fechar a OS' : '📋 Falta preencher'}
+          </div>
+          <div style="font-size:12px;font-weight:700;color:${pronto?'#15803d':'#b45309'};">${feitos}/${total}</div>
+        </div>
+        <div style="height:5px;background:#e2e8f0;">
+          <div style="height:5px;width:${pct}%;background:${pronto?'#16a34a':'#f59e0b'};transition:width .25s;"></div>
+        </div>
+        <div style="padding:8px 10px 10px;">
+          ${itens.map(i=>i.ok
+            ? `<div style="display:flex;align-items:center;gap:9px;padding:5px 4px;font-size:12.5px;color:#15803d;">
+                 <span style="flex-shrink:0;">✅</span><span style="opacity:.75;">${i.l}</span>
+               </div>`
+            : `<div onclick="osConcCheckAcao('${i.acao}')" style="display:flex;align-items:center;gap:9px;padding:7px 8px;font-size:12.5px;color:#7c2d12;background:#fff;border:1px solid #fed7aa;border-radius:8px;margin:4px 0;cursor:pointer;">
+                 <span style="flex-shrink:0;">⬜</span>
+                 <span style="flex:1;"><strong>${i.l}</strong><br><span style="font-size:11.5px;opacity:.8;">${i.falta}</span></span>
+                 <span style="opacity:.5;">›</span>
+               </div>`).join('')}
+        </div>
+      </div>`;
+  };
+
+  // Actualizar sempre que o técnico mexe em alguma coisa dentro do modal
+  document.addEventListener('input',     e=>{ if(e.target.closest?.('#mo-os-concluir')) window.osConcCheckRender(); }, true);
+  document.addEventListener('change',    e=>{ if(e.target.closest?.('#mo-os-concluir')) window.osConcCheckRender(); }, true);
+  document.addEventListener('pointerup', e=>{ if(e.target.closest?.('#mo-os-concluir')) setTimeout(window.osConcCheckRender, 60); }, true);
+  document.addEventListener('touchend',  e=>{ if(e.target.closest?.('#mo-os-concluir')) setTimeout(window.osConcCheckRender, 60); }, true);
+
+  // Rede de segurança enquanto o modal está aberto (fotos/relatório podem
+  // chegar do Firestore sem qualquer interacção)
+  setInterval(()=>{ try{ window.osConcCheckRender(); }catch(_){} }, 1500);
+
+  const _abrirOriginal = window.osAbrirConcluir;
+  if(typeof _abrirOriginal === 'function'){
+    window.osAbrirConcluir = function(osId){
+      const r = _abrirOriginal.apply(this, arguments);
+      setTimeout(()=>{
+        try{
+          window.osConcCheckRender();
+          if(isTec()){
+            const luz = document.getElementById('os-conc-pag-luz');
+            if(luz) luz.style.display='none';
+            // Rótulo mais directo: o técnico só informa a modalidade
+            const sec = document.querySelector('#os-conc-pag-bloco .fsec');
+            if(sec && !sec.dataset.hg1524){
+              sec.dataset.hg1524 = '1';
+              sec.textContent = '💳 Como é que o cliente vai pagar?';
+              const nota = document.createElement('div');
+              nota.style.cssText = 'font-size:11.5px;color:#64748b;margin:-6px 0 10px;line-height:1.45;';
+              nota.textContent = 'Basta indicar a forma de pagamento. A confirmação do recebimento é feita pelo escritório.';
+              sec.parentNode.insertBefore(nota, sec.nextSibling);
+            }
+          }
+        }catch(_){}
+      }, 250);
+      return r;
+    };
+  }
+
+  log('módulo carregado — técnico sem estado de pagamento + checklist de fecho ao vivo');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 11 (v15.25)
+   FECHAR OS SEM RELATÓRIO NUM ÚNICO ECRÃ
+   ──────────────────────────────────────────────────────────────────────────
+   Antes eram quatro pop-ups do browser seguidos: confirm() com um texto
+   enorme, prompt() da hora de início, prompt() da hora de fim e, desde a
+   v15.23, ainda o modal da forma de pagamento. Em telemóvel os prompt()
+   perdem o teclado, não validam nada e um "Cancelar" a meio deixava a OS
+   por fechar sem explicação.
+
+   Agora é um só ecrã: horas (com botão "agora" e duração calculada ao vivo),
+   forma de pagamento e o aviso do prazo — tudo à vista antes de confirmar.
+   Grava exactamente os mesmos campos que a versão anterior.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1525) return;
+  window._hgV1525 = true;
+
+  const log   = (...a)=>console.log('[v15.25]', ...a);
+  const _toast= (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const esc   = s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const HHMM  = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+  const METODOS = [
+    {v:'mb',            l:'💳 Multibanco',   imediato:true},
+    {v:'mbway',         l:'📱 MBWay',        imediato:true},
+    {v:'dinheiro',      l:'💵 Numerário',    imediato:true},
+    {v:'transferencia', l:'🏦 Transferência',imediato:false},
+    {v:'cheque',        l:'📝 Cheque',       imediato:true},
+    {v:'entidade',      l:'🏢 Entidade',     imediato:false},
+  ];
+  const LABEL = v=>({mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência Bancária',cheque:'Cheque',entidade:'Entidade Pagadora'}[v]||v);
+
+  function agora(){ return new Date().toTimeString().slice(0,5); }
+
+  window.osFecharSemRelatorio = function(osId){
+    const os = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(!os){ _toast('OS não encontrada.','⚠️'); return; }
+    const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
+    const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
+
+    const prazo = new Date(); prazo.setDate(prazo.getDate()+5);
+    const prazoStr = prazo.toISOString().slice(0,10);
+
+    document.getElementById('mo-fechar-os')?.remove();
+    const mo = document.createElement('div');
+    mo.id = 'mo-fechar-os';
+    mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99997;display:flex;align-items:flex-end;justify-content:center;padding:0;';
+    mo.innerHTML = `
+      <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:560px;max-height:94vh;overflow-y:auto;box-shadow:0 -8px 40px rgba(0,0,0,.3);font-family:'Outfit','Segoe UI',Arial,sans-serif;">
+
+        <div style="background:linear-gradient(135deg,#0f2447,#1e3a5f);color:#fff;padding:16px 20px;position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">🔒 Fechar OS sem relatório</div>
+            <div style="font-size:12px;opacity:.85;margin-top:3px;">${esc(osId)} · ${esc(cli.nome||'—')}</div>
+          </div>
+          <button id="fos-x" style="background:rgba(255,255,255,.18);color:#fff;border:none;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;flex-shrink:0;">×</button>
+        </div>
+
+        <div style="padding:16px 20px 20px;">
+
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:11px 13px;font-size:12.5px;color:#92400e;line-height:1.5;margin-bottom:16px;">
+            O relatório fica pendente. Tens <strong>5 dias úteis</strong> para o enviar — até
+            <strong>${prazo.toLocaleDateString('pt-PT')}</strong>. Depois disso conta como atraso e reduz a comissão.
+          </div>
+
+          <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;">⏱ Horas trabalhadas</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px;">Início</label>
+              <div style="display:flex;gap:5px;">
+                <input type="time" id="fos-ini" value="${esc((os.horaIniReal||os.horaIni||'').slice(0,5))}"
+                       style="flex:1;min-width:0;padding:10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:15px;font-weight:700;font-family:inherit;">
+                <button data-agora="fos-ini" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px;">Fim</label>
+              <div style="display:flex;gap:5px;">
+                <input type="time" id="fos-fim" value="${esc((os.horaFimReal||'').slice(0,5))}"
+                       style="flex:1;min-width:0;padding:10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:15px;font-weight:700;font-family:inherit;">
+                <button data-agora="fos-fim" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>
+              </div>
+            </div>
+          </div>
+          <div id="fos-dur" style="margin-top:8px;padding:9px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;color:#64748b;">Indica as horas de início e de fim.</div>
+
+          ${naoFat ? `
+          <div style="margin-top:16px;padding:11px 13px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;color:#1e3a5f;">
+            🛡️ Serviço em garantia/orçamento — não há pagamento a registar.
+          </div>` : `
+          <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.6px;margin:18px 0 8px;">💳 Como é que o cliente vai pagar?</div>
+          <div id="fos-mets" style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
+            ${METODOS.map(m=>`
+              <button data-met="${m.v}" style="padding:12px 10px;border:1.5px solid #e2e8f0;background:#fff;border-radius:10px;font-size:13.5px;font-weight:700;color:#1e293b;cursor:pointer;text-align:left;font-family:inherit;">${m.l}</button>`).join('')}
+          </div>
+          <input id="fos-ref" placeholder="Referência / nº de cheque"
+                 style="display:none;width:100%;margin-top:8px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+          <div style="font-size:11.5px;color:#94a3b8;margin-top:7px;line-height:1.45;">Só indicar a forma de pagamento. A confirmação do recebimento é feita pelo escritório.</div>
+          `}
+
+          <div id="fos-erro" style="display:none;margin-top:14px;padding:10px 13px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;font-size:12.5px;color:#b91c1c;font-weight:600;"></div>
+
+          <div style="display:flex;gap:8px;margin-top:18px;">
+            <button id="fos-cancelar" style="flex:1;padding:13px;border:none;background:#f1f5f9;color:#475569;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Cancelar</button>
+            <button id="fos-ok" style="flex:2;padding:13px;border:none;background:#1e3a5f;color:#fff;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🔒 Fechar OS</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(mo);
+
+    let metodo = os.pagamento?.metodo || '';
+
+    const $ = id=>mo.querySelector('#'+id);
+    const fechar = ()=>mo.remove();
+    $('fos-x').onclick = fechar;
+    $('fos-cancelar').onclick = fechar;
+
+    mo.querySelectorAll('[data-agora]').forEach(b=>{
+      b.onclick = ()=>{ const el=$(b.getAttribute('data-agora')); el.value=agora(); duracao(); };
+    });
+
+    function duracao(){
+      const ini=$('fos-ini').value, fim=$('fos-fim').value;
+      const el=$('fos-dur');
+      if(!HHMM.test(ini)||!HHMM.test(fim)){
+        el.style.color='#64748b'; el.textContent='Indica as horas de início e de fim.'; return null;
+      }
+      const [sh,sm]=ini.split(':').map(Number), [eh,em]=fim.split(':').map(Number);
+      const min=(eh*60+em)-(sh*60+sm);
+      if(min<=0){
+        el.style.color='#b91c1c'; el.textContent='A hora de fim tem de ser depois da de início.'; return null;
+      }
+      const h=Math.floor(min/60), m=min%60;
+      el.style.color='#15803d';
+      el.innerHTML=`⏱ <strong>${h}h${m?' '+String(m).padStart(2,'0')+'min':''}</strong> de trabalho`;
+      return min;
+    }
+    $('fos-ini').oninput = duracao;
+    $('fos-fim').oninput = duracao;
+    duracao();
+
+    if(!naoFat){
+      const pintar = ()=>{
+        mo.querySelectorAll('#fos-mets button').forEach(b=>{
+          const on = b.getAttribute('data-met')===metodo;
+          b.style.borderColor = on ? '#16a34a' : '#e2e8f0';
+          b.style.background  = on ? '#f0fdf4' : '#fff';
+          b.style.color       = on ? '#15803d' : '#1e293b';
+        });
+        $('fos-ref').style.display = ['transferencia','cheque'].includes(metodo) ? 'block' : 'none';
+      };
+      mo.querySelectorAll('#fos-mets button').forEach(b=>{
+        b.onclick = ()=>{ metodo = b.getAttribute('data-met'); pintar(); $('fos-erro').style.display='none'; };
+      });
+      pintar();
+    }
+
+    $('fos-ok').onclick = async ()=>{
+      const erro = $('fos-erro');
+      const mostrarErro = txt=>{ erro.textContent=txt; erro.style.display='block'; erro.scrollIntoView({behavior:'smooth',block:'center'}); };
+
+      const min = duracao();
+      if(min===null){ mostrarErro('Preenche as horas de início e de fim.'); return; }
+      if(!naoFat && !metodo){ mostrarErro('Escolhe como o cliente vai pagar.'); return; }
+
+      const ini=$('fos-ini').value, fim=$('fos-fim').value;
+      const ref=(!naoFat && $('fos-ref')) ? ($('fos-ref').value||'').trim() : '';
+
+      // Valores da OS a partir das horas reais (igual ao fecho anterior)
+      const h1=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, ivaPct=parseInt(os.iva)||23;
+      const horas=min/60;
+      const net=parseFloat(calcNetOS(horas,h1,haddV).toFixed(2));
+      const ivaV=parseFloat((net*ivaPct/100).toFixed(2));
+
+      const dados = {
+        estado:'os_fechada',
+        fechadaSemRelatorio:true,
+        fechadoEm:new Date().toISOString(),
+        horaIniReal:ini, horaFimReal:fim,
+        haddN:calcHorasAdd(horas), net, ivaVal:ivaV,
+        total:parseFloat((net+ivaV).toFixed(2)), tempoMin:min,
+        prazoRelatorio:prazoStr,
+        fechadoPor:window.currentUser?.id,
+        fechadoPorNome:window.currentUser?.name||'',
+      };
+      if(!naoFat){
+        dados.pagamento = {
+          metodo, ref,
+          imediato: !!METODOS.find(m=>m.v===metodo)?.imediato,
+          metLabel: LABEL(metodo),
+          confirmadoEm:new Date().toISOString(),
+          confirmadoPor:window.currentUser?.id,
+          lancadoPor:window.currentUser?.name||'',
+        };
+      }
+
+      const btn=$('fos-ok');
+      btn.disabled=true; btn.textContent='⏳ A fechar...';
+      try{
+        await window.fsSetMerge('ordens', osId, dados);
+      }catch(e){
+        console.error('[v15.25] falha ao fechar a OS:', e);
+        btn.disabled=false; btn.textContent='🔒 Fechar OS';
+        mostrarErro('Não foi possível fechar a OS. Verifica a Internet e tenta outra vez — nada se perdeu.');
+        return;
+      }
+
+      fechar();
+      document.querySelectorAll('.os-popover').forEach(p=>p.remove());
+      try{ closeMo('mo-os-tec'); }catch(_){}
+      _toast(`OS ${osId} fechada — relatório até ${prazo.toLocaleDateString('pt-PT')}`,'🔒');
+      if(typeof auditLog==='function'){
+        auditLog('os_fechada_sem_relatorio',
+          `OS ${osId} fechada por ${window.currentUser?.name}. Prazo: ${prazoStr}. Pagamento: ${naoFat?'não faturável':LABEL(metodo)}`);
+      }
+      if(typeof osRenderAgenda==='function') osRenderAgenda();
+      if(typeof osRenderMinhas==='function') osRenderMinhas();
+    };
+  };
+
+  log('fecho sem relatório passa a um único ecrã (horas + pagamento)');
 })();
 
 </script>

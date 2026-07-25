@@ -1229,7 +1229,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.25<br>
+      HidroGest v15.26<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1240,7 +1240,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.25 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.26 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1254,7 +1254,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.25<br>
+      HidroGest v15.26<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -33932,6 +33932,241 @@ window.cliHistoricoImprimir = function(cliId){
   };
 
   log('fecho sem relatório passa a um único ecrã (horas + pagamento)');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 12 (v15.26)
+   BARRA DE PROGRESSO DENTRO DO FORMULÁRIO DO RELATÓRIO
+   ──────────────────────────────────────────────────────────────────────────
+   A lista de verificação da v15.24 só aparecia no fecho da OS: o técnico
+   preenchia o relatório às cegas e só no fim é que sabia o que faltava.
+   Agora a mesma lista fica fixa no topo do formulário e actualiza-se
+   enquanto ele escreve, com a forma de pagamento incluída — se ainda não
+   estiver lançada, o próprio item abre o selector e grava-a na OS.
+
+   Expõe:
+     window.rpFormCheckRender()      → redesenha a barra
+     window.hgEscolherPagamento(id)  → selector de modalidade (Promise)
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1526) return;
+  window._hgV1526 = true;
+
+  const log = (...a)=>console.log('[v15.26]', ...a);
+  const val = id=>(document.getElementById(id)?.value||'').trim();
+
+  const METODOS = [
+    {v:'mb',            l:'💳 Multibanco',    imediato:true},
+    {v:'mbway',         l:'📱 MBWay',         imediato:true},
+    {v:'dinheiro',      l:'💵 Numerário',     imediato:true},
+    {v:'transferencia', l:'🏦 Transferência', imediato:false},
+    {v:'cheque',        l:'📝 Cheque',        imediato:true},
+    {v:'entidade',      l:'🏢 Entidade',      imediato:false},
+  ];
+  const LABEL = v=>({mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência Bancária',cheque:'Cheque',entidade:'Entidade Pagadora'}[v]||v);
+
+  /* ── Selector de modalidade, partilhado ──────────────────────────── */
+  window.hgEscolherPagamento = function(osId){
+    return new Promise(resolve=>{
+      const os = (window.DB.ordens||[]).find(x=>x.id===osId)||{};
+      const mo = document.createElement('div');
+      mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      mo.innerHTML = `
+        <div style="background:#fff;border-radius:14px;max-width:400px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:'Outfit','Segoe UI',Arial,sans-serif;">
+          <div style="background:#1e3a5f;color:#fff;padding:15px 18px;">
+            <div style="font-size:15px;font-weight:800;">💳 Como é que o cliente vai pagar?</div>
+            <div style="font-size:11.5px;opacity:.85;margin-top:3px;">OS ${osId}</div>
+          </div>
+          <div style="padding:16px 18px;">
+            <div id="hgp-ops" style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
+              ${METODOS.map(m=>`<button data-met="${m.v}" style="padding:12px 10px;border:1.5px solid #e2e8f0;background:#fff;border-radius:10px;font-size:13.5px;font-weight:700;color:#1e293b;cursor:pointer;text-align:left;font-family:inherit;">${m.l}</button>`).join('')}
+            </div>
+            <input id="hgp-ref" placeholder="Referência / nº de cheque" style="display:none;width:100%;margin-top:8px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;box-sizing:border-box;font-family:inherit;">
+            <div style="font-size:11.5px;color:#94a3b8;margin-top:8px;line-height:1.45;">Só indicar a forma de pagamento. A confirmação do recebimento é feita pelo escritório.</div>
+            <div style="display:flex;gap:8px;margin-top:14px;">
+              <button id="hgp-cancel" style="flex:1;padding:11px;border:none;background:#f1f5f9;color:#475569;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancelar</button>
+              <button id="hgp-ok" style="flex:2;padding:11px;border:none;background:#1e3a5f;color:#fff;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">Guardar</button>
+            </div>
+          </div>
+        </div>`;
+      document.body.appendChild(mo);
+
+      let metodo = os.pagamento?.metodo || '';
+      const ref = mo.querySelector('#hgp-ref');
+      const pintar = ()=>{
+        mo.querySelectorAll('#hgp-ops button').forEach(b=>{
+          const on = b.getAttribute('data-met')===metodo;
+          b.style.borderColor = on ? '#16a34a' : '#e2e8f0';
+          b.style.background  = on ? '#f0fdf4' : '#fff';
+          b.style.color       = on ? '#15803d' : '#1e293b';
+        });
+        ref.style.display = ['transferencia','cheque'].includes(metodo) ? 'block' : 'none';
+      };
+      mo.querySelectorAll('#hgp-ops button').forEach(b=>{
+        b.onclick = ()=>{ metodo = b.getAttribute('data-met'); pintar(); };
+      });
+      if(os.pagamento?.ref) ref.value = os.pagamento.ref;
+      pintar();
+
+      const fechar = v=>{ mo.remove(); resolve(v); };
+      mo.querySelector('#hgp-cancel').onclick = ()=>fechar(null);
+      mo.addEventListener('click', e=>{ if(e.target===mo) fechar(null); });
+      mo.querySelector('#hgp-ok').onclick = async ()=>{
+        if(!metodo){ try{ toast('Escolhe a forma de pagamento.','⚠️'); }catch(_){} return; }
+        const dados = {
+          metodo, ref:(ref.value||'').trim(),
+          imediato: !!METODOS.find(m=>m.v===metodo)?.imediato,
+          metLabel: LABEL(metodo),
+          confirmadoEm:new Date().toISOString(),
+          confirmadoPor:window.currentUser?.id,
+          lancadoPor:window.currentUser?.name||'',
+        };
+        try{
+          await window.fsSetMerge('ordens', osId, {pagamento:dados});
+          const o=(window.DB.ordens||[]).find(x=>x.id===osId); if(o) o.pagamento=dados;
+          if(typeof auditLog==='function') auditLog('pagamento_lancado_relatorio', `OS ${osId} — ${LABEL(metodo)} — por ${window.currentUser?.name}`);
+        }catch(e){
+          console.error('[v15.26] falha a gravar a modalidade:', e);
+          try{ toast('❌ Não foi possível guardar. Tenta outra vez.','❌'); }catch(_){}
+          return;
+        }
+        fechar(metodo);
+      };
+    });
+  };
+
+  /* ── Itens do relatório, lidos do formulário aberto ───────────────── */
+  function itensForm(){
+    const osId = window._rpEditOsId;
+    const os   = (window.DB.ordens||[]).find(x=>x.id===osId)||{};
+    const rel  = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    const c    = rel.campos||{};
+
+    const nTemp = Array.isArray(window._rpFotosTemp) ? window._rpFotosTemp.length : 0;
+    const nSalvas = (typeof rpGetFotos==='function') ? (rpGetFotos(osId, c, rel)||[]).length : (rel.fotos||[]).length;
+    const nFotos = Math.max(nTemp, nSalvas);
+
+    const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
+    const metodo = os.pagamento?.metodo || '';
+
+    const itens = [
+      {ok:!!(val('rp-tipo-anomalia')||c.tipoProblema),
+       l:'Tipo de anomalia', falta:'Escolher na lista', alvo:'rp-tipo-anomalia'},
+      {ok:!!(val('rp-local-manifestacao')||c.localManifestacao),
+       l:'Local onde o problema se manifesta', falta:'Indicar a fracção/divisão', alvo:'rp-local-manifestacao'},
+      {ok:!!(val('rp-locais-pesquisados')||c.locaisPesquisados),
+       l:'Locais pesquisados', falta:'Indicar onde se fez a pesquisa', alvo:'rp-locais-pesquisados'},
+      {ok:nFotos>=4,
+       l:`Fotografias (${nFotos}/4)`, falta:`Faltam ${Math.max(0,4-nFotos)} foto(s)`, alvo:'__fotos'},
+      {ok:!!(val('rp-conclusao')||val('rp-trabalho')||c.conclusao||c.trabalho),
+       l:'Trabalho realizado / conclusão', falta:'Descrever o que foi feito', alvo:'rp-trabalho'},
+    ];
+    if(!naoFat){
+      itens.push({ok:!!metodo,
+        l: metodo ? `Forma de pagamento · ${LABEL(metodo)}` : 'Forma de pagamento',
+        falta:'Indicar como o cliente vai pagar', alvo:'__pagamento'});
+    }
+    return itens;
+  }
+
+  window.rpFormCheckAcao = async function(alvo){
+    if(alvo === '__pagamento'){
+      const osId = window._rpEditOsId;
+      if(!osId) return;
+      await window.hgEscolherPagamento(osId);
+      window.rpFormCheckRender();
+      return;
+    }
+    // O grid de fotos não tem id — apanha-se pelo botão "Adicionar"
+    const el = (alvo === '__fotos')
+      ? document.querySelector('#mo-relat-pesquisa input[onchange*="rpAdicionarFotosAdmin"]')?.closest('label')
+      : document.getElementById(alvo);
+    if(el){
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      el.style.outline = '3px solid #f59e0b';
+      setTimeout(()=>{ el.style.outline=''; }, 1800);
+      if(el.focus && /INPUT|TEXTAREA|SELECT/.test(el.tagName)) setTimeout(()=>el.focus(), 400);
+    }
+  };
+
+  window.rpFormCheckRender = function(){
+    const modal = document.getElementById('mo-relat-pesquisa');
+    if(!modal || !modal.classList.contains('open')) return;
+    const body = document.getElementById('rp-modal-body');
+    if(!body) return;
+
+    let box = document.getElementById('rp-form-check');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'rp-form-check';
+      box.style.cssText = 'position:sticky;top:0;z-index:6;background:#fff;padding-bottom:10px;margin-bottom:6px;';
+      body.insertBefore(box, body.firstChild);
+    }
+
+    const itens  = itensForm();
+    const feitos = itens.filter(i=>i.ok).length;
+    const total  = itens.length;
+    const pronto = feitos === total;
+    const pct    = Math.round(feitos/total*100);
+    const faltam = itens.filter(i=>!i.ok);
+
+    box.innerHTML = `
+      <div style="border:2px solid ${pronto?'#86efac':'#fed7aa'};background:${pronto?'#f0fdf4':'#fffbeb'};border-radius:10px;overflow:hidden;">
+        <div id="rp-check-top" style="padding:10px 13px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;">
+          <div style="font-size:13px;font-weight:800;color:${pronto?'#15803d':'#b45309'};">
+            ${pronto ? '✅ Relatório completo' : `📋 Falta preencher (${faltam.length})`}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;font-weight:700;color:${pronto?'#15803d':'#b45309'};">${feitos}/${total}</span>
+            <span id="rp-check-seta" style="font-size:12px;opacity:.6;">${pronto?'▸':'▾'}</span>
+          </div>
+        </div>
+        <div style="height:5px;background:#e2e8f0;">
+          <div style="height:5px;width:${pct}%;background:${pronto?'#16a34a':'#f59e0b'};transition:width .25s;"></div>
+        </div>
+        <div id="rp-check-lista" style="padding:8px 10px 10px;display:${pronto?'none':'block'};">
+          ${itens.map(i=>i.ok
+            ? `<div style="display:flex;align-items:center;gap:9px;padding:4px;font-size:12.5px;color:#15803d;">
+                 <span>✅</span><span style="opacity:.75;">${i.l}</span></div>`
+            : `<div onclick="rpFormCheckAcao('${i.alvo}')" style="display:flex;align-items:center;gap:9px;padding:7px 8px;font-size:12.5px;color:#7c2d12;background:#fff;border:1px solid #fed7aa;border-radius:8px;margin:4px 0;cursor:pointer;">
+                 <span>⬜</span>
+                 <span style="flex:1;"><strong>${i.l}</strong><br><span style="font-size:11.5px;opacity:.8;">${i.falta}</span></span>
+                 <span style="opacity:.5;">›</span></div>`).join('')}
+        </div>
+      </div>`;
+
+    // Poder encolher a barra para não ocupar ecrã ao escrever
+    const top = box.querySelector('#rp-check-top');
+    const lst = box.querySelector('#rp-check-lista');
+    const set = box.querySelector('#rp-check-seta');
+    if(top && lst) top.onclick = ()=>{
+      const aberto = lst.style.display !== 'none';
+      lst.style.display = aberto ? 'none' : 'block';
+      if(set) set.textContent = aberto ? '▸' : '▾';
+    };
+  };
+
+  // Actualização ao vivo
+  ['input','change'].forEach(ev=>{
+    document.addEventListener(ev, e=>{
+      if(e.target.closest?.('#mo-relat-pesquisa')) window.rpFormCheckRender();
+    }, true);
+  });
+  // As fotos chegam de forma assíncrona — rede de segurança
+  setInterval(()=>{ try{ window.rpFormCheckRender(); }catch(_){} }, 1500);
+
+  const _abrirForm = window.rpAbrirFormulario;
+  if(typeof _abrirForm === 'function'){
+    window.rpAbrirFormulario = function(){
+      const r = _abrirForm.apply(this, arguments);
+      setTimeout(()=>{ try{ window.rpFormCheckRender(); }catch(_){} }, 220);
+      return r;
+    };
+  }
+
+  log('barra de progresso no formulário do relatório, com forma de pagamento');
 })();
 
 </script>

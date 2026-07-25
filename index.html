@@ -1229,7 +1229,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.34<br>
+      HidroGest v15.37<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1240,7 +1240,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.34 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.37 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1254,7 +1254,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.34<br>
+      HidroGest v15.37<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -2527,7 +2527,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;">
         <div style="font-size:13px;font-weight:800;color:#1e3a5f;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);">📍 Contactos <span style="font-size:10px;font-weight:400;color:var(--text3);">aparecem em todos os emails</span></div>
         <div class="fg"><label>Morada completa (rua, nº, andar)</label>
-          <input class="fi" id="emp-morada" placeholder="Rua Vale D'Este, 40" oninput="cfgAtualizarPrevEmpresa()">
+          <input class="fi" id="emp-morada" placeholder="Rua do Taxa, 13" oninput="cfgAtualizarPrevEmpresa()">
         </div>
         <div class="fgrid">
           <div class="fg"><label>Código postal</label>
@@ -2557,7 +2557,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
         <div style="background:#1e3a5f;color:#fff;padding:14px 18px;border-radius:8px;font-size:12px;">
           <div style="font-size:16px;font-weight:900;margin-bottom:4px;" id="prev-emp-nome">Localiza Fugas</div>
           <div style="opacity:.8;margin-bottom:2px;" id="prev-emp-nif">NIF: 517551543</div>
-          <div style="opacity:.7;font-size:11px;" id="prev-emp-morada">Rua Vale D'Este, 40 · 4710-048 Braga</div>
+          <div style="opacity:.7;font-size:11px;" id="prev-emp-morada">Rua do Taxa, 13 · 4710-448 Braga</div>
           <div style="opacity:.7;font-size:11px;" id="prev-emp-contactos">Tel: 253 000 000 · localizafugas@gmail.com</div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);opacity:.8;font-size:10px;" id="prev-emp-resp">Responsável: Ronaldo Valentim Fialho · Cert. ITC nº 2014BR09N001</div>
         </div>
@@ -11102,7 +11102,7 @@ function getEmpDados(){
     nome:    typeof _nomeEmp==='string' ? _nomeEmp.trim() : 'Localiza Fugas',
     tel:     e.tel     || c.tel       || '253 000 000',
     email:   e.email   || c.remetente || 'localizafugas@gmail.com',
-    morada:  [e.morada, e.cp, e.localidade].filter(Boolean).join(', ') || "Rua Vale D'Este, 40, 4710-048 Braga",
+    morada:  [e.morada, e.cp, e.localidade].filter(Boolean).join(', ') || "Rua do Taxa, 13, 4710-448 Braga",
     website: e.website || c.website   || 'www.localizafugas.com',
     nif:     e.nif     || '517551543',
   };
@@ -18522,7 +18522,7 @@ async function osSugerirTecnicoPainel(){
   // ── Geocodificar pontos de referência base ──────────────────────────────
   const empCfgSug = window._empCfg||window.DB?.empresaConfig||{};
   const moradaEmp = [empCfgSug.morada, empCfgSug.cp, empCfgSug.localidade].filter(Boolean).join(', ')
-                    || "Rua Vale D'Este, 40, 4710-048 Braga";
+                    || "Rua do Taxa, 13, 4710-448 Braga";
   const geoEmpresa = await rotGeocode(moradaEmp).catch(()=>null);
 
   // Cache de geo por técnico para evitar geocodificações repetidas
@@ -19469,7 +19469,7 @@ function cfgCarregarEmpresa(){
   set('emp-responsavel',e.responsavel||'Ronaldo Valentim Fialho');
   set('emp-itc',        e.itc        ||'2014BR09N001');
   set('emp-cert-entidade',e.certEntidade||'INFRARED TRAINING CENTER');
-  set('emp-morada',     e.morada     ||"Rua Vale D'Este, 40");
+  set('emp-morada',     e.morada     ||"Rua do Taxa, 13");
   set('emp-cp',         e.cp         ||'4710-048');
   set('emp-localidade', e.localidade ||'Braga');
   set('emp-tel',        e.tel        ||'253 000 000');
@@ -23159,73 +23159,28 @@ async function rpSalvarRelatorio(){
     return;
   }
 
-  // Enviar o relatório em PDF ao cliente assim que o técnico guarda
+  // ── REGRA (v15.36): o envio ao cliente é SEMPRE um acto do escritório ──
+  // Nada sai automaticamente ao guardar, mesmo com o pagamento já recebido.
+  // Aqui só se guarda, se informa o estado e se aponta o passo seguinte:
+  // alguém do escritório abre a OS e carrega em "📧 Enviar ao cliente".
   const cli2 = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
-  const cfg2  = window._emailCfg||window.DB?.emailConfig||{};
+  const cfg2 = window._emailCfg||window.DB?.emailConfig||{};
   const temBrevo = !!cfg2.brevoApiKey;
   const temEmail = !!cli2.email;
-
-  // ── REGRA: só envia automaticamente se o pagamento estiver confirmado pelo admin ──
   const pagOk = (typeof rpPagamentoConfirmado==='function') ? rpPagamentoConfirmado(os, rel) : true;
 
-  if(temBrevo && temEmail && pagOk){
-    // Enviar em background para não bloquear o utilizador
-    setTimeout(async()=>{
-      try{
-        const resultado = await brevoEnviarRelatorio(osId);
-        if(resultado.ok){
-          // Marcar relatório como enviado
-          const relActual = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||rel;
-          const relEnviado = {
-            ...relActual,
-            estado:'enviado',
-            enviadoEm:new Date().toISOString(),
-            enviadoPor:window.currentUser?.id,
-            enviadoPara:cli2.email,
-          };
-          await rpSaveDoc(osId, relEnviado);
-
-          // Marcar OS como concluída
-          const osActual=(window.DB.ordens||[]).find(x=>x.id===osId)||os;
-          if(osActual.estado!=='concluida'){
-            await window.fsSetMerge('ordens',osId,{
-              ...osActual,
-              estado:'concluida',
-              concluidoEm:new Date().toISOString(),
-              concluidoPor:window.currentUser?.id,
-            });
-          }
-
-          toast(`✅ Relatório enviado em PDF para ${cli2.email}!`,'📧');
-          auditLog('relatorio_enviado_auto',`OS ${osId} → ${cli2.email} (PDF via Brevo) — ${window.currentUser?.name}`);
-
-          // Actualizar agenda — card fica verde
-          rpRender();
-          if(typeof osRenderAgenda==='function') osRenderAgenda();
-        }
-      }catch(e){
-        console.error('Envio automático falhou:', e);
-        toast('⚠️ Relatório guardado mas envio falhou — tente manualmente.','⚠️');
-      }
-    }, 800);
-
-    // Mostrar feedback imediato ao técnico
-    const isTecBrevo = false; // técnico já retornou antes deste bloco
-    setTimeout(()=>{
-      toast('📄 Relatório guardado! A enviar ao cliente...','✅');
-      osAbrirDetalhe(osId);
-    }, 400);
-
-  } else {
-    // Sem Brevo, sem email, ou pagamento por confirmar — fluxo manual
-    setTimeout(()=>{
-      if(temBrevo && temEmail && !pagOk){
-        toast('🔒 Relatório guardado. NÃO foi enviado: o pagamento ainda não foi confirmado pelo admin. Confirme o pagamento e depois envie o relatório ao cliente.','📄', 8000);
-      } else if(!temBrevo)  toast('⚠️ Brevo não configurado — configure em Configurações → Email para envio automático.','⚠️');
-      else if(!temEmail) toast('⚠️ Cliente sem email registado — adicione o email do cliente.','⚠️');
-      osAbrirDetalhe(osId);
-    }, 400);
-  }
+  setTimeout(()=>{
+    if(!temEmail){
+      toast('⚠️ Relatório guardado. O cliente não tem email registado — adicione-o antes de enviar.','⚠️',8000);
+    } else if(!temBrevo){
+      toast('⚠️ Relatório guardado. Brevo não configurado — veja Configurações → Email.','⚠️',8000);
+    } else if(!pagOk){
+      toast('🔒 Relatório guardado. Só pode ser enviado ao cliente depois de a empresa receber o pagamento.','📄',8000);
+    } else {
+      toast('✅ Relatório guardado e pronto a enviar. Use o botão "📧 Enviar ao cliente" para o fazer.','📄',8000);
+    }
+    osAbrirDetalhe(osId);
+  }, 400);
 }
 
 // ── Criar recibo automático quando pagamento imediato ────────
@@ -23622,7 +23577,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
   const empCfg = window._empCfg || window.DB?.empresaConfig || {};
   const empNome   = empCfg.nome       || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
   const empNif    = empCfg.nif        || '517551543';
-  const empMorada = [empCfg.morada, empCfg.cp, empCfg.localidade].filter(Boolean).join(', ') || "Rua Vale D'Este, 40, 4710-048 Braga";
+  const empMorada = [empCfg.morada, empCfg.cp, empCfg.localidade].filter(Boolean).join(', ') || "Rua do Taxa, 13, 4710-448 Braga";
   const empTel    = empCfg.tel        || '253 000 000';
   const empEmail  = empCfg.email      || 'localizafugas@gmail.com';
   const empResp   = empCfg.responsavel|| 'Ronaldo Valentim Fialho';
@@ -23957,8 +23912,8 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
             <div style="font-size:22px;font-weight:900;letter-spacing:-.4px;line-height:1.1;">Localiza Fugas</div>
             <div style="font-size:11px;opacity:.78;margin-top:2px;font-weight:500;">Valentim Fialho Unip. Lda.</div>
             <div style="font-size:9.5px;opacity:.6;margin-top:5px;line-height:1.85;">
-              Rua Vale D'Este, 40 · 4710-048 Braga · Portugal<br>
-              NIF 517551543 · Tel. 253 000 000 · localizafugas@gmail.com
+              ${empMorada} · Portugal<br>
+              NIF ${empNif} · Tel. ${empTel} · ${empEmail}
             </div>
           </div>
         </div>
@@ -24093,16 +24048,25 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
         ${secTit('8. Registo Fotográfico')}
         <div style="padding:14px 16px;">
           <p style="font-size:11px;color:#64748b;margin-bottom:12px;">As fotografias seguintes documentam as condições verificadas durante a inspecção, constituindo evidência técnica complementar ao presente relatório.</p>
-          <div style="display:grid;grid-template-columns:repeat(${Math.min(_f.length,2)===1?1:2},1fr);gap:12px;">
-            ${_f.map((f,i)=>`
-              <div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;page-break-inside:avoid;">
-                <img src="${f.dataUrl||f.url||''}" class="rp-foto" style="width:100%;height:170px;object-fit:cover;background:#f1f5f9;display:block;-webkit-print-color-adjust:exact;">
-                <div style="padding:6px 10px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-                  <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Fig. ${i+1}</span>
-                  ${f.legenda?` — <span style="font-size:10px;color:#475569;">${f.legenda}</span>`:''}
+          ${(()=>{
+            // Tabela em vez de grid: o CSS Grid parte-se na impressão (uma foto
+            // por linha e páginas meio vazias). Duas colunas por linha.
+            const cel = (f,i)=> f ? `
+              <td class="rp-fig" width="50%" valign="top" style="padding:0 6px 12px;">
+                <div style="border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+                  <img src="${f.dataUrl||f.url||''}" class="rp-foto" style="width:100%;height:170px;object-fit:cover;background:#f1f5f9;display:block;-webkit-print-color-adjust:exact;">
+                  <div style="padding:6px 10px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+                    <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Fig. ${i+1}</span>
+                    ${f.legenda?` — <span style="font-size:10px;color:#475569;">${f.legenda}</span>`:''}
+                  </div>
                 </div>
-              </div>`).join('')}
-          </div>
+              </td>` : '<td width="50%" style="padding:0 6px;"></td>';
+            let linhas='';
+            for(let i=0;i<_f.length;i+=2){
+              linhas += `<tr class="rp-fig-row">${cel(_f[i],i)}${cel(_f[i+1],i+1)}</tr>`;
+            }
+            return `<table style="width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;"><tbody>${linhas}</tbody></table>`;
+          })()}
         </div>
       </div>`:''; })()}
 
@@ -24136,29 +24100,29 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
       </div>`:''}
 
       <!-- 10. ASSINATURAS -->
-      <div style="margin-bottom:16px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;page-break-inside:avoid;">
+      <div class="rp-sign" style="margin-bottom:16px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
         ${secTit('10. Declarações e Validação')}
         <div style="padding:14px 16px;">
           <p style="font-size:11px;color:#64748b;margin-bottom:16px;line-height:1.6;">
             O presente relatório foi elaborado com base nos ensaios e observações realizados no local e reflecte os resultados obtidos com os meios técnicos disponíveis e as condições de acesso verificadas no momento da intervenção. As conclusões têm carácter técnico e não substituem eventuais análises complementares que venham a ser determinadas.
           </p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+          <table style="width:100%;table-layout:fixed;border-collapse:separate;border-spacing:15px 0;"><tbody><tr>
             ${(()=>{const {sigTec,sigCli}=rpGetAssinaturas(os.id,c,rel,os); return `
-            <div style="text-align:center;">
+            <td width="50%" valign="bottom" style="text-align:center;">
               ${sigTec
                 ?`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px;margin-bottom:8px;background:#f8fafc;"><img src="${sigTec}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;"></div>`
                 :`<div style="height:70px;border-bottom:1.5px solid #94a3b8;margin-bottom:8px;"></div>`}
               <div style="font-size:11px;font-weight:700;color:#1e293b;">${c.tecnico||tecs||'Técnico'}</div>
               <div style="font-size:9px;color:#94a3b8;">Responsável pela peritagem · ${dataServico}</div>
-            </div>
-            <div style="text-align:center;">
+            </td>
+            <td width="50%" valign="bottom" style="text-align:center;">
               ${sigCli
                 ?`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px;margin-bottom:8px;background:#f8fafc;"><img src="${sigCli}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;"></div>`
                 :`<div style="height:70px;border-bottom:1.5px solid #94a3b8;margin-bottom:8px;"></div>`}
               <div style="font-size:11px;font-weight:700;color:#1e293b;">${c.cliNome||cli.nome||'Cliente'}</div>
               <div style="font-size:9px;color:#94a3b8;">Tomador do serviço · Data: ___/___/______</div>
-            </div>`})()}
-          </div>
+            </td>`})()}
+          </tr></tbody></table>
         </div>
       </div>
 
@@ -24219,10 +24183,17 @@ function rpImprimirRelatorio(){
         .no-print{display:none!important;}
         body{background:#fff;}
         #rp-doc{border-radius:0!important;box-shadow:none!important;}
-        div,table,tr,td,th{page-break-inside:auto;}
+        /* Blocos grandes NUNCA com "avoid": um cartão mais alto do que o espaço
+           que resta salta para a página seguinte e deixa meia folha em branco.
+           O !important é preciso para vencer os style="" inline. */
+        div,section,table,tbody{page-break-inside:auto!important;}
+        /* As unidades pequenas é que se mantêm inteiras */
+        tr,.rp-fig,.rp-fig-row,.rp-sign{page-break-inside:avoid!important;}
         img{max-width:100%!important;page-break-inside:avoid;display:block;}
-        img.rp-foto{height:150px!important;object-fit:cover!important;}
+        img.rp-foto{height:52mm!important;object-fit:cover!important;}
+        table{width:100%!important;table-layout:fixed;}
         h2,h3{page-break-after:avoid;}
+        p,li{orphans:3;widows:3;}
       }
       @media screen{
         body{padding:20px;background:#e5e7eb;}
@@ -24334,7 +24305,7 @@ async function rpGerarDocxBase64(osId){
         const empCfg  = window._empCfg||window.DB?.empresaConfig||{};
         const empNome = empCfg.nome    ||'Localiza Fugas — Valentim Fialho Unip. Lda.';
         const empNif  = empCfg.nif     ||'517551543';
-        const empMorada=[empCfg.morada,empCfg.cp,empCfg.localidade].filter(Boolean).join(', ')||"Rua Vale D'Este, 40, 4710-048 Braga";
+        const empMorada=[empCfg.morada,empCfg.cp,empCfg.localidade].filter(Boolean).join(', ')||"Rua do Taxa, 13, 4710-448 Braga";
         const empTel  = empCfg.tel     ||'253 000 000';
         const empEmail= empCfg.email   ||'localizafugas@gmail.com';
         const empResp = empCfg.responsavel||'Ronaldo Valentim Fialho';
@@ -30464,7 +30435,7 @@ async function propostaEnviarLivre(){
       empresa:     emp2.nome||(window._emailCfg||{}).empresa||'Localiza Fugas',
       telEmp:      emp2.tel||(window._emailCfg||{}).tel||'931 747 199',
       emailEmp:    emp2.email||(window._emailCfg||{}).remetente||'localizafugas@gmail.com',
-      moradaEmp:   emp2.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+      moradaEmp:   emp2.morada||"Rua do Taxa, 13 — Braga — 4710-448",
     });
 
     // Gerar PDF real via iframe oculto + canvas
@@ -30488,7 +30459,7 @@ async function propostaEnviarLivre(){
       empresa:emp2.nome||(window._emailCfg||{}).empresa||'Localiza Fugas',
       telEmp:emp2.tel||(window._emailCfg||{}).tel||'931 747 199',
       emailEmp:emp2.email||(window._emailCfg||{}).remetente||'localizafugas@gmail.com',
-      moradaEmp:emp2.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+      moradaEmp:emp2.morada||"Rua do Taxa, 13 — Braga — 4710-448",
     };
     const pdfBase64 = await _gerarPdfBase64(pdfHtml, numProposta);
     if(pdfBase64){
@@ -30640,7 +30611,7 @@ async function propostaEnviarRascunho(propId){
   // Gerar PDF anexo
   let pdfAnexo=null;
   try{
-    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
+    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua do Taxa, 13 — Braga — 4710-448"});
     const pdfBase64=await new Promise(res=>{const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});const fr=new FileReader();fr.onload=()=>{const parts=fr.result.split(',');res(parts[1]||null);};fr.onerror=()=>res(null);fr.readAsDataURL(blob);});
     if(pdfBase64){
         pdfAnexo=[{content:pdfBase64,name:'Proposta_'+p.numero.replace(/[^A-Za-z0-9_-]/g,'_')+'.pdf'}];
@@ -30685,7 +30656,7 @@ function _propostaHtmlSoEpoxi(dados){
     numProposta='', dataDoc='', nomeCliente='', email='', tel='', morada='',
     h1=615, horas=6, iva=6, obs='',
     empresa='Localiza Fugas', telEmp='931 747 199', emailEmp='localizafugas@gmail.com',
-    moradaEmp="Rua Vale D'Este, 40 — Braga — 4710-048",
+    moradaEmp="Rua do Taxa, 13 — Braga — 4710-448",
   } = dados;
 
   const cor = '#1e3a5f';
@@ -30888,7 +30859,7 @@ function _propostaHtmlSprayCIPP(dados){
     h1=0, hadd=0, horas=6, iva=6, obs='',
     marca='localiza',
     empresa='Localiza Fugas', telEmp='931 747 199', emailEmp='localizafugas@gmail.com',
-    moradaEmp="Rua Vale D'Este, 40 — Braga — 4710-048",
+    moradaEmp="Rua do Taxa, 13 — Braga — 4710-448",
   } = dados;
 
   const cor = '#1e3a5f';
@@ -31176,7 +31147,7 @@ function _propostaHtmlPDF(dados){
     intro='', procedimento='', descritivo='', obs='',
     marca='localiza',
     empresa='Localiza Fugas', telEmp='931 747 199', emailEmp='localizafugas@gmail.com',
-    moradaEmp="Rua Vale D'Este, 40 — Braga — 4710-048",
+    moradaEmp="Rua do Taxa, 13 — Braga — 4710-448",
     responsavel='Ronaldo Valentim Fialho', itcNum='2014BR09N001',
   } = dados;
 
@@ -31509,7 +31480,7 @@ function propostaGerarPDF(){
     empresa:     emp.nome||eCfg.empresa||'Localiza Fugas',
     telEmp:      emp.tel||eCfg.tel||'931 747 199',
     emailEmp:    emp.email||eCfg.remetente||'localizafugas@gmail.com',
-    moradaEmp:   emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+    moradaEmp:   emp.morada||"Rua do Taxa, 13 — Braga — 4710-448",
   });
 }
 
@@ -31541,7 +31512,7 @@ function propostaGerarPDFFromObj(p){
     empresa:     emp.nome||eCfg.empresa||'Localiza Fugas',
     telEmp:      emp.tel||eCfg.tel||'931 747 199',
     emailEmp:    emp.email||eCfg.remetente||'localizafugas@gmail.com',
-    moradaEmp:   emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+    moradaEmp:   emp.morada||"Rua do Taxa, 13 — Braga — 4710-448",
   });
 }
 
@@ -33292,14 +33263,47 @@ window.cliHistoricoImprimir = function(cliId){
                .map(u=>({email:u.email, name:u.name||''}));
   }
 
+  // Relatórios já pagos e prontos, à espera de alguém do escritório enviar
+  window.relProntosEnvio = function(){
+    return (window.DB.ordens||[]).filter(o=>{
+      if(['cancelada'].includes(o.estado)) return false;
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+      if(!rel?.campos) return false;
+      if(rel.estado === 'enviado') return false;
+      const pagoOk = (typeof rpPagamentoConfirmado==='function')
+        ? rpPagamentoConfirmado(o, rel) : o.pago===true;
+      if(!pagoOk) return false;
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+      return !!cli?.email;
+    }).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
+  };
+
+  function linhasProntos(){
+    return window.relProntosEnvio().map(o=>{
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)||{};
+      const dt  = (rel.prontoEm||o.concluidoEm||o.fechadoEm||'').slice(0,10) || o.data || '';
+      const dias = dt ? Math.max(0, Math.floor((Date.now()-new Date(dt+'T12:00:00').getTime())/86400000)) : 0;
+      return {
+        id:o.id,
+        cliente: cli.nome || o.clienteNomeSnapshot || '—',
+        email: cli.email || '',
+        data: dt ? dt.split('-').reverse().join('/') : '—',
+        dias,
+        total: parseFloat(o.total)||0,
+      };
+    });
+  }
+
   window.pagEnviarPedidoBaixas = async function(auto){
     const cfg = window._emailCfg || window.DB?.emailConfig || {};
     const apiKey = cfg.brevoApiKey||'';
     if(!apiKey){ if(!auto) _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️'); return {ok:false}; }
 
-    const lista = linhasResumo(window.pagPendentesBaixa());
-    if(!lista.length){
-      if(!auto) _toast('✅ Não há pagamentos por dar baixa — não foi enviado nada.','✅');
+    const lista   = linhasResumo(window.pagPendentesBaixa());
+    const prontos = linhasProntos();
+    if(!lista.length && !prontos.length){
+      if(!auto) _toast('✅ Nada pendente — não foi enviado nada.','✅');
       return {ok:true, vazio:true};
     }
 
@@ -33319,11 +33323,12 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="font-family:Arial,Helvetica,sans-serif;max-width:760px;margin:0 auto;color:#1e293b;">
         <div style="background:linear-gradient(135deg,#1e3a5f,#2c5282);padding:20px 24px;border-radius:10px 10px 0 0;color:#fff;">
           <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:1px;">Rotina da manhã</div>
-          <div style="font-size:20px;font-weight:800;margin-top:2px;">💰 Pagamentos por dar baixa</div>
+          <div style="font-size:20px;font-weight:800;margin-top:2px;">${lista.length&&prontos.length?'💰 Baixas e relatórios pendentes':(lista.length?'💰 Pagamentos por dar baixa':'📨 Relatórios prontos a enviar')}</div>
           <div style="font-size:13px;opacity:.85;margin-top:4px;text-transform:capitalize;">${esc(hoje)}</div>
         </div>
 
         <div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:18px 24px;">
+          ${!lista.length ? '' : `
           <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">
             Bom dia. Estas ${lista.length} ordens de serviço já têm a modalidade de pagamento lançada pelo técnico,
             mas continuam <strong>por confirmar no sistema</strong>. Confirmem, por favor, quais já entraram
@@ -33368,7 +33373,35 @@ window.cliHistoricoImprimir = function(cliId){
                 <span>${esc(m)} <span style="color:#94a3b8;">(${v.n})</span></span>
                 <strong>€${eur(v.total)}</strong>
               </div>`).join('')}
-          </div>
+          </div>`}
+
+          ${!prontos.length ? '' : `
+          <div style="margin-top:${lista.length?'22px':'0'};padding-top:${lista.length?'18px':'0'};border-top:${lista.length?'2px solid #e2e8f0':'none'};">
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-bottom:6px;">📨 Relatórios pagos e prontos a enviar</div>
+            <p style="margin:0 0 12px;font-size:13.5px;line-height:1.6;color:#334155;">
+              Estes ${prontos.length} relatórios já têm o pagamento recebido e o cliente com email registado.
+              Falta apenas alguém do escritório abrir a OS e carregar em <strong>📧 Enviar ao cliente</strong>.
+            </p>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead><tr style="background:#f0fdf4;border-bottom:2px solid #86efac;">
+                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#15803d;text-transform:uppercase;">OS</th>
+                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#15803d;text-transform:uppercase;">Cliente</th>
+                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#15803d;text-transform:uppercase;">Email</th>
+                <th style="padding:8px 10px;text-align:center;font-size:11px;color:#15803d;text-transform:uppercase;">Desde</th>
+                <th style="padding:8px 10px;text-align:center;font-size:11px;color:#15803d;text-transform:uppercase;">Dias</th>
+              </tr></thead>
+              <tbody>
+                ${prontos.map((l,i)=>`
+                  <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                    <td style="padding:8px 10px;font-weight:700;">${esc(l.id)}</td>
+                    <td style="padding:8px 10px;">${esc(l.cliente)}</td>
+                    <td style="padding:8px 10px;color:#475569;font-size:12px;">${esc(l.email)}</td>
+                    <td style="padding:8px 10px;text-align:center;color:#475569;">${esc(l.data)}</td>
+                    <td style="padding:8px 10px;text-align:center;font-weight:700;color:${l.dias>=5?'#b91c1c':l.dias>=3?'#b45309':'#15803d'};">${l.dias}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`}
 
           <div style="margin-top:18px;font-size:12px;color:#94a3b8;">
             Email automático do HidroGest · ${esc(empNome)}
@@ -33383,7 +33416,10 @@ window.cliHistoricoImprimir = function(cliId){
         body: JSON.stringify({
           sender:{name:empNome, email:empEmail},
           to: para,
-          subject: `💰 Baixas por confirmar — ${lista.length} OS · €${eur(total)}`,
+          subject: [
+            lista.length   ? `💰 ${lista.length} baixa(s) por confirmar (€${eur(total)})` : '',
+            prontos.length ? `📨 ${prontos.length} relatório(s) por enviar` : '',
+          ].filter(Boolean).join(' · '),
           htmlContent: html,
         }),
       });
@@ -33393,7 +33429,7 @@ window.cliHistoricoImprimir = function(cliId){
         return {ok:false, status:r.status};
       }
       if(!auto) _toast(`✅ Pedido enviado a ${para.length} destinatário(s).`,'📧');
-      if(typeof auditLog==='function') auditLog('pedido_baixas', `${lista.length} OS · €${eur(total)} · ${auto?'automático':'manual'}`);
+      if(typeof auditLog==='function') auditLog('pedido_baixas', `${lista.length} baixas · ${prontos.length} relatórios por enviar · ${auto?'automático':'manual'}`);
       return {ok:true};
     }catch(e){
       if(!auto) _toast('❌ Erro de ligação ao Brevo: '+e.message,'❌');
@@ -35227,6 +35263,249 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   log('histórico do cliente disponível ao técnico na ficha da OS');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 19 (v15.35)
+   O TÉCNICO LÊ O RELATÓRIO, MAS NÃO O ENTREGA AO CLIENTE
+   ──────────────────────────────────────────────────────────────────────────
+   O bloqueio de envio já existia no botão de email (rpEnviarEmailDireto:
+   só supervisor/admin/gerente, e só com o pagamento confirmado). O que
+   faltava fechar eram as portas laterais que davam ao técnico o documento
+   oficial na mão — bastava reencaminhá-lo por WhatsApp:
+
+     · 📕 PDF          (rpDownloadPdf)      — PDF oficial, com timbre e assinaturas
+     · 📄 Word         (rpDownloadWord)     — o mesmo em .docx
+     · 🖨️ Imprimir     (rpImprimirRelatorio)— "Guardar como PDF" do browser
+     · brevoEnviarRelatorio                 — chamada directa, sem passar pelo botão
+
+   Agora, para quem tem perfil de técnico, essas quatro saídas devolvem
+   sempre a VERSÃO DE CONSULTA (hgPdfTecnico): sem dados da empresa, sem
+   assinaturas, sem valores. Ler, rever e conferir o trabalho: tudo. Ter o
+   documento que se entrega ao cliente: não.
+
+   E o envio ao cliente ganha uma segunda tranca, agora dentro da própria
+   função de envio: sem pagamento recebido (os.pago === true), não sai —
+   venha a chamada de onde vier.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1535) return;
+  window._hgV1535 = true;
+
+  const log    = (...a)=>console.log('[v15.35]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const isTec  = ()=>window.currentUser?.role === 'tecnico';
+
+  function pago(osId){
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId);
+    if(typeof rpPagamentoConfirmado === 'function') return rpPagamentoConfirmado(os, rel);
+    return os?.pago === true;
+  }
+
+  // ── 1. Documento oficial → versão de consulta, para o técnico ──────
+  ['rpDownloadPdf','rpDownloadWord','rpImprimirRelatorio'].forEach(nome=>{
+    const orig = window[nome];
+    if(typeof orig !== 'function') return;
+    window[nome] = function(osId){
+      if(!isTec()) return orig.apply(this, arguments);
+      const id = osId || window._rpVerOsId || window._rpEditOsId;
+      _toast('Esta é a tua cópia de consulta. O documento oficial é enviado ao cliente pelo escritório.','📄',6000);
+      if(typeof window.hgPdfTecnico === 'function') return window.hgPdfTecnico(id);
+      _toast('Versão de consulta indisponível neste dispositivo.','⚠️');
+    };
+  });
+
+  // ── 2. Envio ao cliente: tranca dentro da própria função ───────────
+  const _enviar = window.brevoEnviarRelatorio;
+  if(typeof _enviar === 'function'){
+    window.brevoEnviarRelatorio = async function(osId){
+      if(isTec()){
+        _toast('⛔ O relatório é enviado ao cliente pelo escritório, não pela app do técnico.','🚫',6000);
+        return {ok:false, motivo:'perfil-tecnico'};
+      }
+      if(!pago(osId)){
+        _toast('🔒 Pagamento por receber. O relatório só sai depois de a empresa ter recebido.','🚫',7000);
+        if(typeof auditLog==='function') auditLog('envio_bloqueado_sem_pagamento', `OS ${osId}: tentativa de envio sem pagamento confirmado (${window.currentUser?.name})`);
+        return {ok:false, motivo:'sem-pagamento'};
+      }
+      return _enviar.apply(this, arguments);
+    };
+  }
+
+  // ── 3. Na ficha do relatório, dizer-lhe porquê ─────────────────────
+  const _verRel = window.rpVerRelatorio;
+  if(typeof _verRel === 'function'){
+    window.rpVerRelatorio = function(osId){
+      const r = _verRel.apply(this, arguments);
+      if(!isTec()) return r;
+      setTimeout(()=>{
+        try{
+          const body = document.getElementById('rp-ver-body');
+          if(!body || document.getElementById('hg-nota-envio')) return;
+          const id = osId || window._rpVerOsId;
+          const ok = pago(id);
+          const nota = document.createElement('div');
+          nota.id = 'hg-nota-envio';
+          nota.style.cssText = `margin-bottom:12px;padding:10px 12px;border-radius:9px;font-size:12.5px;line-height:1.5;
+            background:${ok?'#f0fdf4':'#f8fafc'};border:1px solid ${ok?'#86efac':'#e2e8f0'};color:${ok?'#15803d':'#475569'};`;
+          nota.innerHTML = ok
+            ? '✅ Pagamento recebido. O escritório já pode enviar este relatório ao cliente.'
+            : '🔒 Podes consultar e corrigir o relatório. O envio ao cliente é feito pelo escritório, depois de a empresa receber o pagamento.';
+          body.insertBefore(nota, body.firstChild);
+        }catch(e){ console.warn('[v15.35] nota:', e); }
+      }, 150);
+      return r;
+    };
+  }
+
+  log('técnico consulta o relatório; entrega ao cliente só pelo escritório e com pagamento recebido');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 20 (v15.37)
+   CONTADOR DE RELATÓRIOS PRONTOS A ENVIAR
+   ──────────────────────────────────────────────────────────────────────────
+   Desde a v15.36 nada sai automaticamente: o relatório só chega ao cliente
+   quando alguém do escritório carrega no botão. Isso exige que se veja, sem
+   ir procurar, quantos estão à espera.
+
+   No dashboard, por baixo do contador de baixas, fica um botão verde com o
+   número de relatórios já pagos, com email do cliente e por enviar. Abre um
+   painel com a lista e um botão "Enviar" por linha.
+
+   A mesma lista vai na rotina matinal (v15.23), como segunda secção do email.
+
+   Expõe: window.relAbrirPainelEnvio()
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1537) return;
+  window._hgV1537 = true;
+
+  const log    = (...a)=>console.log('[v15.37]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const esc    = s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const eur    = v=>{ try{ return fmt(parseFloat(v)||0); }catch(_){ return (parseFloat(v)||0).toFixed(2); } };
+
+  function lista(){
+    if(typeof window.relProntosEnvio !== 'function') return [];
+    return window.relProntosEnvio().map(o=>{
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)||{};
+      const dt  = (rel.prontoEm||o.concluidoEm||o.fechadoEm||'').slice(0,10) || o.data || '';
+      const dias= dt ? Math.max(0, Math.floor((Date.now()-new Date(dt+'T12:00:00').getTime())/86400000)) : 0;
+      return {
+        id:o.id,
+        cliente: cli.nome || o.clienteNomeSnapshot || '—',
+        email: cli.email || '',
+        data: dt ? dt.split('-').reverse().join('/') : '—',
+        dias,
+        total: parseFloat(o.total)||0,
+      };
+    });
+  }
+
+  window.relAbrirPainelEnvio = function(){
+    const l = lista();
+    document.getElementById('mo-rel-envio')?.remove();
+
+    const mo = document.createElement('div');
+    mo.id = 'mo-rel-envio';
+    mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99996;display:flex;align-items:center;justify-content:center;padding:14px;';
+    mo.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:'Outfit','Segoe UI',Arial,sans-serif;">
+        <div style="background:linear-gradient(135deg,#065f46,#16a34a);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">📨 Relatórios prontos a enviar</div>
+            <div style="font-size:12px;opacity:.88;margin-top:3px;">${l.length} pagos, com email do cliente e por entregar</div>
+          </div>
+          <button onclick="document.getElementById('mo-rel-envio').remove()"
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0;">×</button>
+        </div>
+        <div style="overflow:auto;">
+          ${!l.length
+            ? '<div style="padding:48px 20px;text-align:center;color:#16a34a;font-weight:600;">✅ Não há relatórios à espera de envio.</div>'
+            : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;position:sticky;top:0;">
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">OS / Cliente</th>
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Email</th>
+                  <th style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Dias</th>
+                  <th style="padding:9px 12px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Valor</th>
+                  <th style="padding:9px 12px;"></th>
+                </tr></thead>
+                <tbody>
+                ${l.map((r,i)=>`
+                  <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                    <td style="padding:10px 12px;">
+                      <div style="font-weight:700;">${esc(r.id)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">${esc(r.cliente)} · ${esc(r.data)}</div>
+                    </td>
+                    <td style="padding:10px 12px;color:#475569;font-size:12px;">${esc(r.email)}</td>
+                    <td style="padding:10px 12px;text-align:center;">
+                      <span style="background:${r.dias>=5?'#fef2f2':r.dias>=3?'#fffbeb':'#f0fdf4'};color:${r.dias>=5?'#b91c1c':r.dias>=3?'#b45309':'#15803d'};font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px;">${r.dias}d</span>
+                    </td>
+                    <td style="padding:10px 12px;text-align:right;font-weight:800;">€${eur(r.total)}</td>
+                    <td style="padding:10px 12px;text-align:right;">
+                      <button onclick="document.getElementById('mo-rel-envio').remove();rpEnviarEmailDireto('${esc(r.id)}')"
+                              style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;">📧 Enviar</button>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>`}
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;">
+          <button onclick="document.getElementById('mo-rel-envio').remove()"
+                  style="background:#f1f5f9;color:#475569;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mo);
+    mo.addEventListener('click', e=>{ if(e.target===mo) mo.remove(); });
+  };
+
+  // ── Botão no dashboard, por baixo do das baixas ────────────────────
+  const _dash = window.renderDashboard;
+  if(typeof _dash === 'function'){
+    window.renderDashboard = function(){
+      const r = _dash.apply(this, arguments);
+      try{
+        const role = window.currentUser?.role||'';
+        if(!['admin','gerente','supervisor'].includes(role)) return r;
+        const stats = document.getElementById('dash-stats');
+        if(!stats) return r;
+
+        let btn = document.getElementById('dash-envio-btn');
+        if(!btn){
+          btn = document.createElement('div');
+          btn.id = 'dash-envio-btn';
+          btn.style.cssText = 'margin-bottom:12px;';
+          const baixas = document.getElementById('dash-baixas-btn');
+          if(baixas && baixas.nextSibling) baixas.parentNode.insertBefore(btn, baixas.nextSibling);
+          else stats.parentNode.insertBefore(btn, stats);
+        }
+
+        const l = lista();
+        if(!l.length){ btn.innerHTML=''; return r; }
+        const total  = l.reduce((s,x)=>s+x.total,0);
+        const antigos= l.filter(x=>x.dias>=5).length;
+        btn.innerHTML = `<button onclick="relAbrirPainelEnvio()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;font-family:inherit;">
+          <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:17px;">📨</span><span style="font-weight:800;">Relatórios prontos a enviar</span></span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:12px;font-weight:700;">${l.length}</span>
+            ${antigos?`<span style="background:rgba(254,202,202,.3);padding:3px 10px;border-radius:12px;font-weight:700;">🔴 ${antigos} +5d</span>`:''}
+            <span style="font-weight:800;">€${eur(total)}</span>
+            <span style="opacity:.7;font-size:14px;">›</span>
+          </span>
+        </button>`;
+      }catch(e){ console.warn('[v15.37] botão de envio:', e); }
+      return r;
+    };
+  }
+
+  log('contador de relatórios prontos a enviar activo');
 })();
 
 </script>

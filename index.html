@@ -1236,7 +1236,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.39<br>
+      HidroGest v15.41<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1247,7 +1247,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.39 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.41 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1261,7 +1261,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.39<br>
+      HidroGest v15.41<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -14301,7 +14301,8 @@ function osRenderMinhas(){
     const fimSemanaStr = fimSemana.toISOString().slice(0,10);
     minhas = minhas.filter(o=>{
       if(o.estado!=='agendada' && o.estado!=='em_curso') return false;
-      return (o.data||'')>=hoje && (o.data||'')<=fimSemanaStr;
+      // Inclui as atrasadas (data já passada e ainda por fazer) — v15.40
+      return (o.data||'')<=fimSemanaStr;
     });
   } else if(filtro==='realizados'){
     // Trabalhos realizados — todos os relatórios já feitos (prontos ou enviados) por este técnico.
@@ -14320,7 +14321,10 @@ function osRenderMinhas(){
     // esteja PRONTO ou ENVIADO (mesmo que o estado da OS não tenha sido
     // atualizado) — uma OS com relatório enviado está terminada.
     minhas = minhas.filter(o=>{
-      if(o.data!==hoje) return false;
+      // v15.40 — uma OS agendada que passou da data desaparecia daqui E do
+      // filtro "Agendadas" (que só olha para a frente): ficava invisível para
+      // o técnico. Passam a entrar as de hoje e as que ficaram por fazer.
+      if((o.data||'') > hoje) return false;
       if(o.estado!=='agendada' && o.estado!=='em_curso') return false;
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
       if(rel && (rel.estado==='enviado' || rel.estado==='pronto')) return false;
@@ -14412,7 +14416,12 @@ function osRenderMinhas(){
   });
 
   list.innerHTML=Object.entries(grupos).map(([data,ordens])=>{
-    const dtLabel = data===hoje?'🟡 Hoje':data===new Date(new Date().setDate(new Date().getDate()+1)).toISOString().slice(0,10)?'Amanhã':fmtDate(data);
+    const _atrasada = (data||'') < hoje;
+    const _diasAtraso = _atrasada ? Math.floor((new Date(hoje) - new Date(data))/86400000) : 0;
+    const dtLabel = data===hoje?'🟡 Hoje'
+      : data===new Date(new Date().setDate(new Date().getDate()+1)).toISOString().slice(0,10)?'Amanhã'
+      : _atrasada?`🔴 ${fmtDate(data)} · ${_diasAtraso} dia${_diasAtraso>1?'s':''} em atraso`
+      : fmtDate(data);
     const cards=ordens.map(o=>{
       const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId)||{};
       const cliEmFalta=!(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
@@ -33309,7 +33318,8 @@ window.cliHistoricoImprimir = function(cliId){
 
     const lista   = linhasResumo(window.pagPendentesBaixa());
     const prontos = linhasProntos();
-    if(!lista.length && !prontos.length){
+    const abertas = (typeof window.osPorFecharLinhas==='function') ? window.osPorFecharLinhas() : [];
+    if(!lista.length && !prontos.length && !abertas.length){
       if(!auto) _toast('✅ Nada pendente — não foi enviado nada.','✅');
       return {ok:true, vazio:true};
     }
@@ -33382,6 +33392,38 @@ window.cliHistoricoImprimir = function(cliId){
               </div>`).join('')}
           </div>`}
 
+          ${(()=>{
+            const ab = (typeof window.osPorFecharLinhas==='function') ? window.osPorFecharLinhas() : [];
+            if(!ab.length) return '';
+            return `
+            <div style="margin-top:${lista.length?'22px':'0'};padding-top:${lista.length?'18px':'0'};border-top:${lista.length?'2px solid #e2e8f0':'none'};">
+              <div style="font-size:16px;font-weight:800;color:#b91c1c;margin-bottom:6px;">⏳ OS por fechar</div>
+              <p style="margin:0 0 12px;font-size:13.5px;line-height:1.6;color:#334155;">
+                Estas ${ab.length} ordens já passaram da data e continuam em aberto. Ou não foram feitas,
+                ou foram feitas e não ficaram registadas — sem fechar não há horas, valor nem relatório.
+              </p>
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="background:#fef2f2;border-bottom:2px solid #fecaca;">
+                  <th style="padding:8px 10px;text-align:left;font-size:11px;color:#b91c1c;text-transform:uppercase;">OS</th>
+                  <th style="padding:8px 10px;text-align:left;font-size:11px;color:#b91c1c;text-transform:uppercase;">Cliente</th>
+                  <th style="padding:8px 10px;text-align:left;font-size:11px;color:#b91c1c;text-transform:uppercase;">Técnico</th>
+                  <th style="padding:8px 10px;text-align:center;font-size:11px;color:#b91c1c;text-transform:uppercase;">Data</th>
+                  <th style="padding:8px 10px;text-align:center;font-size:11px;color:#b91c1c;text-transform:uppercase;">Atraso</th>
+                </tr></thead>
+                <tbody>
+                  ${ab.map((x,i)=>`
+                    <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                      <td style="padding:8px 10px;font-weight:700;">${esc(x.id)}</td>
+                      <td style="padding:8px 10px;">${esc(x.cliente)}</td>
+                      <td style="padding:8px 10px;color:${x.semTec?'#b91c1c':'#475569'};">${esc(x.tecnico)}</td>
+                      <td style="padding:8px 10px;text-align:center;color:#475569;">${esc(x.data)}</td>
+                      <td style="padding:8px 10px;text-align:center;font-weight:700;color:${x.dias>=5?'#b91c1c':'#b45309'};">${x.dias}d</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>`;
+          })()}
+
           ${!prontos.length ? '' : `
           <div style="margin-top:${lista.length?'22px':'0'};padding-top:${lista.length?'18px':'0'};border-top:${lista.length?'2px solid #e2e8f0':'none'};">
             <div style="font-size:16px;font-weight:800;color:#15803d;margin-bottom:6px;">📨 Relatórios pagos e prontos a enviar</div>
@@ -33426,6 +33468,7 @@ window.cliHistoricoImprimir = function(cliId){
           subject: [
             lista.length   ? `💰 ${lista.length} baixa(s) por confirmar (€${eur(total)})` : '',
             prontos.length ? `📨 ${prontos.length} relatório(s) por enviar` : '',
+            abertas.length ? `⏳ ${abertas.length} OS por fechar` : '',
           ].filter(Boolean).join(' · '),
           htmlContent: html,
         }),
@@ -35640,6 +35683,172 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   log('contador de faturas por emitir no dashboard');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 22 (v15.41)
+   OS QUE PASSARAM DA DATA E CONTINUAM POR FECHAR
+   ──────────────────────────────────────────────────────────────────────────
+   O caso da OS0340: o técnico foi ao cliente, mas não arrancou o relógio nem
+   fechou a OS. Ela ficou "Agendada" com data de 23/07 — sem horas, sem
+   valor real, sem forma de pagamento e sem relatório. Ninguém foi avisado:
+   desapareceu do ecrã do técnico (corrigido na v15.40) e nunca existiu
+   para o escritório.
+
+   Uma OS cuja data já passou e que continua por fechar é sempre trabalho
+   perdido — ou não foi feito, ou foi feito e não foi registado. Nos dois
+   casos alguém tem de lhe pegar hoje.
+
+   Passa a ter contador no dashboard, painel com a lista e uma secção na
+   rotina matinal, ao lado das baixas e dos relatórios por enviar.
+
+   Expõe: window.osPorFechar() · window.osAbrirPainelPorFechar()
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1541) return;
+  window._hgV1541 = true;
+
+  const log = (...a)=>console.log('[v15.41]', ...a);
+  const esc = s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const eur = v=>{ try{ return fmt(parseFloat(v)||0); }catch(_){ return (parseFloat(v)||0).toFixed(2); } };
+  const hoje= ()=>{ try{ return osToday(); }catch(_){ return new Date().toISOString().slice(0,10); } };
+
+  window.osPorFechar = function(){
+    const h = hoje();
+    return (window.DB.ordens||[])
+      .filter(o=>
+        ['agendada','em_curso'].includes(o.estado) &&
+        (o.data||'') < h &&
+        (o.data||'') >= '2000-01-01')
+      .sort((a,b)=>String(a.data||'').localeCompare(String(b.data||'')));
+  };
+
+  function linhas(){
+    const h = hoje();
+    return window.osPorFechar().map(o=>{
+      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      const tec = (o.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+      return {
+        id:o.id,
+        cliente: cli.nome || o.clienteNomeSnapshot || '—',
+        tecnico: tec || '⚠️ sem técnico',
+        semTec: !tec,
+        data: (o.data||'').split('-').reverse().join('/'),
+        dias: Math.max(0, Math.floor((new Date(h) - new Date(o.data))/86400000)),
+        estado: o.estado === 'em_curso' ? 'Em curso' : 'Agendada',
+        emCurso: o.estado === 'em_curso',
+        total: parseFloat(o.total)||0,
+      };
+    });
+  }
+  window.osPorFecharLinhas = linhas;
+
+  window.osAbrirPainelPorFechar = function(){
+    const l = linhas();
+    document.getElementById('mo-os-porfechar')?.remove();
+    const mo = document.createElement('div');
+    mo.id = 'mo-os-porfechar';
+    mo.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99995;display:flex;align-items:center;justify-content:center;padding:14px;';
+    mo.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:'Outfit','Segoe UI',Arial,sans-serif;">
+        <div style="background:linear-gradient(135deg,#7f1d1d,#b91c1c);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:16px;font-weight:800;">⏳ OS por fechar</div>
+            <div style="font-size:12px;opacity:.88;margin-top:3px;">${l.length} com data já passada e ainda em aberto</div>
+          </div>
+          <button onclick="document.getElementById('mo-os-porfechar').remove()"
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:18px;cursor:pointer;flex-shrink:0;">×</button>
+        </div>
+        <div style="padding:12px 20px 0;font-size:12.5px;color:#475569;line-height:1.5;">
+          Ou o trabalho não foi feito, ou foi feito e não ficou registado. Sem fechar a OS não há horas reais,
+          nem valor, nem forma de pagamento, nem relatório.
+        </div>
+        <div style="overflow:auto;padding-top:10px;">
+          ${!l.length
+            ? '<div style="padding:44px 20px;text-align:center;color:#16a34a;font-weight:600;">✅ Nenhuma OS em atraso.</div>'
+            : `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;position:sticky;top:0;">
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">OS / Cliente</th>
+                  <th style="padding:9px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Técnico</th>
+                  <th style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Estado</th>
+                  <th style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Atraso</th>
+                  <th style="padding:9px 12px;"></th>
+                </tr></thead>
+                <tbody>
+                ${l.map((r,i)=>`
+                  <tr style="border-bottom:1px solid #f1f5f9;background:${i%2?'#fff':'#fcfdfe'};">
+                    <td style="padding:10px 12px;">
+                      <div style="font-weight:700;">${esc(r.id)}</div>
+                      <div style="font-size:11.5px;color:#64748b;">${esc(r.cliente)} · ${esc(r.data)}</div>
+                    </td>
+                    <td style="padding:10px 12px;color:${r.semTec?'#b91c1c':'#475569'};font-weight:${r.semTec?'700':'400'};">${esc(r.tecnico)}</td>
+                    <td style="padding:10px 12px;text-align:center;">
+                      <span style="background:${r.emCurso?'#fffbeb':'#eff6ff'};color:${r.emCurso?'#b45309':'#1d4ed8'};font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;">${r.estado}</span>
+                    </td>
+                    <td style="padding:10px 12px;text-align:center;">
+                      <span style="background:${r.dias>=5?'#fef2f2':'#fffbeb'};color:${r.dias>=5?'#b91c1c':'#b45309'};font-weight:700;font-size:12px;padding:2px 9px;border-radius:10px;">${r.dias}d</span>
+                    </td>
+                    <td style="padding:10px 12px;text-align:right;">
+                      <button onclick="document.getElementById('mo-os-porfechar').remove();osAbrirDetalhe('${esc(r.id)}')"
+                              style="background:#1e3a5f;color:#fff;border:none;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;">Abrir OS</button>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>`}
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;">
+          <button onclick="document.getElementById('mo-os-porfechar').remove()"
+                  style="background:#f1f5f9;color:#475569;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mo);
+    mo.addEventListener('click', e=>{ if(e.target===mo) mo.remove(); });
+  };
+
+  // ── Contador no dashboard, o primeiro dos quatro ───────────────────
+  const _dash = window.renderDashboard;
+  if(typeof _dash === 'function'){
+    window.renderDashboard = function(){
+      const r = _dash.apply(this, arguments);
+      try{
+        const role = window.currentUser?.role||'';
+        if(!['admin','gerente','supervisor'].includes(role)) return r;
+        const stats = document.getElementById('dash-stats');
+        if(!stats) return r;
+
+        let btn = document.getElementById('dash-porfechar-btn');
+        if(!btn){
+          btn = document.createElement('div');
+          btn.id = 'dash-porfechar-btn';
+          btn.style.cssText = 'margin-bottom:12px;';
+          const primeiro = document.getElementById('dash-baixas-btn')
+                        || document.getElementById('dash-faturas-btn')
+                        || document.getElementById('dash-envio-btn');
+          if(primeiro) primeiro.parentNode.insertBefore(btn, primeiro);
+          else stats.parentNode.insertBefore(btn, stats);
+        }
+
+        const l = linhas();
+        if(!l.length){ btn.innerHTML=''; return r; }
+        const antigos = l.filter(x=>x.dias>=5).length;
+        const semTec  = l.filter(x=>x.semTec).length;
+        btn.innerHTML = `<button onclick="osAbrirPainelPorFechar()" style="width:100%;padding:11px 16px;background:linear-gradient(135deg,#991b1b,#dc2626);color:#fff;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:8px;font-family:inherit;">
+          <span style="display:flex;align-items:center;gap:10px;"><span style="font-size:17px;">⏳</span><span style="font-weight:800;">OS por fechar</span></span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="background:rgba(255,255,255,.2);padding:3px 10px;border-radius:12px;font-weight:700;">${l.length}</span>
+            ${antigos?`<span style="background:rgba(254,202,202,.25);padding:3px 10px;border-radius:12px;font-weight:700;">🔴 ${antigos} +5d</span>`:''}
+            ${semTec?`<span style="background:rgba(254,202,202,.25);padding:3px 10px;border-radius:12px;font-weight:700;">⚠️ ${semTec} sem técnico</span>`:''}
+            <span style="opacity:.7;font-size:14px;">›</span>
+          </span>
+        </button>`;
+      }catch(e){ console.warn('[v15.41] botão OS por fechar:', e); }
+      return r;
+    };
+  }
+
+  log('contador de OS por fechar activo');
 })();
 
 </script>

@@ -1229,7 +1229,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.26<br>
+      HidroGest v15.32<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1240,7 +1240,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.26 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.32 · Jul 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1254,7 +1254,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.26<br>
+      HidroGest v15.32<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -33579,6 +33579,9 @@ window.cliHistoricoImprimir = function(cliId){
        l:'Local onde o problema se manifesta', falta:'Indicar a fracção/divisão', acao:'relatorio'},
       {k:'pesq',  ok:!!(c.locaisPesquisados && c.locaisPesquisados.trim()),
        l:'Locais pesquisados', falta:'Indicar onde se fez a pesquisa', acao:'relatorio'},
+      {k:'mets', ok:Array.isArray(c.metodologias) && c.metodologias.length > 0,
+       l:`Metodologias utilizadas${(c.metodologias||[]).length?' ('+c.metodologias.length+')':''}`,
+       falta:'Marcar pelo menos uma metodologia', acao:'relatorio'},
       {k:'fotos', ok:nFotos >= 4,
        l:`Fotografias (${nFotos}/4)`, falta:`Faltam ${Math.max(0,4-nFotos)} foto(s)`, acao:'relatorio'},
     ];
@@ -33750,6 +33753,9 @@ window.cliHistoricoImprimir = function(cliId){
     if(!os){ _toast('OS não encontrada.','⚠️'); return; }
     const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
     const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
+    const _tec   = window.currentUser?.role === 'tecnico';
+    // O tempo conta do início do trabalho até este momento (v15.28)
+    const _ro    = _tec ? 'readonly style="background:#f8fafc;"' : '';
 
     const prazo = new Date(); prazo.setDate(prazo.getDate()+5);
     const prazoStr = prazo.toISOString().slice(0,10);
@@ -33781,21 +33787,24 @@ window.cliHistoricoImprimir = function(cliId){
             <div>
               <label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px;">Início</label>
               <div style="display:flex;gap:5px;">
-                <input type="time" id="fos-ini" value="${esc((os.horaIniReal||os.horaIni||'').slice(0,5))}"
+                <input type="time" id="fos-ini" value="${esc((os.horaIniReal||os.horaIni||'').slice(0,5))}" ${(os.horaIniReal||os.horaIni)?_ro:''}
                        style="flex:1;min-width:0;padding:10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:15px;font-weight:700;font-family:inherit;">
-                <button data-agora="fos-ini" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>
+                ${(_tec && (os.horaIniReal||os.horaIni)) ? '' : '<button data-agora="fos-ini" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>'}
               </div>
             </div>
             <div>
               <label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:4px;">Fim</label>
               <div style="display:flex;gap:5px;">
-                <input type="time" id="fos-fim" value="${esc((os.horaFimReal||'').slice(0,5))}"
+                <input type="time" id="fos-fim" value="${agora()}" ${_ro}
                        style="flex:1;min-width:0;padding:10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:15px;font-weight:700;font-family:inherit;">
-                <button data-agora="fos-fim" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>
+                ${_tec ? '' : '<button data-agora="fos-fim" style="flex-shrink:0;padding:0 11px;border:1.5px solid #e2e8f0;background:#f8fafc;border-radius:9px;font-size:15px;cursor:pointer;">🕐</button>'}
               </div>
             </div>
           </div>
           <div id="fos-dur" style="margin-top:8px;padding:9px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;font-size:13px;color:#64748b;">Indica as horas de início e de fim.</div>
+          <div style="font-size:11.5px;color:#94a3b8;margin-top:6px;line-height:1.45;">${_tec
+            ? 'O tempo conta desde o início do trabalho até agora, que é quando a OS fecha.'
+            : 'Fim pré-preenchido com a hora actual — pode ser corrigido.'}</div>
 
           ${naoFat ? `
           <div style="margin-top:16px;padding:11px 13px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;font-size:12.5px;color:#1e3a5f;">
@@ -33872,8 +33881,9 @@ window.cliHistoricoImprimir = function(cliId){
       const erro = $('fos-erro');
       const mostrarErro = txt=>{ erro.textContent=txt; erro.style.display='block'; erro.scrollIntoView({behavior:'smooth',block:'center'}); };
 
+      if(_tec) $('fos-fim').value = agora();   // fim = instante do fecho
       const min = duracao();
-      if(min===null){ mostrarErro('Preenche as horas de início e de fim.'); return; }
+      if(min===null){ mostrarErro(_tec ? 'Esta OS não tem hora de início registada. Fala com o escritório.' : 'Preenche as horas de início e de fim.'); return; }
       if(!naoFat && !metodo){ mostrarErro('Escolhe como o cliente vai pagar.'); return; }
 
       const ini=$('fos-ini').value, fim=$('fos-fim').value;
@@ -34051,6 +34061,13 @@ window.cliHistoricoImprimir = function(cliId){
     const naoFat = (typeof osServicoNaoFaturavel==='function') && osServicoNaoFaturavel(os);
     const metodo = os.pagamento?.metodo || '';
 
+    // Metodologias: ler as checkboxes abertas; se o formulário ainda não as
+    // montou, usar o que está gravado no relatório
+    const temMets = !!document.querySelector('#mo-relat-pesquisa input[name="rp-met"]');
+    const nMets = temMets
+      ? document.querySelectorAll('#mo-relat-pesquisa input[name="rp-met"]:checked').length
+      : (c.metodologias||[]).length;
+
     const itens = [
       {ok:!!(val('rp-tipo-anomalia')||c.tipoProblema),
        l:'Tipo de anomalia', falta:'Escolher na lista', alvo:'rp-tipo-anomalia'},
@@ -34058,6 +34075,8 @@ window.cliHistoricoImprimir = function(cliId){
        l:'Local onde o problema se manifesta', falta:'Indicar a fracção/divisão', alvo:'rp-local-manifestacao'},
       {ok:!!(val('rp-locais-pesquisados')||c.locaisPesquisados),
        l:'Locais pesquisados', falta:'Indicar onde se fez a pesquisa', alvo:'rp-locais-pesquisados'},
+      {ok:nMets>0,
+       l:`Metodologias utilizadas${nMets?' ('+nMets+')':''}`, falta:'Marcar pelo menos uma metodologia', alvo:'__mets'},
       {ok:nFotos>=4,
        l:`Fotografias (${nFotos}/4)`, falta:`Faltam ${Math.max(0,4-nFotos)} foto(s)`, alvo:'__fotos'},
       {ok:!!(val('rp-conclusao')||val('rp-trabalho')||c.conclusao||c.trabalho),
@@ -34079,9 +34098,11 @@ window.cliHistoricoImprimir = function(cliId){
       window.rpFormCheckRender();
       return;
     }
-    // O grid de fotos não tem id — apanha-se pelo botão "Adicionar"
+    // Fotos e metodologias não têm id — apanham-se pelos controlos
     const el = (alvo === '__fotos')
       ? document.querySelector('#mo-relat-pesquisa input[onchange*="rpAdicionarFotosAdmin"]')?.closest('label')
+      : (alvo === '__mets')
+      ? document.querySelector('#mo-relat-pesquisa input[name="rp-met"]')?.closest('label')
       : document.getElementById(alvo);
     if(el){
       el.scrollIntoView({behavior:'smooth', block:'center'});
@@ -34154,6 +34175,11 @@ window.cliHistoricoImprimir = function(cliId){
       if(e.target.closest?.('#mo-relat-pesquisa')) window.rpFormCheckRender();
     }, true);
   });
+  // As checkboxes de metodologias/equipamentos são marcadas por onclick no
+  // label e não disparam 'change' — daí ouvir também o clique.
+  document.addEventListener('click', e=>{
+    if(e.target.closest?.('#mo-relat-pesquisa')) setTimeout(window.rpFormCheckRender, 60);
+  }, true);
   // As fotos chegam de forma assíncrona — rede de segurança
   setInterval(()=>{ try{ window.rpFormCheckRender(); }catch(_){} }, 1500);
 
@@ -34167,6 +34193,620 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   log('barra de progresso no formulário do relatório, com forma de pagamento');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 13 (v15.27)
+   METODOLOGIAS OBRIGATÓRIAS
+   ──────────────────────────────────────────────────────────────────────────
+   O técnico passa a ter de marcar as metodologias que usou. Sem pelo menos
+   uma:
+     · não fecha a OS (osConcluirComAssinaturas)
+     · não fecha sem relatório (osFecharSemRelatorio)
+     · o relatório não segue para o cliente (brevoEnviarRelatorio)
+
+   O item já aparece nas duas barras de progresso (formulário e fecho), por
+   isso o técnico vê a falta muito antes de chegar ao botão.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1527) return;
+  window._hgV1527 = true;
+
+  const log    = (...a)=>console.log('[v15.27]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+
+  // Metodologias válidas: as checkboxes abertas, senão as gravadas
+  window.hgMetodologias = function(osId){
+    const abertas = document.querySelector('#mo-relat-pesquisa input[name="rp-met"]');
+    if(abertas){
+      return [...document.querySelectorAll('#mo-relat-pesquisa input[name="rp-met"]:checked')].map(x=>x.value);
+    }
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    return (rel.campos?.metodologias)||[];
+  };
+
+  function faltaMetodologia(osId){
+    return window.hgMetodologias(osId).length === 0;
+  }
+
+  function avisar(){
+    _toast('🚫 Marca as metodologias que usaste no relatório — pelo menos uma é obrigatória.','⚠️',7000);
+  }
+
+  // ── 1. Fecho com assinaturas ───────────────────────────────────────
+  const _concluir = window.osConcluirComAssinaturas;
+  if(typeof _concluir === 'function'){
+    window.osConcluirComAssinaturas = function(){
+      const osId = window._osConcluirId;
+      if(osId && faltaMetodologia(osId)){
+        avisar();
+        if(typeof rpAbrirFormulario === 'function'){
+          setTimeout(()=>{ try{ closeMo('mo-os-concluir'); }catch(_){} rpAbrirFormulario(osId); }, 500);
+        }
+        return;
+      }
+      return _concluir.apply(this, arguments);
+    };
+  }
+
+  // ── 2. Fecho sem relatório ─────────────────────────────────────────
+  const _fecharSem = window.osFecharSemRelatorio;
+  if(typeof _fecharSem === 'function'){
+    window.osFecharSemRelatorio = function(osId){
+      if(osId && faltaMetodologia(osId)){
+        avisar();
+        if(typeof rpAbrirFormulario === 'function') setTimeout(()=>rpAbrirFormulario(osId), 500);
+        return;
+      }
+      return _fecharSem.apply(this, arguments);
+    };
+  }
+
+  // ── 3. Envio do relatório ao cliente ───────────────────────────────
+  const _enviar = window.brevoEnviarRelatorio;
+  if(typeof _enviar === 'function'){
+    window.brevoEnviarRelatorio = async function(osId){
+      const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+      if(!((rel.campos?.metodologias)||[]).length){
+        _toast('🚫 O relatório não tem metodologias marcadas — não pode ser enviado ao cliente.','⚠️',8000);
+        return {ok:false, motivo:'sem-metodologias'};
+      }
+      return _enviar.apply(this, arguments);
+    };
+  }
+
+  log('metodologias obrigatórias para fechar a OS e enviar o relatório');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 14 (v15.28)
+   O TEMPO CONTA DO INÍCIO DO TRABALHO ATÉ AO FECHO DA OS
+   ──────────────────────────────────────────────────────────────────────────
+   Antes a hora de fim vinha de um campo à parte (horaFimReal), que só ficava
+   preenchido se o técnico se lembrasse de parar o cronómetro. Quando ficava
+   vazio, o fecho não contava tempo nenhum — e a OS ia a zero.
+
+   Agora a hora de fim é sempre o momento em que a OS é fechada. O campo
+   actualiza-se sozinho enquanto o modal está aberto e, no instante em que o
+   técnico carrega em "Concluir OS", fica com a hora exacta desse clique.
+   O técnico não escreve horas; o admin/gerente continua a poder corrigi-las.
+
+   Nota: as pausas registadas continuam a ser descontadas, como já acontecia.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1528) return;
+  window._hgV1528 = true;
+
+  const log   = (...a)=>console.log('[v15.28]', ...a);
+  const isTec = ()=>window.currentUser?.role === 'tecnico';
+  const agora = ()=>new Date().toTimeString().slice(0,5);
+
+  function marcarFim(osId, valor){
+    const os = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(os) os.horaFimReal = valor;          // é daqui que o fecho lê, para o técnico
+    const el = document.getElementById('os-conc-hora-fim');
+    if(el) el.value = valor;                // e daqui, para o admin
+  }
+
+  // ── 1. Enquanto o modal de fecho está aberto, o fim é "agora" ───────
+  let relogio = null;
+  const _abrir = window.osAbrirConcluir;
+  if(typeof _abrir === 'function'){
+    window.osAbrirConcluir = function(osId){
+      const r = _abrir.apply(this, arguments);
+      setTimeout(()=>{
+        try{
+          const os = (window.DB.ordens||[]).find(x=>x.id===osId)||{};
+          // Início: o registado no arranque do trabalho
+          const iniEl = document.getElementById('os-conc-hora-ini');
+          const ini = (os.horaIniReal||os.horaIni||'').slice(0,5);
+          if(iniEl && !iniEl.value && ini) iniEl.value = ini;
+
+          marcarFim(osId, agora());
+          if(typeof osCalcHorasConc === 'function') osCalcHorasConc();
+
+          // Etiqueta a explicar de onde vem o tempo
+          const res = document.getElementById('os-conc-horas-res');
+          if(res && !res.dataset.hg1528){
+            res.dataset.hg1528 = '1';
+            const nota = document.createElement('div');
+            nota.id = 'hg-nota-tempo';
+            nota.style.cssText = 'font-size:11.5px;color:#64748b;margin:-10px 0 16px;line-height:1.45;';
+            nota.textContent = isTec()
+              ? 'O tempo conta desde o início do trabalho até ao momento em que fechas a OS.'
+              : 'Fim pré-preenchido com a hora actual — pode ser corrigido.';
+            res.parentNode.insertBefore(nota, res.nextSibling);
+          }
+
+          clearInterval(relogio);
+          relogio = setInterval(()=>{
+            const modal = document.getElementById('mo-os-concluir');
+            if(!modal || !modal.classList.contains('open')){ clearInterval(relogio); return; }
+            if(!isTec()) return;             // admin a corrigir: não mexer
+            marcarFim(osId, agora());
+            if(typeof osCalcHorasConc === 'function') osCalcHorasConc();
+          }, 30000);
+        }catch(e){ console.warn('[v15.28] abrir fecho:', e); }
+      }, 300);
+      return r;
+    };
+  }
+
+  // ── 2. No clique de "Concluir OS", o fim é o instante do clique ─────
+  const _concluir = window.osConcluirComAssinaturas;
+  if(typeof _concluir === 'function'){
+    window.osConcluirComAssinaturas = function(){
+      try{
+        const osId = window._osConcluirId;
+        if(osId){
+          const os = (window.DB.ordens||[]).find(x=>x.id===osId)||{};
+          if(isTec() || !document.getElementById('os-conc-hora-fim')?.value){
+            marcarFim(osId, agora());
+          }
+          // Sem hora de início não há tempo — avisar em vez de fechar a zero
+          const ini = (os.horaIniReal||os.horaIni||document.getElementById('os-conc-hora-ini')?.value||'').slice(0,5);
+          if(!ini){
+            try{ toast('⚠️ Esta OS não tem hora de início registada. Peça ao escritório para a corrigir antes de fechar.','⚠️',8000); }catch(_){}
+            return;
+          }
+          if(isTec()){
+            const iniEl = document.getElementById('os-conc-hora-ini');
+            if(iniEl && !iniEl.value) iniEl.value = ini;
+            if(os) os.horaIniReal = os.horaIniReal || ini;
+          }
+        }
+      }catch(e){ console.warn('[v15.28] concluir:', e); }
+      return _concluir.apply(this, arguments);
+    };
+  }
+
+  log('tempo = início do trabalho → fecho da OS');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 15 (v15.29)
+   CHEGADA DETECTADA POR GPS E ARRANQUE AUTOMÁTICO DO RELÓGIO
+   ──────────────────────────────────────────────────────────────────────────
+   Regra: deteta-se a chegada do técnico ao cliente por GPS e regista-se a
+   hora. O relógio NÃO arranca sozinho — a chegada serve para lembrar o
+   técnico de iniciar o trabalho (avisos no módulo v15.30) e para a gestão
+   poder comparar a hora de chegada com a hora de início.
+
+   Como se deteta a chegada, sem depender de coordenadas do cliente
+   (os clientes só têm morada, não têm lat/lng):
+     · o técnico tem de estar em deslocamento para uma OS, ou ter uma única
+       OS por iniciar hoje;
+     · a posição GPS fica dentro de um raio de 80 m durante 3 minutos
+       seguidos, com precisão ≤ 100 m → considera-se que chegou e parou;
+     · se o código postal do cliente for convertível em coordenadas, exige-se
+       ainda que esteja a menos de 3 km desse ponto (evita marcar chegada num
+       café a meio do caminho).
+
+   Limite honesto: isto vive do GPS do browser, que só corre com a app aberta.
+   Se o técnico fechar a app, não há detecção — o arranque automático é uma
+   rede de segurança, não substitui o botão "Iniciar".
+
+   Guarda na OS: chegadaEm, chegadaLat/Lng, chegadaAuto — que a gestão pode
+   comparar com a horaIniReal para ver quanto tempo passou entre chegar e
+   começar.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1529) return;
+  window._hgV1529 = true;
+
+  const RAIO_PARADO_M   = 80;          // considera-se parado dentro deste raio
+  const TEMPO_PARADO_MS = 3*60*1000;   // durante este tempo
+  const PRECISAO_MAX_M  = 100;         // ignora leituras de GPS más
+  const TOLERANCIA_MS   = 10*60*1000;  // 10 min para iniciar à mão
+  const RAIO_CLIENTE_KM = 3;           // validação opcional pelo código postal
+
+  const log    = (...a)=>console.log('[v15.29]', ...a);
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+  const hhmm   = d=>new Date(d).toTimeString().slice(0,5);
+  const hoje   = ()=>new Date().toISOString().slice(0,10);
+
+  function distM(lat1,lng1,lat2,lng2){
+    if(typeof rotDistKm === 'function') return rotDistKm(lat1,lng1,lat2,lng2)*1000;
+    const R=6371000, p=Math.PI/180;
+    const a=Math.sin((lat2-lat1)*p/2)**2 + Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin((lng2-lng1)*p/2)**2;
+    return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+
+  // ── Qual a OS a que esta chegada diz respeito ──────────────────────
+  // 1.º o deslocamento marcado ao abrir o Maps; 2.º a única OS por iniciar hoje
+  function osAlvo(){
+    const uid = window.currentUser?.id;
+    if(!uid) return null;
+    const porIniciar = (window.DB.ordens||[]).filter(o=>
+      (o.tecnicos||[]).includes(uid) &&
+      o.data === hoje() &&
+      !['em_curso','concluida','os_fechada','cancelada'].includes(o.estado) &&
+      !o.horaIniReal
+    );
+    const loc = (window.DB.localizacoes||[]).find(l=>(l.userId||l._id)===uid);
+    if(loc?.deslocamentoOS){
+      const alvo = porIniciar.find(o=>o.id===loc.deslocamentoOS);
+      if(alvo) return alvo;
+    }
+    // Sem deslocamento marcado: só arranca sozinho se não houver dúvida
+    return porIniciar.length === 1 ? porIniciar[0] : null;
+  }
+
+  // Validação opcional: perto da morada do cliente (nível de código postal)
+  async function perto(os, lat, lng){
+    try{
+      if(typeof cpParaCoordenadas !== 'function') return true;
+      const cli = (window.DB.clientes||[]).find(c=>c.id===os.clienteId);
+      const cp  = cli?.srvCp || cli?.cp;
+      if(!cp) return true;                       // sem CP não dá para validar
+      const co = await cpParaCoordenadas(cp);
+      if(!co) return true;
+      return distM(co.lat, co.lng, lat, lng)/1000 <= RAIO_CLIENTE_KM;
+    }catch(_){ return true; }
+  }
+
+  // ── Registar a chegada ─────────────────────────────────────────────
+  const parado = {};   // {osId: {lat, lng, desde}}
+
+  async function avaliarPosicao(lat, lng, accuracy){
+    if(window.currentUser?.role !== 'tecnico') return;
+    if(!isFinite(lat) || !isFinite(lng) || accuracy > PRECISAO_MAX_M) return;
+
+    const os = osAlvo();
+    if(!os){ return; }
+    if(os.chegadaEm) return;                     // chegada já registada
+
+    const p = parado[os.id];
+    if(!p || distM(p.lat, p.lng, lat, lng) > RAIO_PARADO_M){
+      parado[os.id] = {lat, lng, desde: Date.now()};
+      return;
+    }
+    if(Date.now() - p.desde < TEMPO_PARADO_MS) return;
+
+    if(!(await perto(os, lat, lng))){
+      parado[os.id] = {lat, lng, desde: Date.now()};   // parou, mas longe do cliente
+      return;
+    }
+
+    const chegadaEm = new Date(p.desde).toISOString();
+    delete parado[os.id];
+    try{
+      await window.fsSetMerge('ordens', os.id, {
+        chegadaEm, chegadaLat:lat, chegadaLng:lng, chegadaAuto:true,
+      });
+      const o = (window.DB.ordens||[]).find(x=>x.id===os.id);
+      if(o) Object.assign(o, {chegadaEm, chegadaLat:lat, chegadaLng:lng, chegadaAuto:true});
+      log('chegada registada', os.id, hhmm(chegadaEm));
+      _toast(`📍 Chegada registada às ${hhmm(chegadaEm)}. Não te esqueças de iniciar o trabalho — o tempo só conta a partir daí.`,'⏱',9000);
+      if(typeof auditLog==='function') auditLog('os_chegada_gps', `OS ${os.id}: chegada detectada por GPS às ${hhmm(chegadaEm)} (${window.currentUser?.name})`);
+    }catch(e){ console.warn('[v15.29] gravar chegada:', e); }
+  }
+
+  // ── Arranque automático: DESLIGADO por decisão do Ronaldo (v15.30) ──
+  // O relógio nunca arranca sozinho. A chegada é registada na mesma e serve
+  // de base aos lembretes do módulo v15.30 — iniciar o trabalho é sempre um
+  // acto do técnico.
+  async function verificarArranque(){ /* sem arranque automático */ }
+
+  // ── Ligações ao sistema de GPS existente ──────────────────────────
+  const _locEnviar = window.locEnviar;
+  if(typeof _locEnviar === 'function'){
+    window.locEnviar = async function(pos){
+      const r = await _locEnviar.apply(this, arguments);
+      try{
+        const {latitude, longitude, accuracy} = pos.coords;
+        await avaliarPosicao(latitude, longitude, accuracy);
+        await verificarArranque();
+      }catch(e){ console.warn('[v15.29] locEnviar:', e); }
+      return r;
+    };
+  }
+
+  // O GPS pode estar parado (técnico dentro de casa, sem sinal novo):
+  // verificar o prazo dos 10 minutos também por relógio
+  setInterval(()=>{ verificarArranque().catch(()=>{}); }, 60000);
+
+  // Permitir corrigir/limpar à mão a chegada detectada (admin)
+  window.osLimparChegada = async function(osId){
+    if(!['admin','gerente','supervisor'].includes(window.currentUser?.role||'')){
+      _toast('Só a gestão pode limpar a chegada detectada.','🔒'); return;
+    }
+    await window.fsSetMerge('ordens', osId, {chegadaEm:null, chegadaAuto:false});
+    const o=(window.DB.ordens||[]).find(x=>x.id===osId); if(o){ o.chegadaEm=null; o.chegadaAuto=false; }
+    _toast('Chegada detectada removida.','🧹');
+  };
+
+  log('chegada por GPS + arranque automático do relógio ao fim de 10 min');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 16 (v15.30)
+   AVISOS ENTRE A CHEGADA E O ARRANQUE AUTOMÁTICO
+   ──────────────────────────────────────────────────────────────────────────
+   A v15.29 deteta a chegada por GPS. O relógio nunca arranca sozinho — quem
+   inicia o trabalho é sempre o técnico. O que o sistema faz é lembrá-lo,
+   enquanto a OS estiver por iniciar.
+
+   Lembretes, contados desde a hora da chegada — param assim que ele inicia:
+     · 5 min  — "Chegaste há 5 minutos. Inicia o trabalho."
+     · 10 min — "O tempo ainda não está a contar."
+     · 20 e 30 min — último aviso; depois disso não insiste mais.
+
+   Cada aviso sai por notificação push (chega com a app em segundo plano) e,
+   se a app estiver aberta no telemóvel do técnico, também por notificação
+   local. Os avisos são marcados na própria OS, por isso não se repetem nem
+   se duplicam entre o telemóvel do técnico e o computador do escritório —
+   e o escritório é quem os envia quando a app do técnico está fechada.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1530) return;
+  window._hgV1530 = true;
+
+  const log  = (...a)=>console.log('[v15.30]', ...a);
+  const hhmm = d=>new Date(d).toTimeString().slice(0,5);
+
+  const AVISOS = [
+    {min:5,  campo:'avisoChegada5'},
+    {min:10, campo:'avisoChegada10'},
+    {min:20, campo:'avisoChegada20'},
+    {min:30, campo:'avisoChegada30'},
+  ];
+
+  function nomeCliente(os){
+    const c = (window.DB.clientes||[]).find(x=>x.id===os.clienteId);
+    return c?.nome || os.clienteNomeSnapshot || 'cliente';
+  }
+
+  function notificarLocal(titulo, corpo){
+    try{
+      if('Notification' in window && Notification.permission === 'granted'){
+        new Notification(titulo, {body:corpo, tag:'hg-chegada', renotify:true});
+      }
+    }catch(_){}
+  }
+
+  async function push(os, titulo, corpo){
+    const ids = (os.tecnicos||[]);
+    if(typeof window.pushEnviarParaTecnicos === 'function' && ids.length){
+      try{ await window.pushEnviarParaTecnicos(ids, titulo, corpo, os.id); }
+      catch(e){ console.warn('[v15.30] push:', e); }
+    }
+  }
+
+  // Quem envia: o próprio técnico (se tiver a app aberta) ou a gestão
+  function podeEnviar(os){
+    const role = window.currentUser?.role||'';
+    if(role === 'tecnico') return (os.tecnicos||[]).includes(window.currentUser.id);
+    return ['admin','gerente','supervisor'].includes(role);
+  }
+
+  const souOTecnico = os =>
+    window.currentUser?.role === 'tecnico' && (os.tecnicos||[]).includes(window.currentUser.id);
+
+  async function marcar(osId, campo, valor){
+    await window.fsSetMerge('ordens', osId, {[campo]: valor});
+    const o = (window.DB.ordens||[]).find(x=>x.id===osId);
+    if(o) o[campo] = valor;
+  }
+
+  async function verificar(){
+    if(!window.currentUser) return;
+    const ordens = (window.DB.ordens||[]).filter(o=>o.chegadaEm && podeEnviar(o));
+
+    for(const os of ordens){
+      const decorridoMin = Math.floor((Date.now() - new Date(os.chegadaEm).getTime())/60000);
+      if(decorridoMin < 0 || decorridoMin > 60) continue;   // fora de janela útil
+
+      // Assim que o trabalho arranca, os lembretes param
+      if(os.horaIniReal || os.estado === 'em_curso') continue;
+
+      for(const a of AVISOS){
+        if(decorridoMin < a.min || os[a.campo]) continue;
+        await marcar(os.id, a.campo, new Date().toISOString());
+
+        const titulo = a.min <= 5
+          ? '⏱ Já chegaste — inicia o trabalho'
+          : a.min <= 10
+          ? '⏱ O tempo ainda não está a contar'
+          : `⚠️ OS ${os.id} por iniciar`;
+        const corpo = a.min <= 5
+          ? `Chegaste há ${decorridoMin} minutos a ${nomeCliente(os)}. Abre a OS ${os.id} e carrega em Iniciar.`
+          : `Estás há ${decorridoMin} minutos em ${nomeCliente(os)} sem iniciar a OS ${os.id}. O tempo trabalhado só conta a partir do Iniciar.`;
+
+        await push(os, titulo, corpo);
+        if(souOTecnico(os)){
+          notificarLocal(titulo, corpo);
+          try{ toast(corpo, '⏱', 9000); }catch(_){}
+        }
+        log('aviso', a.min+'min', os.id);
+      }
+    }
+  }
+
+  // Pedir permissão de notificações ao técnico, uma vez
+  if(window.currentUser?.role === 'tecnico' && 'Notification' in window
+     && Notification.permission === 'default'){
+    setTimeout(()=>{ try{ Notification.requestPermission(); }catch(_){} }, 8000);
+  }
+
+  setInterval(()=>{ verificar().catch(e=>console.warn('[v15.30]', e)); }, 60000);
+  setTimeout(()=>{ verificar().catch(()=>{}); }, 15000);
+
+  window.hgVerificarAvisosChegada = verificar;
+  log('lembretes de chegada activos (5, 10, 20 e 30 min) — sem arranque automático');
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HidroGest — Correção 17 (v15.32)
+   CHEGADA → INÍCIO: QUANTO TEMPO PASSA ENTRE CHEGAR E COMEÇAR
+   ──────────────────────────────────────────────────────────────────────────
+   Com a chegada detectada por GPS (chegadaEm) e a hora de arranque manual
+   (horaIniReal), passa a haver um número que não existia: o tempo morto
+   entre chegar ao cliente e pôr o relógio a andar.
+
+   Onde aparece:
+     · lista de OS — selo ao lado do estado (⏱ 12 min), verde até 10 min,
+       laranja até 20, vermelho acima disso;
+     · Relatórios → aba Técnico — quadro por técnico com nº de OS medidas,
+       espera média, pior caso, e o detalhe das piores.
+
+   É informação de gestão, não de cobrança: não altera valores nem horas.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window._hgV1532) return;
+  window._hgV1532 = true;
+
+  const log = (...a)=>console.log('[v15.32]', ...a);
+
+  // Minutos entre a chegada detectada e o arranque do relógio
+  window.hgEsperaMin = function(os){
+    if(!os?.chegadaEm || !os?.horaIniReal) return null;
+    const cheg = new Date(os.chegadaEm);
+    if(isNaN(cheg)) return null;
+    const [h,m] = String(os.horaIniReal).slice(0,5).split(':').map(Number);
+    if(!isFinite(h) || !isFinite(m)) return null;
+    const ini = new Date(cheg);
+    ini.setHours(h, m, 0, 0);
+    let min = Math.round((ini - cheg)/60000);
+    if(min < -720) min += 1440;              // arranque depois da meia-noite
+    return (min >= 0 && min <= 720) ? min : null;
+  };
+
+  const cor = min => min <= 10 ? ['#f0fdf4','#15803d','#86efac']
+                   : min <= 20 ? ['#fffbeb','#b45309','#fde68a']
+                               : ['#fef2f2','#b91c1c','#fecaca'];
+
+  function selo(os){
+    const min = window.hgEsperaMin(os);
+    if(min === null) return '';
+    const [bg,fg,bd] = cor(min);
+    return `<span title="Entre chegar ao cliente e iniciar o trabalho"
+      style="display:inline-block;margin-left:5px;background:${bg};color:${fg};border:1px solid ${bd};font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;white-space:nowrap;">⏱ ${min} min</span>`;
+  }
+
+  // ── 1. Selo na lista de OS (coluna do estado) ──────────────────────
+  const _osBadge = window.osBadge;
+  if(typeof _osBadge === 'function'){
+    window.osBadge = function(estado, os){
+      const base = _osBadge.apply(this, arguments);
+      try{
+        if(window.currentUser?.role === 'tecnico') return base;   // é dado de gestão
+        return base + selo(os);
+      }catch(_){ return base; }
+    };
+  }
+
+  // ── 2. Quadro no relatório por técnico ─────────────────────────────
+  function quadroEspera(){
+    const f = document.getElementById('rep-from')?.value||'';
+    const t = document.getElementById('rep-to')?.value||'';
+    const dia = o => String(o.concluidoEm||o.fechadoEm||o.data||'').slice(0,10);
+
+    let ords = (window.DB.ordens||[]).filter(o=>window.hgEsperaMin(o)!==null);
+    if(f) ords = ords.filter(o=>dia(o)>=f);
+    if(t) ords = ords.filter(o=>dia(o)<=t);
+    if(!ords.length) return '';
+
+    const nome = id => (window.DB.users||[]).find(u=>u.id===id)?.name || '—';
+    const porTec = {};
+    ords.forEach(o=>{
+      const min = window.hgEsperaMin(o);
+      (o.tecnicos||['—']).forEach(id=>{
+        const k = nome(id);
+        if(!porTec[k]) porTec[k] = {n:0, soma:0, pior:0, piorOS:''};
+        porTec[k].n++; porTec[k].soma += min;
+        if(min > porTec[k].pior){ porTec[k].pior = min; porTec[k].piorOS = o.id; }
+      });
+    });
+
+    const linhas = Object.entries(porTec)
+      .sort((a,b)=>(b[1].soma/b[1].n)-(a[1].soma/a[1].n))
+      .map(([tec,v])=>{
+        const media = Math.round(v.soma/v.n);
+        const [bg,fg] = cor(media);
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 10px;font-weight:600;">${tec}</td>
+          <td style="padding:8px 10px;text-align:center;">${v.n}</td>
+          <td style="padding:8px 10px;text-align:center;">
+            <span style="background:${bg};color:${fg};font-weight:800;padding:2px 10px;border-radius:10px;">${media} min</span>
+          </td>
+          <td style="padding:8px 10px;text-align:center;color:#b91c1c;font-weight:700;">${v.pior} min</td>
+          <td style="padding:8px 10px;text-align:center;font-family:monospace;font-size:11px;color:var(--text3);">${v.piorOS}</td>
+        </tr>`;
+      }).join('');
+
+    const geral = Math.round(ords.reduce((s,o)=>s+window.hgEsperaMin(o),0)/ords.length);
+    const acima = ords.filter(o=>window.hgEsperaMin(o)>20).length;
+
+    return `
+      <div class="rep-card" style="grid-column:1/-1;margin-top:16px;">
+        <div class="rep-card-title">⏱ Chegada → Início do trabalho</div>
+        <div style="font-size:12px;color:var(--text3);margin:-4px 0 12px;line-height:1.5;">
+          Tempo entre a chegada ao cliente (detectada por GPS) e o arranque do relógio.
+          Só entram as OS em que houve detecção de chegada — ${ords.length} no período.
+        </div>
+        <div class="stats" style="margin-bottom:14px;">
+          <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div>
+            <div class="sc-label">Espera média</div><div class="sc-val" style="color:var(--accent);">${geral} min</div></div>
+          <div class="sc"><div class="sc-glow" style="background:var(--red)"></div>
+            <div class="sc-label">Acima de 20 min</div><div class="sc-val" style="color:var(--red);">${acima}</div></div>
+          <div class="sc"><div class="sc-glow" style="background:var(--purple)"></div>
+            <div class="sc-label">OS medidas</div><div class="sc-val" style="color:var(--purple);">${ords.length}</div></div>
+        </div>
+        <div style="overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="background:var(--s2);">
+              <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--text3);text-transform:uppercase;">Técnico</th>
+              <th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;">OS</th>
+              <th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;">Média</th>
+              <th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;">Pior</th>
+              <th style="padding:8px 10px;text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;">OS pior</th>
+            </tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  const _repTec = window.repRenderTecnico;
+  if(typeof _repTec === 'function'){
+    window.repRenderTecnico = function(){
+      const base = _repTec.apply(this, arguments);
+      try{ return base + quadroEspera(); }catch(e){ console.warn('[v15.32]', e); return base; }
+    };
+  }
+
+  log('selo chegada→início na lista de OS e quadro na aba Técnico');
 })();
 
 </script>

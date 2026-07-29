@@ -32712,83 +32712,96 @@ window.cliHistoricoImprimir = function(cliId){
 </script>
 
 
-<!-- HidroGest - Mapa de Deslocacao (modulo v2) -->
+<!-- HidroGest - Mapa de Deslocacao (modulo v3) -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   HidroGest — MAPA DE DESLOCAÇÃO por funcionário  (v2)
-   Colar dentro de <script> ... <\/script> no fim do index.html.
+   HidroGest — MAPA DE DESLOCACAO por funcionario  (v3 - corrigido)
+   Colar no fim do index.html dentro de um bloco de script.
 
-   Novidades v2:
-   • Km contados A PARTIR DE CASA: casa → 1.ª OS → ... → última OS → casa.
-   • Ponto de casa por CÓDIGO POSTAL (definido por funcionário, no painel).
-   • OS sem lat/lng passam a ser geocodificadas pelo código postal, reutilizando
-     a tua função existente cpParaCoordenadas(cp).
-   Mantém: logo Localiza, período, data/assinatura, × 0,40 €/km, total,
-   uma folha por funcionário, lançável pelo admin.
+   Correcao v3 (o v2 dava tudo a zero):
+   • As OS nao guardam lat/lng nem morada — guardam clienteId. As coordenadas
+     vem do CLIENTE: cliente.srvCp || cliente.cp -> cpParaCoordenadas(cp).
+   • A "casa" do funcionario vem da ficha: tecGetCpActivo(u).cp (cp ou cpTemp).
+   • Nome do cliente = o.clienteNomeSnapshot; hora = o.horaIni.
+   Mantem: logo, periodo, data/assinatura, casa->visitas->casa, x0,40, total,
+   uma folha por funcionario, lancavel pelo admin.
    ═══════════════════════════════════════════════════════════════════════ */
 (function () {
   const LOGO       = 'https://raw.githubusercontent.com/localizafugas-afk/Hidrogest/main/icon-512.png';
-  const VALOR_KM   = 0.40;   // €/km
-  const FATOR      = 1.3;    // linha reta → estrada (aprox.); 1.0 = linha reta pura
-  const ROUND_TRIP = true;   // incluir o regresso a casa no fim do dia
+  const VALOR_KM   = 0.40;
+  const FATOR      = 1.3;     // linha reta -> estrada (aprox.); 1.0 = linha reta
+  const ROUND_TRIP = true;    // incluir regresso a casa
   const EMPRESA    = 'Localiza Fugas · Valentim Fialho – Unipessoal, Lda.';
 
-  // Reutiliza a geocodificação por CP já existente no HidroGest
-  const geoCP = (typeof window.cpParaCoordenadas === 'function')
-    ? window.cpParaCoordenadas
-    : (typeof cpParaCoordenadas === 'function' ? cpParaCoordenadas : null);
+  const geoCP     = (typeof window.cpParaCoordenadas === 'function') ? window.cpParaCoordenadas
+                    : (typeof cpParaCoordenadas === 'function' ? cpParaCoordenadas : null);
+  const geoMorada = (typeof window.rotGeocode === 'function') ? window.rotGeocode
+                    : (typeof rotGeocode === 'function' ? rotGeocode : null);
 
-  // ---- Utilidades ----
+  // ---- utilidades ----
   const esc = s => String(s == null ? '' : s)
     .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const round1 = n => Math.round(n * 10) / 10;
   const round2 = n => Math.round(n * 100) / 100;
-  const fmtData = d => {
-    if (!d) return '';
-    const p = String(d).slice(0, 10).split('-');
-    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(d);
-  };
+  const fmtData = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(d); };
   function haversineKm(a, b) {
     if (!a || !b || a.lat == null || b.lat == null) return 0;
     const R = 6371, rad = x => x * Math.PI / 180;
     const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-    const s = Math.sin(dLat / 2) ** 2 +
-      Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(s));
   }
-  const nomeFunc  = id => { const u = (window.DB.users || []).find(x => x.id === id); return u ? u.name : id; };
-  const clienteDe = o  => o.clienteNome || o.nomeCliente || o.cliente || '';
-  const cpDeOS    = o  => o.codigoPostal || o.cp || o.codPostal || o.postal ||
-                          ((o.morada || '').match(/\d{4}-\d{3}/) || [])[0] || '';
+  const userById   = id => (window.DB.users || []).find(x => x.id === id) || null;
+  const clienteById = id => (window.DB.clientes || []).find(c => c.id === id) || null;
+  const nomeFunc   = id => { const u = userById(id); return u ? u.name : id; };
 
-  // ---- Coordenadas de uma OS (lat/lng, senão pelo código postal) ----
+  const clienteDe = o => o.clienteNomeSnapshot || o.clienteNome || o.nomeCliente ||
+                         ((clienteById(o.clienteId) || {}).nome) || '';
+  const moradaDe = o => {
+    const cli = clienteById(o.clienteId); if (!cli) return o.morada || '';
+    const srv  = [cli.srvRua, cli.srvCp, cli.srvLocalidade].filter(Boolean).join(', ');
+    const prin = [cli.rua, cli.cp, cli.localidade].filter(Boolean).join(', ');
+    return (cli.outraMorada && srv) ? srv : (prin || srv || cli.morada || '');
+  };
+  const cpDaOS = o => { const cli = clienteById(o.clienteId); if (cli) { const cp = cli.srvCp || cli.cp; if (cp) return cp; } return o.srvCp || o.cp || o.codigoPostal || ''; };
+
+  // ---- coordenadas ----
   async function coordsOS(o) {
     if (o.lat != null && o.lng != null) return { lat: +o.lat, lng: +o.lng };
-    const cp = cpDeOS(o);
+    const cp = cpDaOS(o);
     if (cp && geoCP) { try { const c = await geoCP(cp); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
+    const m = moradaDe(o);
+    if (m && geoMorada) { try { const c = await geoMorada(m); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
     return null;
   }
-  // ---- Coordenadas de casa (pelo código postal do funcionário) ----
+  function casaCpDe(u) {
+    if (u.casaCP) return u.casaCP;                       // override opcional
+    if (typeof tecGetCpActivo === 'function') { try { const l = tecGetCpActivo(u); if (l && l.cp) return l.cp; } catch (e) {} }
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (u.cpTemp && u.cpTempAte && u.cpTempAte >= hoje) return u.cpTemp;
+    return u.cp || '';
+  }
   async function coordsCasa(uid) {
-    const u = (window.DB.users || []).find(x => x.id === uid);
-    const cp = u && u.casaCP;
+    const u = userById(uid); if (!u) return null;
+    const cp = casaCpDe(u);
     if (cp && geoCP) { try { const c = await geoCP(cp); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
     return null;
   }
 
-  // ---- OS de um funcionário no período ----
+  // ---- OS de um funcionario no periodo ----
   function osDoFuncionario(uid, ini, fim) {
     return (window.DB.ordens || []).filter(o => {
       const d = (o.data || '').slice(0, 10);
       if (!d || d < ini || d > fim) return false;
+      if (o.estado === 'cancelada') return false;
       const tecs = o.tecnicos || (o.tecnico ? [o.tecnico] : []);
       return tecs.includes(uid);
     });
   }
 
-  // ---- Linhas por dia (casa → OS... → casa) ----
+  // ---- linhas por dia (casa -> OS... -> casa) ----
   async function linhasFuncionario(uid, ini, fim) {
-    const os   = osDoFuncionario(uid, ini, fim);
+    const os = osDoFuncionario(uid, ini, fim);
     const casa = await coordsCasa(uid);
     const semCasa = !casa;
 
@@ -32798,20 +32811,19 @@ window.cliHistoricoImprimir = function(cliId){
     const linhas = []; let totKm = 0, totEur = 0, semCoord = 0;
     for (const data of Object.keys(porData).sort()) {
       const lista = porData[data].sort((a, b) =>
-        String(a.hora || a.horaAgendada || '').localeCompare(String(b.hora || b.horaAgendada || '')));
-      let ant = casa;                       // parte de casa (ou null → 1.ª visita = 0)
+        String(a.horaIni || a.hora || '').localeCompare(String(b.horaIni || b.hora || '')));
+      let ant = casa;
       for (let i = 0; i < lista.length; i++) {
         const o = lista[i];
         const p = await coordsOS(o);
         let km = 0;
-        if (p) { if (ant) km = haversineKm(ant, p) * FATOR; ant = p; }
-        else   { semCoord++; }
+        if (p) { if (ant) km = haversineKm(ant, p) * FATOR; ant = p; } else { semCoord++; }
         km = round1(km);
         const eur = round2(km * VALOR_KM);
-        linhas.push({ data, cliente: clienteDe(o), morada: o.morada || '', km, eur });
+        linhas.push({ data, cliente: clienteDe(o), morada: moradaDe(o), km, eur });
         totKm += km; totEur += eur;
       }
-      if (casa && ant && ROUND_TRIP) {       // regresso a casa
+      if (casa && ant && ROUND_TRIP) {
         const km = round1(haversineKm(ant, casa) * FATOR);
         const eur = round2(km * VALOR_KM);
         linhas.push({ data, cliente: '🏠 Casa (regresso)', morada: '', km, eur });
@@ -32825,51 +32837,35 @@ window.cliHistoricoImprimir = function(cliId){
   async function folhaHTML(uid, ini, fim) {
     const { linhas, totKm, totEur, semCoord, semCasa } = await linhasFuncionario(uid, ini, fim);
     const rows = linhas.length ? linhas.map(l => `
-      <tr>
-        <td>${esc(fmtData(l.data))}</td>
-        <td>${esc(l.cliente)}</td>
-        <td>${esc(l.morada)}</td>
-        <td class="num">${l.km.toFixed(1)}</td>
-        <td class="num">${l.eur.toFixed(2)} €</td>
-      </tr>`).join('')
+      <tr><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.morada)}</td>
+      <td class="num">${l.km.toFixed(1)}</td><td class="num">${l.eur.toFixed(2)} €</td></tr>`).join('')
       : `<tr><td colspan="5" style="text-align:center;color:#888;padding:18px;">Sem deslocações no período.</td></tr>`;
-
-    const avisoCasa  = semCasa  ? `<div class="aviso">⚠ Sem código postal de casa definido — km contados a partir da 1.ª visita.</div>` : '';
-    const avisoCoord = semCoord ? `<div class="aviso">⚠ ${semCoord} paragem(ns) sem coordenadas nem código postal — contam 0 km.</div>` : '';
-
+    const avisoCasa  = semCasa  ? `<div class="aviso">⚠ Funcionário sem código postal na ficha — km contados a partir da 1.ª visita.</div>` : '';
+    const avisoCoord = semCoord ? `<div class="aviso">⚠ ${semCoord} visita(s) sem código postal do cliente — contam 0 km.</div>` : '';
     return `
     <section class="folha">
       <header class="cab">
         <img src="${LOGO}" alt="Localiza Fugas" class="logo" onerror="this.style.display='none'">
         <div class="tit"><h1>Mapa de Deslocação</h1><div class="sub">${esc(EMPRESA)}</div></div>
       </header>
-      <div class="meta">
-        <div><b>Funcionário:</b> ${esc(nomeFunc(uid))}</div>
-        <div><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}</div>
-      </div>
+      <div class="meta"><div><b>Funcionário:</b> ${esc(nomeFunc(uid))}</div><div><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}</div></div>
       ${avisoCasa}${avisoCoord}
       <table class="tb">
         <thead><tr><th>Data</th><th>Cliente</th><th>Morada</th><th>Km rodados</th><th>Deslocação (€)</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="3">TOTAL</td><td class="num">${totKm.toFixed(1)}</td><td class="num">${totEur.toFixed(2)} €</td></tr></tfoot>
       </table>
-      <div class="ass">
-        <div class="lin"><span>Data</span></div>
-        <div class="lin"><span>Assinatura do funcionário</span></div>
-        <div class="lin"><span>Assinatura da empresa</span></div>
-      </div>
-      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto: casa → visitas → casa. Distância estimada (linha reta × ${FATOR}); OS sem coordenadas usam o código postal.</div>
+      <div class="ass"><div class="lin"><span>Data</span></div><div class="lin"><span>Assinatura do funcionário</span></div><div class="lin"><span>Assinatura da empresa</span></div></div>
+      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto: casa → visitas → casa. Distância estimada por código postal (linha reta × ${FATOR}).</div>
     </section>`;
   }
 
-  // ---- Gerar e imprimir ----
   async function gerar() {
     const uid = document.getElementById('desl-func').value;
     const ini = document.getElementById('desl-ini').value;
     const fim = document.getElementById('desl-fim').value;
     if (!ini || !fim) { alert('Escolhe o período (data início e data fim).'); return; }
     if (fim < ini)    { alert('A data fim não pode ser anterior à data início.'); return; }
-
     let alvos;
     if (uid === '__todos__') {
       const ids = new Set();
@@ -32880,83 +32876,53 @@ window.cliHistoricoImprimir = function(cliId){
     if (!alvos.length) { alert('Não há funcionários para gerar.'); return; }
 
     const folhas = [];
-    for (const id of alvos) folhas.push(await folhaHTML(id, ini, fim));   // sequencial (usa cache do CP)
+    for (const id of alvos) folhas.push(await folhaHTML(id, ini, fim));
 
-    const css = `
-      *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}
-      body{margin:0;color:#1e293b;}
-      .folha{padding:26px 30px;page-break-after:always;}
-      .folha:last-child{page-break-after:auto;}
+    const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;}
+      .folha{padding:26px 30px;page-break-after:always;}.folha:last-child{page-break-after:auto;}
       .cab{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1e3a8a;padding-bottom:12px;}
-      .logo{height:56px;width:auto;}
-      .tit h1{margin:0;font-size:22px;color:#1e3a8a;}
-      .sub{font-size:12px;color:#64748b;}
+      .logo{height:56px;width:auto;}.tit h1{margin:0;font-size:22px;color:#1e3a8a;}.sub{font-size:12px;color:#64748b;}
       .meta{display:flex;justify-content:space-between;gap:20px;margin:14px 0 6px;font-size:13px;}
       .aviso{font-size:11px;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;padding:5px 9px;margin:6px 0;}
       table.tb{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;}
       table.tb th{background:#1e3a8a;color:#fff;padding:7px 8px;text-align:left;}
-      table.tb td{border:1px solid #cbd5e1;padding:6px 8px;}
-      table.tb tbody tr:nth-child(even){background:#f1f5f9;}
-      table.tb .num{text-align:right;white-space:nowrap;}
-      table.tb tfoot td{background:#dbe4f3;font-weight:bold;}
-      .ass{display:flex;gap:24px;margin-top:46px;}
-      .ass .lin{flex:1;border-top:1px solid #475569;padding-top:5px;text-align:center;font-size:11px;color:#475569;}
-      .nota{margin-top:16px;font-size:10px;color:#94a3b8;}
-      @media print{.folha{padding:14mm;}}
-    `;
+      table.tb td{border:1px solid #cbd5e1;padding:6px 8px;}table.tb tbody tr:nth-child(even){background:#f1f5f9;}
+      table.tb .num{text-align:right;white-space:nowrap;}table.tb tfoot td{background:#dbe4f3;font-weight:bold;}
+      .ass{display:flex;gap:24px;margin-top:46px;}.ass .lin{flex:1;border-top:1px solid #475569;padding-top:5px;text-align:center;font-size:11px;color:#475569;}
+      .nota{margin-top:16px;font-size:10px;color:#94a3b8;}@media print{.folha{padding:14mm;}}`;
     const w = window.open('', '_blank');
     if (!w) { alert('Permite pop-ups para abrir o relatório.'); return; }
-    w.document.write(
-      `<!doctype html><html><head><meta charset="utf-8"><title>Mapa de Deslocação</title>` +
-      `<style>${css}</style></head><body>${folhas.join('')}` +
-      `<scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},350);}</scr` + `ipt>` +
-      `</body></html>`
-    );
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Mapa de Deslocação</title><style>${css}</style></head><body>${folhas.join('')}<scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},350);}</scr` + `ipt></body></html>`);
     w.document.close();
     const ov = document.getElementById('desl-ov'); if (ov) ov.remove();
   }
-
   window._deslGerar = async function () {
     const btn = document.getElementById('desl-gerar-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'A gerar…'; }
-    try { await gerar(); }
-    catch (e) { alert('Erro ao gerar: ' + (e && e.message || e)); }
+    try { await gerar(); } catch (e) { alert('Erro ao gerar: ' + (e && e.message || e)); }
     finally { if (btn) { btn.disabled = false; btn.textContent = 'Gerar mapa'; } }
   };
 
-  // ---- Casa (código postal) por funcionário ----
-  window._deslToggleCasa = function () {
-    const uid  = document.getElementById('desl-func').value;
-    const wrap = document.getElementById('desl-casa-wrap');
-    if (!wrap) return;
-    if (uid === '__todos__') { wrap.style.display = 'none'; return; }
-    wrap.style.display = 'block';
-    const u = (window.DB.users || []).find(x => x.id === uid);
-    document.getElementById('desl-casa').value = (u && u.casaCP) || '';
-  };
-  window._deslGuardarCasa = async function () {
+  // ---- Painel ----
+  window._deslInfoCasa = function () {
     const uid = document.getElementById('desl-func').value;
-    if (uid === '__todos__') return;
-    const cp = document.getElementById('desl-casa').value.trim();
-    const b  = document.getElementById('desl-casa-btn');
-    try {
-      await window.fsSetMerge('users', uid, { casaCP: cp });
-      const u = (window.DB.users || []).find(x => x.id === uid); if (u) u.casaCP = cp;
-      if (b) { b.textContent = '✔ Guardado'; setTimeout(() => b.textContent = 'Guardar casa', 1500); }
-    } catch (e) { alert('Não deu para guardar: ' + (e && e.message || e)); }
+    const box = document.getElementById('desl-casa-info');
+    if (!box) return;
+    if (uid === '__todos__') { box.textContent = 'Partida/regresso: código postal da ficha de cada funcionário (cp ou estadia temporária).'; return; }
+    const u = userById(uid);
+    const cp = u ? casaCpDe(u) : '';
+    box.innerHTML = cp
+      ? `Partida/regresso a partir do CP <b>${esc(cp)}</b> (da ficha do funcionário).`
+      : `⚠ Este funcionário não tem código postal na ficha — os km contam a partir da 1.ª visita. Define o CP na ficha do utilizador.`;
   };
 
-  // ---- Painel ----
   window.deslocAbrir = function () {
     if (typeof closeSidebar === 'function') { try { closeSidebar(); } catch (e) {} }
     const antigo = document.getElementById('desl-ov'); if (antigo) antigo.remove();
-
-    const users = (window.DB.users || []).filter(u => u.active !== false)
-      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const users = (window.DB.users || []).filter(u => u.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const opts = users.map(u => `<option value="${esc(u.id)}">${esc(u.name)} (${esc(u.role || '')})</option>`).join('');
     const hoje = new Date().toISOString().slice(0, 10);
     const prim = hoje.slice(0, 8) + '01';
-
     const ov = document.createElement('div');
     ov.id = 'desl-ov';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:99999;';
@@ -32965,18 +32931,10 @@ window.cliHistoricoImprimir = function(cliId){
         <h2 style="margin:0 0 4px;font-size:18px;color:#1e3a8a;">🚗 Mapa de Deslocação</h2>
         <p style="margin:0 0 16px;font-size:12px;color:#64748b;">Escolhe o funcionário e o período a analisar.</p>
         <label style="font-size:12px;font-weight:bold;">Funcionário</label>
-        <select id="desl-func" onchange="window._deslToggleCasa()" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid #cbd5e1;border-radius:8px;">
-          <option value="__todos__">— Todos os funcionários —</option>
-          ${opts}
+        <select id="desl-func" onchange="window._deslInfoCasa()" style="width:100%;padding:9px;margin:4px 0 6px;border:1px solid #cbd5e1;border-radius:8px;">
+          <option value="__todos__">— Todos os funcionários —</option>${opts}
         </select>
-        <div id="desl-casa-wrap" style="display:none;margin-bottom:12px;">
-          <label style="font-size:12px;font-weight:bold;">Código postal de casa (partida/regresso)</label>
-          <div style="display:flex;gap:8px;margin-top:4px;">
-            <input id="desl-casa" placeholder="ex.: 4700-000" style="flex:1;padding:9px;border:1px solid #cbd5e1;border-radius:8px;">
-            <button id="desl-casa-btn" onclick="window._deslGuardarCasa()" style="padding:9px 12px;border:1px solid #1e3a8a;background:#eef2ff;color:#1e3a8a;border-radius:8px;cursor:pointer;white-space:nowrap;">Guardar casa</button>
-          </div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Guardado no funcionário. Em "Todos", cada um usa o seu.</div>
-        </div>
+        <div id="desl-casa-info" style="font-size:11px;color:#64748b;background:#f1f5f9;border-radius:8px;padding:8px 10px;margin-bottom:12px;"></div>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;"><label style="font-size:12px;font-weight:bold;">Data início</label>
             <input type="date" id="desl-ini" value="${prim}" style="width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:8px;"></div>
@@ -32990,13 +32948,11 @@ window.cliHistoricoImprimir = function(cliId){
       </div>`;
     document.body.appendChild(ov);
     ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
-    window._deslToggleCasa();
+    window._deslInfoCasa();
   };
 
-  // ---- Item no menu ----
   function injetarNav() {
-    const nav = document.getElementById('main-nav');
-    if (!nav) return;
+    const nav = document.getElementById('main-nav'); if (!nav) return;
     const r = window.currentUser && window.currentUser.role;
     if (!['admin', 'supervisor', 'gerente'].includes(r)) return;
     if (document.getElementById('ni-desloc')) return;

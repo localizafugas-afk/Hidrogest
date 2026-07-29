@@ -32972,35 +32972,39 @@ window.cliHistoricoImprimir = function(cliId){
 
 </script>
 
-<!-- HidroGest - Recebimentos por tecnico -->
+<!-- HidroGest - Recebimentos por tecnico (v2) -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   HidroGest — RECEBIMENTOS POR TECNICO (sem IVA)
+   HidroGest — RECEBIMENTOS POR TECNICO (v2 - por OS e por modalidade)
    Colar no fim do index.html dentro de um bloco de script.
 
-   • Menu "💰 Recebimentos por técnico" (admin / supervisor / gerente)
-   • Escolhe o período (e, opcional, um técnico)
-   • Relatório imprimível com DUAS secções, sempre SEM IVA:
-       - RECEBIDOS (recibos pagos)  → soma de recibo.net por técnico (techId)
-       - A RECEBER (OS concluídas não pagas) → soma de OS.net por técnico
-   • Totais por técnico e total geral. Não altera os teus relatórios atuais.
+   Fonte de "recebido" = OS dada como paga (o.pago===true) ou com recibo pago
+   — apanha também transferência/entidade confirmadas na OS sem recibo.
+   Relatório imprimível, sempre SEM IVA, com:
+     • Recebidos — resumo por técnico (Imediato vs Transf./Ent.)
+     • Recebidos — por modalidade de pagamento
+     • Recebidos — detalhe por OS (com modalidade)
+     • A receber — por técnico
+   Não altera os teus relatórios atuais.
    ═══════════════════════════════════════════════════════════════════════ */
 (function () {
   const LOGO    = 'https://raw.githubusercontent.com/localizafugas-afk/Hidrogest/main/icon-512.png';
   const EMPRESA = 'Localiza Fugas · Valentim Fialho – Unipessoal, Lda.';
+  const PAYS = { mb: 'MB', mbway: 'MBWay', dinheiro: 'Numerário', numerario: 'Numerário', cheque: 'Cheque', transferencia: 'Transferência', entidade: 'Entidade' };
+  const IMED = ['mb', 'mbway', 'dinheiro', 'numerario', 'cheque'];
+  const payLabel = m => PAYS[m] || (m ? m : '— sem método —');
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = v => parseFloat(String(v == null ? 0 : v).replace(',', '.')) || 0;
   const eur = n => n.toFixed(2).replace('.', ',') + ' €';
   const fmtData = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(d); };
-  const nomeTec = (id, fallback) => { const u = (window.DB.users || []).find(x => x.id === id); return (u && u.name) || fallback || id || '—'; };
+  const nomeTec = (id, fb) => { const u = (window.DB.users || []).find(x => x.id === id); return (u && u.name) || fb || (id === '__sem__' ? '— sem técnico —' : id) || '—'; };
+  const clienteById = id => (window.DB.clientes || []).find(c => c.id === id) || null;
 
-  // ---- RECEBIDOS (OS dadas como pagas) por técnico ----
-  //  "Pago" = o.pago===true  OU  existe recibo pago para a OS.
-  //  Assim apanha também pagamentos confirmados sem recibo gerado.
-  function recebidosPorTecnico(ini, fim, tecFiltro) {
+  // ---- Lista de recebidos (uma entrada por OS paga) ----
+  function recebidosLista(ini, fim, tecFiltro) {
     const ordens = (typeof getVisibleOrdens === 'function') ? (getVisibleOrdens() || []) : (window.DB.ordens || []);
-    const map = {};
+    const out = [];
     ordens.forEach(o => {
       if (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o)) return;
       const recibo = (window.DB.recibos || []).find(r => r.osId === o.id);
@@ -33013,21 +33017,22 @@ window.cliHistoricoImprimir = function(cliId){
       const tid = (o.tecnicos || [])[0] || (recibo && recibo.techId) || '__sem__';
       if (tecFiltro && tid !== tecFiltro) return;
       let net = num(o.net) || num(recibo && recibo.net);
-      let iva = num(o.ivaVal) || num(recibo && recibo.iva);
       let total = num(o.total) || num(recibo && recibo.total);
       if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
-      if (!iva && total && net) iva = total - net;
-      const met = (o.pagamento && o.pagamento.metodo) || (recibo && recibo.pay) || '';
-      const imediato = ['mb', 'mbway', 'dinheiro', 'numerario', 'cheque'].includes(met);
-      (map[tid] ??= { nome: nomeTec(tid, recibo && recibo.tech), net: 0, imed: 0, dif: 0, iva: 0, total: 0, count: 0 });
-      const m = map[tid];
-      m.net += net; m.iva += iva; m.total += total; m.count++;
-      if (imediato) m.imed += net; else m.dif += net;
+      if (!total && net) total = net * 1.23;
+      const met = pag.metodo || (recibo && recibo.pay) || '';
+      const cli = clienteById(o.clienteId);
+      out.push({
+        osId: o.id, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || o.clienteNome || '—',
+        tecId: tid, tecnico: nomeTec(tid, recibo && recibo.tech), net, total,
+        met, metLabel: payLabel(met), imediato: IMED.includes(met)
+      });
     });
-    return map;
+    out.sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.osId).localeCompare(String(b.osId)));
+    return out;
   }
 
-  // ---- A RECEBER (OS concluídas não pagas) por técnico ----
+  // ---- A receber (OS concluídas não pagas) por técnico ----
   function aReceberPorTecnico(ini, fim, tecFiltro) {
     const ordens = (typeof getVisibleOrdens === 'function') ? (getVisibleOrdens() || []) : (window.DB.ordens || []);
     const map = {};
@@ -33042,44 +33047,64 @@ window.cliHistoricoImprimir = function(cliId){
       if (fim && d > fim) return;
       const tid = (o.tecnicos || [])[0] || '__sem__';
       if (tecFiltro && tid !== tecFiltro) return;
-      // net sem IVA: preferir o.net; se faltar, derivar do total e taxa
-      let net = num(o.net);
-      if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
+      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
       (map[tid] ??= { nome: nomeTec(tid, ''), net: 0, count: 0 });
       map[tid].net += net; map[tid].count++;
     });
     return map;
   }
 
-  function tabelaRecebidos(map) {
-    const ids = Object.keys(map).sort((a, b) => String(map[a].nome).localeCompare(String(map[b].nome)));
-    if (!ids.length) return `<div class="vazio">Sem recebimentos pagos no período.</div>`;
-    let tNet = 0, tImed = 0, tDif = 0, tTot = 0, tN = 0;
-    const rows = ids.map(id => {
-      const m = map[id]; tNet += m.net; tImed += m.imed; tDif += m.dif; tTot += m.total; tN += m.count;
-      return `<tr><td>${esc(m.nome)}</td><td class="c">${m.count}</td>
-        <td class="num strong">${eur(m.net)}</td><td class="num">${eur(m.imed)}</td><td class="num">${eur(m.dif)}</td><td class="num">${eur(m.total)}</td></tr>`;
-    }).join('');
-    return `<table class="tb">
-      <thead><tr><th>Técnico</th><th class="c">Nº</th><th class="num">Recebido s/ IVA</th><th class="num">Imediato s/ IVA</th><th class="num">Transf./Ent. s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tImed)}</td><td class="num">${eur(tDif)}</td><td class="num">${eur(tTot)}</td></tr></tfoot>
-    </table>`;
+  // ---- Resumos a partir da lista ----
+  function resumoTecnicos(lista) {
+    const map = {};
+    lista.forEach(l => {
+      (map[l.tecId] ??= { nome: l.tecnico, net: 0, imed: 0, dif: 0, total: 0, count: 0 });
+      const m = map[l.tecId]; m.net += l.net; m.total += l.total; m.count++;
+      if (l.imediato) m.imed += l.net; else m.dif += l.net;
+    });
+    return map;
+  }
+  function resumoModalidades(lista) {
+    const map = {};
+    lista.forEach(l => { (map[l.metLabel] ??= { net: 0, total: 0, count: 0 }); map[l.metLabel].net += l.net; map[l.metLabel].total += l.total; map[l.metLabel].count++; });
+    return map;
   }
 
+  // ---- Tabelas ----
+  function tabelaResumoTec(map) {
+    const ids = Object.keys(map).sort((a, b) => String(map[a].nome).localeCompare(String(map[b].nome)));
+    if (!ids.length) return `<div class="vazio">Sem recebimentos no período.</div>`;
+    let tNet = 0, tI = 0, tD = 0, tT = 0, tN = 0;
+    const rows = ids.map(id => { const m = map[id]; tNet += m.net; tI += m.imed; tD += m.dif; tT += m.total; tN += m.count;
+      return `<tr><td>${esc(m.nome)}</td><td class="c">${m.count}</td><td class="num strong">${eur(m.net)}</td><td class="num">${eur(m.imed)}</td><td class="num">${eur(m.dif)}</td><td class="num">${eur(m.total)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Técnico</th><th class="c">Nº</th><th class="num">Recebido s/ IVA</th><th class="num">Imediato s/ IVA</th><th class="num">Transf./Ent. s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tI)}</td><td class="num">${eur(tD)}</td><td class="num">${eur(tT)}</td></tr></tfoot></table>`;
+  }
+  function tabelaModalidades(map) {
+    const keys = Object.keys(map).sort((a, b) => map[b].net - map[a].net);
+    if (!keys.length) return `<div class="vazio">Sem recebimentos no período.</div>`;
+    let tNet = 0, tT = 0, tN = 0;
+    const rows = keys.map(k => { const m = map[k]; tNet += m.net; tT += m.total; tN += m.count;
+      return `<tr><td>${esc(k)}</td><td class="c">${m.count}</td><td class="num strong">${eur(m.net)}</td><td class="num">${eur(m.total)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Modalidade</th><th class="c">Nº</th><th class="num">Recebido s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tT)}</td></tr></tfoot></table>`;
+  }
+  function tabelaDetalheOS(lista) {
+    if (!lista.length) return `<div class="vazio">Sem recebimentos no período.</div>`;
+    let tNet = 0, tT = 0;
+    const rows = lista.map(l => { tNet += l.net; tT += l.total;
+      return `<tr><td class="mono">${esc(l.osId)}</td><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.tecnico)}</td><td class="num strong">${eur(l.net)}</td><td class="num">${eur(l.total)}</td><td>${esc(l.metLabel)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Técnico</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th><th>Modalidade</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td colspan="4">TOTAL</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tT)}</td><td></td></tr></tfoot></table>`;
+  }
   function tabelaAReceber(map) {
     const ids = Object.keys(map).sort((a, b) => String(map[a].nome).localeCompare(String(map[b].nome)));
     if (!ids.length) return `<div class="vazio">Nada a receber no período.</div>`;
     let tNet = 0, tN = 0;
-    const rows = ids.map(id => {
-      const m = map[id]; tNet += m.net; tN += m.count;
-      return `<tr><td>${esc(m.nome)}</td><td class="c">${m.count}</td><td class="num strong">${eur(m.net)}</td></tr>`;
-    }).join('');
-    return `<table class="tb">
-      <thead><tr><th>Técnico</th><th class="c">Nº OS</th><th class="num">A receber s/ IVA</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td></tr></tfoot>
-    </table>`;
+    const rows = ids.map(id => { const m = map[id]; tNet += m.net; tN += m.count;
+      return `<tr><td>${esc(m.nome)}</td><td class="c">${m.count}</td><td class="num strong">${eur(m.net)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Técnico</th><th class="c">Nº OS</th><th class="num">A receber s/ IVA</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td></tr></tfoot></table>`;
   }
 
   function gerar() {
@@ -33089,31 +33114,31 @@ window.cliHistoricoImprimir = function(cliId){
     if (!ini || !fim) { alert('Escolhe o período (data início e data fim).'); return; }
     if (fim < ini)    { alert('A data fim não pode ser anterior à data início.'); return; }
 
-    const recebidos = tabelaRecebidos(recebidosPorTecnico(ini, fim, tec));
-    const areceber  = tabelaAReceber(aReceberPorTecnico(ini, fim, tec));
+    const lista = recebidosLista(ini, fim, tec);
+    const secTec = tabelaResumoTec(resumoTecnicos(lista));
+    const secMod = tabelaModalidades(resumoModalidades(lista));
+    const secOS  = tabelaDetalheOS(lista);
+    const secAR  = tabelaAReceber(aReceberPorTecnico(ini, fim, tec));
 
-    const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;padding:26px 30px;}
+    const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;padding:24px 26px;}
       .cab{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1e3a8a;padding-bottom:12px;}
-      .logo{height:56px;}.tit h1{margin:0;font-size:22px;color:#1e3a8a;}.sub{font-size:12px;color:#64748b;}
-      .meta{margin:12px 0 4px;font-size:13px;}
-      h2{font-size:15px;color:#1e3a8a;margin:22px 0 6px;}
-      table.tb{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px;}
-      table.tb th{background:#1e3a8a;color:#fff;padding:7px 8px;text-align:left;}
-      table.tb td{border:1px solid #cbd5e1;padding:6px 8px;}
-      table.tb tbody tr:nth-child(even){background:#f1f5f9;}
-      table.tb .num{text-align:right;white-space:nowrap;font-family:monospace;} .c{text-align:center;} .strong{font-weight:bold;}
-      table.tb tfoot td{background:#dbe4f3;font-weight:bold;}
-      .vazio{padding:14px;color:#64748b;font-size:12px;}
-      .nota{margin-top:18px;font-size:10px;color:#94a3b8;}
-      @media print{body{padding:14mm;}}`;
+      .logo{height:54px;}.tit h1{margin:0;font-size:21px;color:#1e3a8a;}.sub{font-size:12px;color:#64748b;}
+      .meta{margin:12px 0 4px;font-size:13px;}h2{font-size:14px;color:#1e3a8a;margin:20px 0 6px;}
+      table.tb{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:6px;}
+      table.tb th{background:#1e3a8a;color:#fff;padding:6px 7px;text-align:left;}
+      table.tb td{border:1px solid #cbd5e1;padding:5px 7px;}table.tb tbody tr:nth-child(even){background:#f1f5f9;}
+      table.tb .num{text-align:right;white-space:nowrap;font-family:monospace;}.c{text-align:center;}.strong{font-weight:bold;}.mono{font-family:monospace;}
+      table.tb tfoot td{background:#dbe4f3;font-weight:bold;}.vazio{padding:12px;color:#64748b;font-size:12px;}
+      .nota{margin-top:16px;font-size:10px;color:#94a3b8;}@media print{body{padding:12mm;}}`;
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Recebimentos por técnico</title><style>${css}</style></head><body>
-      <div class="cab"><img src="${LOGO}" class="logo" onerror="this.style.display='none'">
-        <div class="tit"><h1>Recebimentos por técnico</h1><div class="sub">${esc(EMPRESA)}</div></div></div>
+      <div class="cab"><img src="${LOGO}" class="logo" onerror="this.style.display='none'"><div class="tit"><h1>Recebimentos</h1><div class="sub">${esc(EMPRESA)}</div></div></div>
       <div class="meta"><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}${tec ? ' · <b>Técnico:</b> ' + esc(nomeTec(tec, '')) : ''} · valores <b>sem IVA</b></div>
-      <h2>Recebidos (já pagos)</h2>${recebidos}
-      <h2>A receber (por cobrar)</h2>${areceber}
-      <div class="nota">Recebidos = OS dadas como pagas (valor líquido, sem IVA), pela data de pagamento — repartidas em Imediato (MB/MBWay/Numerário/Cheque) e Transf./Ent. (transferência/entidade). A receber = OS concluídas ainda não pagas (valor líquido). Cada trabalho é atribuído ao técnico principal da OS.</div>
+      <h2>Recebidos — resumo por técnico</h2>${secTec}
+      <h2>Recebidos — por modalidade de pagamento</h2>${secMod}
+      <h2>Recebidos — detalhe por OS</h2>${secOS}
+      <h2>A receber (por cobrar) — por técnico</h2>${secAR}
+      <div class="nota">Recebido = OS dada como paga (o.pago) ou com recibo pago, pela data de pagamento. Imediato = MB/MBWay/Numerário/Cheque; Transf./Ent. = transferência/entidade; "— sem método —" = OS paga sem método gravado. Cada trabalho vai para o técnico principal da OS.</div>
       <scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);}</scr` + `ipt></body></html>`;
 
     const w = window.open('', '_blank');
@@ -33136,11 +33161,9 @@ window.cliHistoricoImprimir = function(cliId){
     ov.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:22px;width:min(440px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif;">
         <h2 style="margin:0 0 4px;font-size:18px;color:#1e3a8a;">💰 Recebimentos por técnico</h2>
-        <p style="margin:0 0 16px;font-size:12px;color:#64748b;">Valores sem IVA — recebidos e a receber.</p>
+        <p style="margin:0 0 16px;font-size:12px;color:#64748b;">Por OS e por modalidade — valores sem IVA.</p>
         <label style="font-size:12px;font-weight:bold;">Técnico (opcional)</label>
-        <select id="rcb-tec" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid #cbd5e1;border-radius:8px;">
-          <option value="">— Todos os técnicos —</option>${opts}
-        </select>
+        <select id="rcb-tec" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid #cbd5e1;border-radius:8px;"><option value="">— Todos os técnicos —</option>${opts}</select>
         <div style="display:flex;gap:10px;">
           <div style="flex:1;"><label style="font-size:12px;font-weight:bold;">Data início</label>
             <input type="date" id="rcb-ini" value="${prim}" style="width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:8px;"></div>

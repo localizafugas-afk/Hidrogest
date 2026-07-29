@@ -32995,18 +32995,30 @@ window.cliHistoricoImprimir = function(cliId){
   const fmtData = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(d); };
   const nomeTec = (id, fallback) => { const u = (window.DB.users || []).find(x => x.id === id); return (u && u.name) || fallback || id || '—'; };
 
-  // ---- RECEBIDOS (recibos pagos) por técnico ----
+  // ---- RECEBIDOS (OS dadas como pagas) por técnico ----
+  //  "Pago" = o.pago===true  OU  existe recibo pago para a OS.
+  //  Assim apanha também pagamentos confirmados sem recibo gerado.
   function recebidosPorTecnico(ini, fim, tecFiltro) {
+    const ordens = (typeof getVisibleOrdens === 'function') ? (getVisibleOrdens() || []) : (window.DB.ordens || []);
     const map = {};
-    (window.DB.recibos || []).forEach(r => {
-      if (r.status !== 'paid') return;
-      const d = String(r.pagoEm || r.date || '').slice(0, 10);
+    ordens.forEach(o => {
+      if (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o)) return;
+      const recibo = (window.DB.recibos || []).find(r => r.osId === o.id);
+      const pago = (o.pago === true) || (recibo && recibo.status === 'paid');
+      if (!pago) return;
+      const pag = o.pagamento || {};
+      const d = String(o.pagoEm || (recibo && (recibo.pagoEm || recibo.date)) || pag.confirmadoEm || pag.data || o.concluidoEm || o.data || '').slice(0, 10);
       if (ini && d < ini) return;
       if (fim && d > fim) return;
-      const tid = r.techId || '__sem__';
+      const tid = (o.tecnicos || [])[0] || (recibo && recibo.techId) || '__sem__';
       if (tecFiltro && tid !== tecFiltro) return;
-      (map[tid] ??= { nome: nomeTec(tid, r.tech), net: 0, iva: 0, total: 0, count: 0 });
-      map[tid].net += num(r.net); map[tid].iva += num(r.iva); map[tid].total += num(r.total); map[tid].count++;
+      let net = num(o.net) || num(recibo && recibo.net);
+      let iva = num(o.ivaVal) || num(recibo && recibo.iva);
+      let total = num(o.total) || num(recibo && recibo.total);
+      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+      if (!iva && total && net) iva = total - net;
+      (map[tid] ??= { nome: nomeTec(tid, recibo && recibo.tech), net: 0, iva: 0, total: 0, count: 0 });
+      map[tid].net += net; map[tid].iva += iva; map[tid].total += total; map[tid].count++;
     });
     return map;
   }
@@ -33097,7 +33109,7 @@ window.cliHistoricoImprimir = function(cliId){
       <div class="meta"><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}${tec ? ' · <b>Técnico:</b> ' + esc(nomeTec(tec, '')) : ''} · valores <b>sem IVA</b></div>
       <h2>Recebidos (já pagos)</h2>${recebidos}
       <h2>A receber (por cobrar)</h2>${areceber}
-      <div class="nota">Recebidos = recibos pagos (valor líquido, sem IVA). A receber = OS concluídas ainda não pagas (valor líquido). Cada trabalho é atribuído ao técnico principal da OS.</div>
+      <div class="nota">Recebidos = OS dadas como pagas (valor líquido, sem IVA), pela data de pagamento. A receber = OS concluídas ainda não pagas (valor líquido). Cada trabalho é atribuído ao técnico principal da OS.</div>
       <scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);}</scr` + `ipt></body></html>`;
 
     const w = window.open('', '_blank');

@@ -33054,6 +33054,29 @@ window.cliHistoricoImprimir = function(cliId){
     return map;
   }
 
+  // ---- A receber: lista detalhada (uma linha por OS não paga) ----
+  function aReceberLista(ini, fim, tecFiltro) {
+    const ordens = (typeof getVisibleOrdens === 'function') ? (getVisibleOrdens() || []) : (window.DB.ordens || []);
+    const out = [];
+    ordens.forEach(o => {
+      if (!['concluida', 'os_fechada'].includes(o.estado)) return;
+      if (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o)) return;
+      const recibo = (window.DB.recibos || []).find(r => r.osId === o.id);
+      const pago = (o.pago === true) || (recibo && recibo.status === 'paid');
+      if (pago) return;
+      const d = String(o.concluidoEm || o.data || '').slice(0, 10);
+      if (ini && d < ini) return;
+      if (fim && d > fim) return;
+      const tid = (o.tecnicos || [])[0] || '__sem__';
+      if (tecFiltro && tid !== tecFiltro) return;
+      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
+      const cli = clienteById(o.clienteId);
+      out.push({ osId: o.id, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || o.clienteNome || '—', tecnico: nomeTec(tid, ''), net });
+    });
+    out.sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.osId).localeCompare(String(b.osId)));
+    return out;
+  }
+
   // ---- Resumos a partir da lista ----
   function resumoTecnicos(lista) {
     const map = {};
@@ -33106,6 +33129,13 @@ window.cliHistoricoImprimir = function(cliId){
     return `<table class="tb"><thead><tr><th>Técnico</th><th class="c">Nº OS</th><th class="num">A receber s/ IVA</th></tr></thead>
       <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td></tr></tfoot></table>`;
   }
+  function tabelaDetalheAReceber(lista) {
+    if (!lista.length) return `<div class="vazio">Nada a receber no período.</div>`;
+    let t = 0;
+    const rows = lista.map(l => { t += l.net; return `<tr><td class="mono">${esc(l.osId)}</td><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.tecnico)}</td><td class="num strong">${eur(l.net)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Técnico</th><th class="num">A receber s/ IVA</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td colspan="4">TOTAL</td><td class="num strong">${eur(t)}</td></tr></tfoot></table>`;
+  }
 
   function gerar() {
     const ini = document.getElementById('rcb-ini').value;
@@ -33119,6 +33149,7 @@ window.cliHistoricoImprimir = function(cliId){
     const secMod = tabelaModalidades(resumoModalidades(lista));
     const secOS  = tabelaDetalheOS(lista);
     const secAR  = tabelaAReceber(aReceberPorTecnico(ini, fim, tec));
+    const secARdet = tabelaDetalheAReceber(aReceberLista(ini, fim, tec));
 
     const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;padding:24px 26px;}
       .cab{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1e3a8a;padding-bottom:12px;}
@@ -33138,6 +33169,7 @@ window.cliHistoricoImprimir = function(cliId){
       <h2>Recebidos — por modalidade de pagamento</h2>${secMod}
       <h2>Recebidos — detalhe por OS</h2>${secOS}
       <h2>A receber (por cobrar) — por técnico</h2>${secAR}
+      <h2>A receber — detalhe por OS (quem não pagou)</h2>${secARdet}
       <div class="nota">Recebido = OS dada como paga (o.pago) ou com recibo pago, pela data de pagamento. Imediato = MB/MBWay/Numerário/Cheque; Transf./Ent. = transferência/entidade; "— sem método —" = OS paga sem método gravado. Cada trabalho vai para o técnico principal da OS.</div>
       <scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);}</scr` + `ipt></body></html>`;
 
@@ -33196,6 +33228,191 @@ window.cliHistoricoImprimir = function(cliId){
   }
   setInterval(injetarNav, 2000);
   setTimeout(injetarNav, 1300);
+})();
+
+</script>
+
+<!-- HidroGest - Recibos em falta -->
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   HidroGest — RECIBOS EM FALTA (backfill seguro)
+   Colar no fim do index.html dentro de um bloco de script.
+
+   Problema: OS marcadas como pagas (ex.: transferência/entidade) por vezes
+   não geram recibo → a ecrã nativa "Todos os Recebimentos" fica vazia.
+   Esta ferramenta encontra essas OS e cria o recibo (status pago) em falta,
+   com a DATA real de pagamento (para caírem no mês certo).
+
+   • Menu "🧾 Recibos em falta" (só ADMIN)
+   • Mostra primeiro a lista; SÓ cria depois de confirmares.
+   • Replica o mesmo formato de recibo que o "Dar baixa" já usa.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function () {
+  const PAYS = { mb: 'MB', mbway: 'MBWay', dinheiro: 'Numerário', numerario: 'Numerário', cheque: 'Cheque', transferencia: 'Transferência', entidade: 'Entidade' };
+  const payLabel = m => PAYS[m] || (m ? m : '— sem método —');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const num = v => parseFloat(String(v == null ? 0 : v).replace(',', '.')) || 0;
+  const eur = n => n.toFixed(2).replace('.', ',') + ' €';
+  const iso = () => new Date().toISOString().slice(0, 10);
+  const fmtData = d => { if (!d) return ''; const p = String(d).slice(0, 10).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(d); };
+  const nomeTec = (o) => (o.tecnicos || []).map(t => (window.DB.users || []).find(u => u.id === t)?.name || '').filter(Boolean).join(', ') || '—';
+  const cliById = id => (window.DB.clientes || []).find(c => c.id === id) || null;
+  const dataPagOS = o => { const p = o.pagamento || {}; return String(o.pagoEm || p.confirmadoEm || p.data || o.concluidoEm || o.data || '').slice(0, 10); };
+
+  // ---- Encontrar OS pagas sem recibo pago ----
+  function analisar(ini, fim) {
+    const faltam = [], confirmadosPorReceber = [];
+    (window.DB.ordens || []).forEach(o => {
+      if (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o)) return;
+      const reciboEx = (window.DB.recibos || []).find(r => r.osId === o.id);
+      const temReciboPago = reciboEx && reciboEx.status === 'paid';
+      const pag = o.pagamento || {};
+      if (o.pago === true && !temReciboPago) {
+        const d = dataPagOS(o);
+        if (d && (!ini || d >= ini) && (!fim || d <= fim)) {
+          const cli = cliById(o.clienteId);
+          const met = pag.metodo || (reciboEx && reciboEx.pay) || '';
+          let net = num(o.net) || num(reciboEx && reciboEx.net);
+          let total = num(o.total) || num(reciboEx && reciboEx.total);
+          if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+          faltam.push({ o, reciboEx, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || '—', tecnico: nomeTec(o), met, metLabel: payLabel(met), net, total });
+        }
+      } else if (pag.confirmadoEm && o.pago !== true && !temReciboPago) {
+        const d = String(pag.confirmadoEm).slice(0, 10);
+        if (d && (!ini || d >= ini) && (!fim || d <= fim)) confirmadosPorReceber.push({ o, data: d });
+      }
+    });
+    faltam.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    return { faltam, confirmadosPorReceber };
+  }
+
+  // ---- Criar os recibos em falta (após confirmação) ----
+  async function gerar(faltam) {
+    let nr = window.DB.nextRec || 1;
+    const ids = new Set((window.DB.recibos || []).map(r => r.id));
+    const novoId = () => { while (ids.has('R' + String(nr).padStart(3, '0'))) nr++; const id = 'R' + String(nr).padStart(3, '0'); ids.add(id); nr++; return id; };
+    const now = new Date().toISOString();
+    let ok = 0, err = 0;
+    for (const it of faltam) {
+      const o = it.o, reciboEx = it.reciboEx;
+      const cli = cliById(o.clienteId);
+      const srv = (window.DB.servicos || []).find(s => s.id === o.servicoId);
+      const id = reciboEx ? reciboEx.id : novoId();
+      const pay = it.met;
+      const docType = ['mb', 'dinheiro', 'numerario', 'mbway', 'cheque'].includes(pay) ? 'fatura-recibo' : 'fatura';
+      const rec = {
+        ...(reciboEx || {}), id, osId: o.id,
+        client: cli?.nome || o.clienteNomeSnapshot || '—', nif: cli?.nif || o.clienteNifSnapshot || '',
+        service: srv?.nome || o.servicoId || '', date: it.data || iso(),
+        net: num(o.net) || num(reciboEx?.net), iva: num(o.ivaVal) || num(reciboEx?.iva), total: num(o.total) || num(reciboEx?.total),
+        pay, bank: '', tech: nomeTec(o) || window.currentUser?.name, techId: (o.tecnicos || [])[0] || (reciboEx && reciboEx.techId) || window.currentUser?.id,
+        docType, status: 'paid', pagoEm: it.data || iso(),
+        criadoPor: reciboEx?.criadoPor || window.currentUser?.id, criadoEm: reciboEx?.criadoEm || now, backfill: true
+      };
+      try {
+        await window.fsSet('recibos', id, rec);
+        if (!o.faturaEmitida) { try { await window.fsSetMerge('ordens', o.id, { faturaEmitida: true, faturaEmitidaEm: now }); o.faturaEmitida = true; } catch (e) {} }
+        const idx = (window.DB.recibos || []).findIndex(r => r.id === id);
+        if (idx >= 0) window.DB.recibos[idx] = rec; else (window.DB.recibos = window.DB.recibos || []).push(rec);
+        ok++;
+      } catch (e) { console.error('recibo em falta — falha', o.id, e); err++; }
+    }
+    window.DB.nextRec = nr; try { await window.fsMeta('nextRec', nr); } catch (e) {}
+    if (typeof auditLog === 'function') { try { auditLog('recibos_backfill', `Gerados ${ok} recibo(s) em falta`); } catch (e) {} }
+    return { ok, err };
+  }
+
+  window._rfAnalisar = function () {
+    const ini = document.getElementById('rf-ini').value;
+    const fim = document.getElementById('rf-fim').value;
+    const box = document.getElementById('rf-res');
+    if (!box) return;
+    const { faltam, confirmadosPorReceber } = analisar(ini, fim);
+    window._rfFaltam = faltam;
+    if (!faltam.length) {
+      box.innerHTML = `<div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:13px;">
+        ✅ Não há OS pagas sem recibo neste período.${confirmadosPorReceber.length ? `<br><span style="color:#92400e;">ℹ ${confirmadosPorReceber.length} OS com pagamento confirmado mas ainda <b>não marcadas como recebidas</b> (ficam em "A receber").</span>` : ''}
+      </div>`;
+      return;
+    }
+    const tot = faltam.reduce((s, l) => s + l.total, 0);
+    const rows = faltam.map(l => `<tr>
+      <td style="padding:4px 6px;font-family:monospace;">${esc(l.o.id)}</td>
+      <td style="padding:4px 6px;">${esc(fmtData(l.data))}</td>
+      <td style="padding:4px 6px;">${esc(l.cliente)}</td>
+      <td style="padding:4px 6px;">${esc(l.tecnico)}</td>
+      <td style="padding:4px 6px;text-align:right;font-family:monospace;">${eur(l.total)}</td>
+      <td style="padding:4px 6px;">${esc(l.metLabel)}</td></tr>`).join('');
+    box.innerHTML = `
+      <div style="font-size:13px;margin:4px 0 8px;"><b>${faltam.length}</b> OS pagas sem recibo · total c/IVA <b>${eur(tot)}</b>${confirmadosPorReceber.length ? ` · <span style="color:#92400e;">${confirmadosPorReceber.length} confirmadas por receber</span>` : ''}</div>
+      <div style="max-height:230px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+          <thead><tr style="background:#1e3a8a;color:#fff;position:sticky;top:0;"><th style="padding:5px 6px;text-align:left;">OS</th><th style="padding:5px 6px;text-align:left;">Data</th><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:left;">Técnico</th><th style="padding:5px 6px;text-align:right;">c/IVA</th><th style="padding:5px 6px;text-align:left;">Método</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <button id="rf-gerar-btn" onclick="window._rfGerar()" style="margin-top:12px;width:100%;padding:11px;border:none;background:#16a34a;color:#fff;border-radius:8px;font-weight:bold;font-size:14px;cursor:pointer;">✓ Gerar ${faltam.length} recibo(s) em falta</button>
+      <div style="font-size:10px;color:#94a3b8;margin-top:6px;">Cria os recibos com a data real de pagamento. Não altera valores nem o estado de pagamento das OS.</div>`;
+  };
+
+  window._rfGerar = async function () {
+    const faltam = window._rfFaltam || [];
+    if (!faltam.length) return;
+    if (!confirm(`Vão ser criados ${faltam.length} recibo(s) (status pago) para OS já marcadas como pagas.\n\nContinuar?`)) return;
+    const btn = document.getElementById('rf-gerar-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'A gerar…'; }
+    const { ok, err } = await gerar(faltam);
+    if (typeof toast === 'function') toast(`✅ ${ok} recibo(s) criado(s)${err ? ` · ${err} com erro` : ''}.`, '🧾', 5000);
+    else alert(`${ok} recibo(s) criado(s)${err ? ` · ${err} com erro` : ''}.`);
+    if (typeof renderRecibos === 'function') try { renderRecibos(); } catch (e) {}
+    if (typeof agRenderRecebimentos === 'function') try { agRenderRecebimentos(); } catch (e) {}
+    window._rfAnalisar();
+  };
+
+  window.recibosFaltaAbrir = function () {
+    if (typeof closeSidebar === 'function') { try { closeSidebar(); } catch (e) {} }
+    const antigo = document.getElementById('rf-ov'); if (antigo) antigo.remove();
+    const hoje = iso(); const prim = hoje.slice(0, 8) + '01';
+    const ov = document.createElement('div');
+    ov.id = 'rf-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:99999;';
+    ov.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:22px;width:min(620px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif;">
+        <h2 style="margin:0 0 4px;font-size:18px;color:#1e3a8a;">🧾 Recibos em falta</h2>
+        <p style="margin:0 0 14px;font-size:12px;color:#64748b;">OS marcadas como pagas que ainda não têm recibo. Gera-os para aparecerem em "Todos os Recebimentos".</p>
+        <div style="display:flex;gap:10px;align-items:flex-end;">
+          <div style="flex:1;"><label style="font-size:12px;font-weight:bold;">Data início</label>
+            <input type="date" id="rf-ini" value="${prim}" style="width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:8px;"></div>
+          <div style="flex:1;"><label style="font-size:12px;font-weight:bold;">Data fim</label>
+            <input type="date" id="rf-fim" value="${hoje}" style="width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:8px;"></div>
+          <button onclick="window._rfAnalisar()" style="padding:9px 16px;border:none;background:#1e3a8a;color:#fff;border-radius:8px;cursor:pointer;font-weight:bold;">Analisar</button>
+        </div>
+        <div id="rf-res" style="margin-top:14px;"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button onclick="document.getElementById('rf-ov').remove()" style="padding:9px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer;">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    window._rfAnalisar();
+  };
+
+  function injetarNav() {
+    const nav = document.getElementById('main-nav'); if (!nav) return;
+    if ((window.currentUser && window.currentUser.role) !== 'admin') return;   // só admin escreve recibos
+    if (document.getElementById('ni-recfalta')) return;
+    const div = document.createElement('div');
+    div.className = 'ni'; div.id = 'ni-recfalta';
+    div.innerHTML = '<span class="ico">🧾</span> Recibos em falta';
+    div.onclick = window.recibosFaltaAbrir;
+    nav.appendChild(div);
+  }
+  if (typeof window.renderSidebar === 'function') {
+    const orig = window.renderSidebar;
+    window.renderSidebar = function () { orig.apply(this, arguments); try { injetarNav(); } catch (e) {} };
+  }
+  setInterval(injetarNav, 2000);
+  setTimeout(injetarNav, 1400);
 })();
 
 </script>

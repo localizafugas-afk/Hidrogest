@@ -33017,8 +33017,12 @@ window.cliHistoricoImprimir = function(cliId){
       let total = num(o.total) || num(recibo && recibo.total);
       if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
       if (!iva && total && net) iva = total - net;
-      (map[tid] ??= { nome: nomeTec(tid, recibo && recibo.tech), net: 0, iva: 0, total: 0, count: 0 });
-      map[tid].net += net; map[tid].iva += iva; map[tid].total += total; map[tid].count++;
+      const met = (o.pagamento && o.pagamento.metodo) || (recibo && recibo.pay) || '';
+      const imediato = ['mb', 'mbway', 'dinheiro', 'numerario', 'cheque'].includes(met);
+      (map[tid] ??= { nome: nomeTec(tid, recibo && recibo.tech), net: 0, imed: 0, dif: 0, iva: 0, total: 0, count: 0 });
+      const m = map[tid];
+      m.net += net; m.iva += iva; m.total += total; m.count++;
+      if (imediato) m.imed += net; else m.dif += net;
     });
     return map;
   }
@@ -33050,16 +33054,16 @@ window.cliHistoricoImprimir = function(cliId){
   function tabelaRecebidos(map) {
     const ids = Object.keys(map).sort((a, b) => String(map[a].nome).localeCompare(String(map[b].nome)));
     if (!ids.length) return `<div class="vazio">Sem recebimentos pagos no período.</div>`;
-    let tNet = 0, tIva = 0, tTot = 0, tN = 0;
+    let tNet = 0, tImed = 0, tDif = 0, tTot = 0, tN = 0;
     const rows = ids.map(id => {
-      const m = map[id]; tNet += m.net; tIva += m.iva; tTot += m.total; tN += m.count;
+      const m = map[id]; tNet += m.net; tImed += m.imed; tDif += m.dif; tTot += m.total; tN += m.count;
       return `<tr><td>${esc(m.nome)}</td><td class="c">${m.count}</td>
-        <td class="num strong">${eur(m.net)}</td><td class="num">${eur(m.iva)}</td><td class="num">${eur(m.total)}</td></tr>`;
+        <td class="num strong">${eur(m.net)}</td><td class="num">${eur(m.imed)}</td><td class="num">${eur(m.dif)}</td><td class="num">${eur(m.total)}</td></tr>`;
     }).join('');
     return `<table class="tb">
-      <thead><tr><th>Técnico</th><th class="c">Nº</th><th class="num">Recebido s/ IVA</th><th class="num">IVA</th><th class="num">Total c/ IVA</th></tr></thead>
+      <thead><tr><th>Técnico</th><th class="c">Nº</th><th class="num">Recebido s/ IVA</th><th class="num">Imediato s/ IVA</th><th class="num">Transf./Ent. s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tIva)}</td><td class="num">${eur(tTot)}</td></tr></tfoot>
+      <tfoot><tr><td>TOTAL</td><td class="c">${tN}</td><td class="num strong">${eur(tNet)}</td><td class="num">${eur(tImed)}</td><td class="num">${eur(tDif)}</td><td class="num">${eur(tTot)}</td></tr></tfoot>
     </table>`;
   }
 
@@ -33109,7 +33113,7 @@ window.cliHistoricoImprimir = function(cliId){
       <div class="meta"><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}${tec ? ' · <b>Técnico:</b> ' + esc(nomeTec(tec, '')) : ''} · valores <b>sem IVA</b></div>
       <h2>Recebidos (já pagos)</h2>${recebidos}
       <h2>A receber (por cobrar)</h2>${areceber}
-      <div class="nota">Recebidos = OS dadas como pagas (valor líquido, sem IVA), pela data de pagamento. A receber = OS concluídas ainda não pagas (valor líquido). Cada trabalho é atribuído ao técnico principal da OS.</div>
+      <div class="nota">Recebidos = OS dadas como pagas (valor líquido, sem IVA), pela data de pagamento — repartidas em Imediato (MB/MBWay/Numerário/Cheque) e Transf./Ent. (transferência/entidade). A receber = OS concluídas ainda não pagas (valor líquido). Cada trabalho é atribuído ao técnico principal da OS.</div>
       <scr` + `ipt>window.onload=function(){setTimeout(function(){window.print();},300);}</scr` + `ipt></body></html>`;
 
     const w = window.open('', '_blank');

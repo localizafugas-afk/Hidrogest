@@ -13219,7 +13219,7 @@ async function osRegistarPagamentoRapido(id, met){
   const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência',cheque:'Cheque'}[met]||met;
   const updated={...os, pagamento:{ metodo:met, data:today(), imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id }};
   if(imediato){
-    updated.faturaEmitida=true; updated.faturaEmitidaEm=new Date().toISOString();
+    /* Pago na hora: fatura NAO marcada como emitida — vai para o admin emitir a Fatura-Recibo */
     updated.pago=true; updated.pagoEm=new Date().toISOString(); updated.pagoPor=window.currentUser?.id;
   }
   await window.fsSet('ordens',id,updated);
@@ -16005,10 +16005,10 @@ async function osReconciliarImediatos(){
         const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
         const dataRec=(o.pagamento?.data||o.concluidoEm||o.data||today());
         const now=new Date().toISOString();
-        const patch={faturaEmitida:true, faturaEmitidaEm:now, pago:true, pagoEm:now, pagoPor:'auto-imediato'};
+        const patch={pago:true, pagoEm:now, pagoPor:'auto-imediato'}; /* fatura fica por emitir → admin emite */
         if(!o.pagamento?.metodo){ patch.pagamento={...(o.pagamento||{}), metodo:met, data:String(dataRec).slice(0,10)}; }
         await window.fsSetMerge('ordens', o.id, patch);
-        o.faturaEmitida=true; o.pago=true; o.pagoEm=now; if(patch.pagamento) o.pagamento=patch.pagamento;
+        o.pago=true; o.pagoEm=now; if(patch.pagamento) o.pagamento=patch.pagamento;
         const ex=(window.DB.recibos||[]).find(r=>r.osId===o.id);
         if(ex){ if(ex.status!=='paid'){ await window.fsSet('recibos',ex.id,{...ex,status:'paid',pagoEm:(ex.pagoEm||String(dataRec).slice(0,10))}); } }
         else { await osCriarReciboAutomatico(o,'paid'); }
@@ -25308,7 +25308,7 @@ async function osConfirmarPagamentoOS(){
   };
   if(imediato){
     // Pagamento imediato = Fatura-Recibo na hora → fica logo Faturado + Pago
-    updated.faturaEmitida=true; updated.faturaEmitidaEm=new Date().toISOString();
+    /* Pago na hora: fatura NAO marcada como emitida — vai para o admin emitir a Fatura-Recibo */
     updated.pago=true; updated.pagoEm=new Date().toISOString(); updated.pagoPor=window.currentUser?.id;
   }
   await window.fsSet('ordens', osId, updated);
@@ -32716,7 +32716,7 @@ window.cliHistoricoImprimir = function(cliId){
 </script>
 
 
-<!-- HidroGest - Mapa de Deslocacao (v3) -->
+<!-- Mapa de Deslocacao (v3) -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    HidroGest — MAPA DE DESLOCACAO por funcionario  (v3 - corrigido)
@@ -32976,7 +32976,7 @@ window.cliHistoricoImprimir = function(cliId){
 
 </script>
 
-<!-- HidroGest - Recebimentos por tecnico (v2) -->
+<!-- Recebimentos por tecnico (v2) -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    HidroGest — RECEBIMENTOS POR TECNICO (v2 - por OS e por modalidade)
@@ -33236,7 +33236,7 @@ window.cliHistoricoImprimir = function(cliId){
 
 </script>
 
-<!-- HidroGest - Recibos em falta -->
+<!-- Recibos em falta -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    HidroGest — RECIBOS EM FALTA (backfill seguro)

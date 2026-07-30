@@ -33423,9 +33423,9 @@ window.cliHistoricoImprimir = function(cliId){
 
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     HidroGest — MÓDULO CONTAS A PAGAR (etapa 1 + OCR de fatura)
-     Lançar faturas a pagar com vencimento e IVA. Upload lê a fatura (Claude).
-     Coleção: contasPagar
+     HidroGest — MÓDULO CONTAS A PAGAR + FISCAL (etapas 1 e 2)
+     Faturas de fornecedores e impostos (IVA/IRS/SS), por vencimento.
+     Upload lê o documento (Claude, claude-sonnet-4-6). Coleção: contasPagar
      ═══════════════════════════════════════════════════════════════════════ -->
 <script>
 (function(){
@@ -33439,6 +33439,8 @@ window.cliHistoricoImprimir = function(cliId){
   const cpDB=()=>window.DB.contasPagar||[];
   const toast=(m,i)=>{ if(typeof window.toast==='function') window.toast(m,i); else console.log(m); };
   const podeVer=()=>['admin','supervisor','gerente'].includes(window.currentUser&&window.currentUser.role);
+  const readB64=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('falha a ler o ficheiro'));r.readAsDataURL(f);});
+  const IMP={IVA:{ico:'🧾',bg:'#e0e7ff',fg:'#3730a3'},IRS:{ico:'🏛️',bg:'#dbeafe',fg:'#1e40af'},'Segurança Social':{ico:'👥',bg:'#dcfce7',fg:'#166534'}};
 
   function estadoVenc(c){
     if(c.estado==='pago') return {tag:'Paga',bg:'#dcfce7',fg:'#15803d',ord:4};
@@ -33453,7 +33455,7 @@ window.cliHistoricoImprimir = function(cliId){
     const abertas=cpDB().filter(c=>c.estado!=='pago');
     const venc=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d<0;});
     const sem7=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d>=0&&d<=7;});
-    return { totAb:abertas.reduce((s,c)=>s+num(c.gross),0), totIva:abertas.reduce((s,c)=>s+num(c.iva),0),
+    return { totAb:abertas.reduce((s,c)=>s+num(c.gross),0), totIva:abertas.filter(c=>c.categoria!=='imposto').reduce((s,c)=>s+num(c.iva),0),
       vencN:venc.length, vencV:venc.reduce((s,c)=>s+num(c.gross),0),
       sem7N:sem7.length, sem7V:sem7.reduce((s,c)=>s+num(c.gross),0) };
   }
@@ -33476,11 +33478,12 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b;">${k}</div>
       <div style="font-size:22px;font-weight:700;margin-top:6px;color:${fg||'#0f2430'};">${v}</div>
       <div style="font-size:12px;color:#64748b;margin-top:2px;">${m||''}</div></div>`;
-    const linha=c=>{ const e=estadoVenc(c); const pago=c.estado==='pago';
+    const linha=c=>{ const e=estadoVenc(c); const pago=c.estado==='pago'; const imp=c.categoria==='imposto';
+      const badge=imp&&IMP[c.imposto]?`<span style="display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;background:${IMP[c.imposto].bg};color:${IMP[c.imposto].fg};margin-right:6px;">${IMP[c.imposto].ico} ${esc(c.imposto)}</span>`:'';
       return `<div style="display:flex;align-items:center;gap:12px;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin:8px 0;background:#fff;${pago?'opacity:.7;':''}">
         <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:14px;${pago?'text-decoration:line-through;':''}">${esc(c.fornecedor||'(fornecedor)')}${c.numero?` · <span style="color:#64748b;font-weight:500;">${esc(c.numero)}</span>`:''}</div>
-          <div style="font-size:12px;color:#64748b;">Fatura ${fmtData(c.dataFatura)} · Vence ${fmtData(c.vencimento)} · IVA ${eur(c.iva)}</div>
+          <div style="font-weight:600;font-size:14px;${pago?'text-decoration:line-through;':''}">${badge}${esc(c.fornecedor||'(sem nome)')}${c.numero&&!imp?` · <span style="color:#64748b;font-weight:500;">${esc(c.numero)}</span>`:''}</div>
+          <div style="font-size:12px;color:#64748b;">${imp?(c.notas?esc(c.notas)+' · ':''):'Fatura '+fmtData(c.dataFatura)+' · '}Vence ${fmtData(c.vencimento)}${imp?'':' · IVA '+eur(c.iva)}</div>
         </div>
         <div style="text-align:right;white-space:nowrap;">
           <div style="font-weight:700;font-size:15px;">${eur(c.gross)}</div>
@@ -33488,41 +33491,54 @@ window.cliHistoricoImprimir = function(cliId){
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <button onclick="window.cpTogglePago('${c.id}')" style="border:1px solid ${pago?'#cbd5e1':'#15803d'};background:${pago?'#fff':'#15803d'};color:${pago?'#64748b':'#fff'};border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">${pago?'↺':'✓ Pago'}</button>
-          <button onclick="window.cpNova('${c.id}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Editar</button>
+          <button onclick="window.${imp?'cpNovoImposto':'cpNova'}('${c.id}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Editar</button>
           <button onclick="window.cpApagar('${c.id}')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Apagar</button>
         </div></div>`;
     };
     ov.innerHTML=`<div style="width:100%;max-width:820px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <h2 style="margin:0;font-size:20px;">📅 Contas a Pagar</h2>
-        <button onclick="window.cpNova()" style="margin-left:auto;border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;">+ Nova conta</button>
+        <button onclick="window.cpNovoImposto()" style="margin-left:auto;border:1px solid #0e7c86;background:#fff;color:#0e7c86;border-radius:9px;padding:10px 14px;font-weight:600;cursor:pointer;">+ Imposto</button>
+        <button onclick="window.cpNova()" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;">+ Nova conta</button>
         <button onclick="document.getElementById('cp-ov').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 14px;cursor:pointer;">Fechar</button>
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-        ${card('Total em aberto',eur(r.totAb),`${cpDB().filter(c=>c.estado!=='pago').length} faturas`)}
+        ${card('Total em aberto',eur(r.totAb),`${cpDB().filter(c=>c.estado!=='pago').length} a pagar`)}
         ${card('Vencidas',r.vencN,eur(r.vencV),'#b91c1c')}
         ${card('Vencem em 7 dias',r.sem7N,eur(r.sem7V),'#b45309')}
         ${card('IVA das compras',eur(r.totIva),'dedutível, em aberto')}
       </div>
-      <div>${lista.length?lista.map(linha).join(''):'<div style="text-align:center;color:#64748b;padding:30px;">Ainda não há faturas lançadas. Carrega em <b>+ Nova conta</b>.</div>'}</div>
+      <div>${lista.length?lista.map(linha).join(''):'<div style="text-align:center;color:#64748b;padding:30px;">Ainda não há nada lançado. Usa <b>+ Nova conta</b> ou <b>+ Imposto</b>.</div>'}</div>
     </div>`;
   }
 
+  // ---------- OCR genérico (mesma via do HidroGest) ----------
+  async function ocrDoc(file,prompt){
+    const key=(window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+    if(!key) throw new Error('SEM_CHAVE');
+    const b64=await readB64(file);
+    const isPdf=file.type==='application/pdf';
+    const block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
+                     :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}};
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
+    if(!resp.ok) throw new Error('API '+resp.status);
+    const data=await resp.json();
+    const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
+    return JSON.parse(txt.replace(/```json|```/g,'').trim());
+  }
+
+  // ---------- formulário: FATURA ----------
   window.cpNova=function(id){
     const c=id?cpDB().find(x=>x.id===id):null;
     const forns=[...new Set((window.DB.fornecedores||[]).map(f=>f.nome||f.name||f.fornecedor).filter(Boolean))];
-    let ov=document.getElementById('cp-form');
-    if(!ov){ ov=document.createElement('div'); ov.id='cp-form';
-      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.45);z-index:9100;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
-      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
-      document.body.appendChild(ov);
-    }
+    const ov=mkForm();
     const fg='margin-bottom:12px;', lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;',
           inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
-    ov.innerHTML=`<div style="width:100%;max-width:520px;background:#fff;border-radius:16px;padding:22px;box-shadow:0 10px 40px rgba(15,36,48,.3);">
-      <h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar conta':'Nova conta a pagar'}</h2>
+    ov.firstChild.innerHTML=`<h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar conta':'Nova conta a pagar'}</h2>
       ${id?'':`<div id="cp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
-        <b style="color:#0f2430;">📎 Arrasta aqui a fatura (PDF ou foto)</b><br><span style="font-size:12px;">para preencher sozinho — ou toca para escolher do computador</span>
+        <b style="color:#0f2430;">📎 Arrasta aqui a fatura (PDF ou foto)</b><br><span style="font-size:12px;">para preencher sozinho — ou toca para escolher</span>
         <input id="cp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
       <div id="cp-ocr-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`}
       <div style="${fg}"><label style="${lb}">Fornecedor</label>
@@ -33546,51 +33562,112 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
         <button onclick="document.getElementById('cp-form').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 16px;cursor:pointer;">Cancelar</button>
         <button onclick="window.cpGuardar('${id||''}')" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">Guardar</button>
-      </div></div>`;
+      </div>`;
     window._cpCalc();
-    if(!id){ const dz=document.getElementById('cp-drop'), fi=document.getElementById('cp-file');
-      dz.onclick=()=>fi.click();
-      fi.onchange=()=>{ if(fi.files[0]) cpOCR(fi.files[0]); };
-      dz.ondragover=e=>{e.preventDefault();dz.style.borderColor='#0e7c86';};
-      dz.ondragleave=()=>{dz.style.borderColor='#cbd5e1';};
-      dz.ondrop=e=>{e.preventDefault();dz.style.borderColor='#cbd5e1'; if(e.dataTransfer.files[0]) cpOCR(e.dataTransfer.files[0]);};
-    }
+    if(!id) bindDrop('cp-drop','cp-file','cp-ocr-msg',cpFaturaOCR);
   };
   window._cpCalc=function(){
     const g=num(document.getElementById('cp-gross')?.value), r=num(document.getElementById('cp-rate')?.value)/100;
     const el=document.getElementById('cp-iva'); if(el) el.value=eur(g-g/(1+r));
   };
-
-  // ---------- OCR da fatura (mesma via que o HidroGest já usa) ----------
-  async function cpOCR(file){
-    const msg=document.getElementById('cp-ocr-msg'); if(!msg) return;
-    const key=(window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
-    if(!key){ msg.style.color='#b45309'; msg.innerHTML='⚠️ Falta a chave da Claude (Configurações → Email → API Key Claude). Preenche à mão.'; return; }
+  async function cpFaturaOCR(file,msg){
     msg.style.color='#0e7c86'; msg.innerHTML='🤖 A ler a fatura…';
     try{
-      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('falha a ler o ficheiro'));r.readAsDataURL(file);});
-      const isPdf=file.type==='application/pdf';
-      const block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
-                       :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}};
-      const prompt=`Analisa esta fatura de fornecedor e responde APENAS em JSON puro (sem markdown):
+      const p=await ocrDoc(file,`Analisa esta fatura de fornecedor e responde APENAS em JSON puro (sem markdown):
 {"fornecedor":"","nif":"","numero":"número da fatura","total":"valor total com IVA, só números e ponto decimal","iva":"taxa de IVA: 23, 13, 6 ou 0","data":"data da fatura AAAA-MM-DD","vencimento":"data de vencimento AAAA-MM-DD se existir","descricao":"breve descrição"}
-Deixa vazio o que não conseguires ler.`;
-      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
-      if(!resp.ok) throw new Error('API '+resp.status);
-      const data=await resp.json();
-      const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
-      let p=null; try{p=JSON.parse(txt.replace(/```json|```/g,'').trim());}catch(e){}
-      if(!p) throw new Error('não veio em JSON');
+Deixa vazio o que não conseguires ler.`);
       const set=(id,v)=>{const el=document.getElementById(id); if(el&&v) el.value=v;};
       set('cp-forn',p.fornecedor); set('cp-num',p.numero);
       if(p.total){const n=parseFloat(String(p.total).replace(',','.')); if(!isNaN(n)&&n>0) document.getElementById('cp-gross').value=n.toFixed(2);}
       if(p.iva&&['23','13','6','0'].includes(String(parseInt(p.iva)))) document.getElementById('cp-rate').value=String(parseInt(p.iva));
       set('cp-dtf',p.data); set('cp-venc',p.vencimento); set('cp-notas',p.descricao);
-      window._cpCalc();
-      msg.style.color='#15803d'; msg.innerHTML='✓ Fatura lida — confere os campos e guarda.';
-    }catch(e){ msg.style.color='#b91c1c'; msg.innerHTML='Não consegui ler ('+(e.message||e)+'). Preenche à mão.'; }
+      window._cpCalc(); msg.style.color='#15803d'; msg.innerHTML='✓ Fatura lida — confere os campos e guarda.';
+    }catch(e){ ocrErro(e,msg); }
+  }
+
+  // ---------- formulário: IMPOSTO ----------
+  window.cpNovoImposto=function(id){
+    const c=id?cpDB().find(x=>x.id===id):null;
+    const ov=mkForm();
+    const fg='margin-bottom:12px;', lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;',
+          inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
+    const tipos=['IVA','IRS','Segurança Social'];
+    ov.firstChild.innerHTML=`<h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar imposto':'Novo imposto'}</h2>
+      ${id?'':`<div id="imp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
+        <b style="color:#0f2430;">📎 Arrasta o PDF do contabilista</b><br><span style="font-size:12px;">para ler o tipo, o valor e o prazo — ou toca para escolher</span>
+        <input id="imp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
+      <div id="imp-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`}
+      <div style="${fg}"><label style="${lb}">Imposto</label>
+        <select id="imp-tipo" style="${inp}">${tipos.map(t=>`<option ${c?.imposto===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div style="display:flex;gap:12px;">
+        <div style="${fg}flex:1;"><label style="${lb}">Valor a pagar (€)</label><input id="imp-valor" type="number" step="0.01" style="${inp}" value="${c?.gross??''}"></div>
+        <div style="${fg}flex:1;"><label style="${lb}">Data-limite</label><input id="imp-venc" type="date" style="${inp}" value="${c?.vencimento||''}"></div>
+      </div>
+      <div style="${fg}"><label style="${lb}">Período (opcional)</label><input id="imp-periodo" style="${inp}" value="${esc(c?.notas||'')}" placeholder="ex.: 2.º trimestre 2026"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+        <button onclick="document.getElementById('cp-form').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 16px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.cpGuardarImposto('${id||''}')" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">Guardar</button>
+      </div>`;
+    if(!id) bindDrop('imp-drop','imp-file','imp-msg',cpImpostoOCR);
+  };
+  async function cpImpostoOCR(file,msg){
+    msg.style.color='#0e7c86'; msg.innerHTML='🤖 A ler o documento…';
+    try{
+      const p=await ocrDoc(file,`Este é um documento do contabilista sobre um imposto a pagar. Responde APENAS em JSON puro (sem markdown):
+{"imposto":"escolhe um: IVA, IRS ou Segurança Social","valor":"valor a pagar, só números e ponto decimal","vencimento":"data-limite de pagamento AAAA-MM-DD","periodo":"período a que respeita, ex.: 2T2026 ou Junho 2026"}
+Deixa vazio o que não conseguires ler.`);
+      const norm=String(p.imposto||'').toLowerCase();
+      const tipo = norm.includes('social')||norm.includes('ss')?'Segurança Social' : norm.includes('irs')?'IRS' : norm.includes('iva')?'IVA':'';
+      if(tipo) document.getElementById('imp-tipo').value=tipo;
+      if(p.valor){const n=parseFloat(String(p.valor).replace(',','.')); if(!isNaN(n)&&n>0) document.getElementById('imp-valor').value=n.toFixed(2);}
+      if(p.vencimento) document.getElementById('imp-venc').value=p.vencimento;
+      if(p.periodo) document.getElementById('imp-periodo').value=p.periodo;
+      msg.style.color='#15803d'; msg.innerHTML='✓ Documento lido — confere e guarda.';
+    }catch(e){ ocrErro(e,msg); }
+  }
+  window.cpGuardarImposto=async function(id){
+    const tipo=document.getElementById('imp-tipo').value;
+    const valor=num(document.getElementById('imp-valor').value);
+    const venc=document.getElementById('imp-venc').value;
+    if(!valor){toast('Falta o valor.','⚠️');return;}
+    if(!venc){toast('Falta a data-limite.','⚠️');return;}
+    const antiga=id?cpDB().find(x=>x.id===id):null;
+    const periodo=document.getElementById('imp-periodo').value.trim();
+    const d={ id:id||('IMP'+Date.now().toString(36)), categoria:'imposto', imposto:tipo,
+      fornecedor:tipo+(periodo?' — '+periodo:''), numero:'',
+      gross:parseFloat(valor.toFixed(2)), ivarate:0, iva:0, net:parseFloat(valor.toFixed(2)),
+      dataFatura:iso(), vencimento:venc, notas:periodo,
+      estado:antiga?.estado||'aberto', pagoEm:antiga?.pagoEm||null,
+      criadoPor:antiga?.criadoPor||(window.currentUser?.id||null), criadoEm:antiga?.criadoEm||new Date().toISOString() };
+    try{ await window.fsSet('contasPagar', d.id, d);
+      if(typeof auditLog==='function') auditLog(id?'imposto_editado':'imposto_criado',`${tipo} — ${eur(d.gross)} — vence ${fmtData(venc)}`);
+      document.getElementById('cp-form')?.remove(); toast(id?'Imposto atualizado!':'Imposto lançado!','✅'); cpRender();
+    }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
+  };
+
+  // ---------- comuns ----------
+  function mkForm(){
+    let ov=document.getElementById('cp-form');
+    if(!ov){ ov=document.createElement('div'); ov.id='cp-form';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.45);z-index:9100;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      const inner=document.createElement('div'); inner.style.cssText='width:100%;max-width:520px;background:#fff;border-radius:16px;padding:22px;box-shadow:0 10px 40px rgba(15,36,48,.3);';
+      ov.appendChild(inner); document.body.appendChild(ov);
+    }
+    return ov;
+  }
+  function bindDrop(dzId,fiId,msgId,fn){
+    const dz=document.getElementById(dzId), fi=document.getElementById(fiId), msg=document.getElementById(msgId);
+    if(!dz) return;
+    dz.onclick=()=>fi.click();
+    fi.onchange=()=>{ if(fi.files[0]) fn(fi.files[0],msg); };
+    dz.ondragover=e=>{e.preventDefault();dz.style.borderColor='#0e7c86';};
+    dz.ondragleave=()=>{dz.style.borderColor='#cbd5e1';};
+    dz.ondrop=e=>{e.preventDefault();dz.style.borderColor='#cbd5e1'; if(e.dataTransfer.files[0]) fn(e.dataTransfer.files[0],msg);};
+  }
+  function ocrErro(e,msg){
+    if(String(e.message).includes('SEM_CHAVE')){ msg.style.color='#b45309'; msg.innerHTML='⚠️ Falta a chave da Claude (Configurações → Email → API Key Claude). Preenche à mão.'; }
+    else { msg.style.color='#b91c1c'; msg.innerHTML='Não consegui ler ('+(e.message||e)+'). Preenche à mão.'; }
   }
 
   window.cpGuardar=async function(id){
@@ -33600,7 +33677,7 @@ Deixa vazio o que não conseguires ler.`;
     if(!gross){toast('Falta o valor.','⚠️');return;}
     if(!venc){toast('Falta a data de vencimento.','⚠️');return;}
     const net=gross/(1+rate/100), iva=gross-net, antiga=id?cpDB().find(x=>x.id===id):null;
-    const d={ id:id||('CP'+Date.now().toString(36)),
+    const d={ id:id||('CP'+Date.now().toString(36)), categoria:'fornecedor',
       fornecedor:forn, numero:document.getElementById('cp-num').value.trim(),
       gross:parseFloat(gross.toFixed(2)), ivarate:rate, iva:parseFloat(iva.toFixed(2)), net:parseFloat(net.toFixed(2)),
       dataFatura:document.getElementById('cp-dtf').value, vencimento:venc,
@@ -33618,8 +33695,8 @@ Deixa vazio o que não conseguires ler.`;
   };
   window.cpApagar=async function(id){
     const c=cpDB().find(x=>x.id===id); if(!c) return;
-    if(!confirm(`Apagar a conta de ${c.fornecedor} (${eur(c.gross)})?`)) return;
-    try{ await window.fsDel('contasPagar', id); cpRender(); toast('Conta apagada.','🗑️'); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
+    if(!confirm(`Apagar "${c.fornecedor}" (${eur(c.gross)})?`)) return;
+    try{ await window.fsDel('contasPagar', id); cpRender(); toast('Apagado.','🗑️'); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
   };
 
   function injetarNav(){

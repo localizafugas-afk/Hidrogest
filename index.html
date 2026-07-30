@@ -33421,5 +33421,216 @@ window.cliHistoricoImprimir = function(cliId){
 
 </script>
 
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HidroGest — MÓDULO CONTAS A PAGAR (etapa 1)
+     Lançar faturas a pagar com vencimento e IVA. Coleção: contasPagar
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const num=v=>parseFloat(String(v==null?0:v).replace(',','.'))||0;
+  const eur=n=>(n||0).toLocaleString('pt-PT',{style:'currency',currency:'EUR'});
+  const iso=()=>new Date().toISOString().slice(0,10);
+  const fmtData=d=>{if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:String(d);};
+  const hojeD=()=>{const d=new Date();d.setHours(0,0,0,0);return d;};
+  const diasAte=v=>{if(!v)return null;const d=new Date(String(v).slice(0,10));d.setHours(0,0,0,0);return Math.round((d-hojeD())/86400000);};
+  const cpDB=()=>window.DB.contasPagar||[];
+  const toast=(m,i)=>{ if(typeof window.toast==='function') window.toast(m,i); else console.log(m); };
+  const podeVer=()=>['admin','supervisor','gerente'].includes(window.currentUser&&window.currentUser.role);
+
+  // estado do vencimento -> cor/etiqueta
+  function estadoVenc(c){
+    if(c.estado==='pago') return {tag:'Paga',bg:'#dcfce7',fg:'#15803d',ord:4};
+    const d=diasAte(c.vencimento);
+    if(d===null) return {tag:'Sem data',bg:'#f1f5f9',fg:'#64748b',ord:3};
+    if(d<0) return {tag:`Vencida há ${-d}d`,bg:'#fee2e2',fg:'#b91c1c',ord:0};
+    if(d===0) return {tag:'Vence hoje',bg:'#fee2e2',fg:'#b91c1c',ord:0};
+    if(d<=7) return {tag:`Vence em ${d}d`,bg:'#fef3c7',fg:'#b45309',ord:1};
+    return {tag:`Vence em ${d}d`,bg:'#eef2f4',fg:'#0f2430',ord:2};
+  }
+
+  // ---------- resumo ----------
+  function resumo(){
+    const abertas=cpDB().filter(c=>c.estado!=='pago');
+    const totAb=abertas.reduce((s,c)=>s+num(c.gross),0);
+    const totIva=abertas.reduce((s,c)=>s+num(c.iva),0);
+    const venc=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d<0;});
+    const sem7=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d>=0&&d<=7;});
+    return {
+      totAb, totIva,
+      vencN:venc.length, vencV:venc.reduce((s,c)=>s+num(c.gross),0),
+      sem7N:sem7.length, sem7V:sem7.reduce((s,c)=>s+num(c.gross),0)
+    };
+  }
+
+  // ---------- ecrã principal (overlay) ----------
+  window.cpAbrir=function(){
+    let ov=document.getElementById('cp-ov');
+    if(!ov){ ov=document.createElement('div'); ov.id='cp-ov';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.35);z-index:9000;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      document.body.appendChild(ov);
+    }
+    cpRender();
+  };
+  function cpRender(){
+    const ov=document.getElementById('cp-ov'); if(!ov) return;
+    const r=resumo();
+    const lista=[...cpDB()].sort((a,b)=>{
+      const ea=estadoVenc(a),eb=estadoVenc(b);
+      if(ea.ord!==eb.ord) return ea.ord-eb.ord;
+      return String(a.vencimento||'').localeCompare(String(b.vencimento||''));
+    });
+    const card=(k,v,m,bg,fg)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b;">${k}</div>
+      <div style="font-size:22px;font-weight:700;margin-top:6px;color:${fg||'#0f2430'};">${v}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:2px;">${m||''}</div></div>`;
+    const linha=c=>{ const e=estadoVenc(c); const pago=c.estado==='pago';
+      return `<div style="display:flex;align-items:center;gap:12px;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin:8px 0;background:#fff;${pago?'opacity:.7;':''}">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:14px;${pago?'text-decoration:line-through;':''}">${esc(c.fornecedor||'(fornecedor)')}${c.numero?` · <span style="color:#64748b;font-weight:500;">${esc(c.numero)}</span>`:''}</div>
+          <div style="font-size:12px;color:#64748b;">Fatura ${fmtData(c.dataFatura)} · Vence ${fmtData(c.vencimento)} · IVA ${eur(c.iva)}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap;">
+          <div style="font-weight:700;font-size:15px;">${eur(c.gross)}</div>
+          <span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${e.bg};color:${e.fg};margin-top:3px;">${e.tag}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button onclick="window.cpTogglePago('${c.id}')" title="${pago?'Reabrir':'Marcar como paga'}" style="border:1px solid ${pago?'#cbd5e1':'#15803d'};background:${pago?'#fff':'#15803d'};color:${pago?'#64748b':'#fff'};border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">${pago?'↺':'✓ Pago'}</button>
+          <button onclick="window.cpNova('${c.id}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Editar</button>
+          <button onclick="window.cpApagar('${c.id}')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Apagar</button>
+        </div>
+      </div>`;
+    };
+    ov.innerHTML=`<div style="width:100%;max-width:820px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <h2 style="margin:0;font-size:20px;">📅 Contas a Pagar</h2>
+        <button onclick="window.cpNova()" style="margin-left:auto;border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;">+ Nova conta</button>
+        <button onclick="document.getElementById('cp-ov').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 14px;cursor:pointer;">Fechar</button>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        ${card('Total em aberto',eur(r.totAb),`${cpDB().filter(c=>c.estado!=='pago').length} faturas`)}
+        ${card('Vencidas',r.vencN,eur(r.vencV),null,'#b91c1c')}
+        ${card('Vencem em 7 dias',r.sem7N,eur(r.sem7V),null,'#b45309')}
+        ${card('IVA das compras',eur(r.totIva),'dedutível, em aberto')}
+      </div>
+      <div>${lista.length?lista.map(linha).join(''):'<div style="text-align:center;color:#64748b;padding:30px;">Ainda não há faturas lançadas. Carrega em <b>+ Nova conta</b>.</div>'}</div>
+    </div>`;
+  }
+
+  // ---------- formulário ----------
+  window.cpNova=function(id){
+    const c=id?cpDB().find(x=>x.id===id):null;
+    const forns=[...new Set((window.DB.fornecedores||[]).map(f=>f.nome||f.name||f.fornecedor).filter(Boolean))];
+    let ov=document.getElementById('cp-form');
+    if(!ov){ ov=document.createElement('div'); ov.id='cp-form';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.45);z-index:9100;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      document.body.appendChild(ov);
+    }
+    const fg='margin-bottom:12px;';
+    const lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;';
+    const inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
+    ov.innerHTML=`<div style="width:100%;max-width:520px;background:#fff;border-radius:16px;padding:22px;box-shadow:0 10px 40px rgba(15,36,48,.3);">
+      <h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar conta':'Nova conta a pagar'}</h2>
+      <div style="${fg}"><label style="${lb}">Fornecedor</label>
+        <input id="cp-forn" list="cp-forn-list" style="${inp}" value="${esc(c?.fornecedor||'')}" placeholder="Nome do fornecedor">
+        <datalist id="cp-forn-list">${forns.map(f=>`<option value="${esc(f)}">`).join('')}</datalist></div>
+      <div style="display:flex;gap:12px;">
+        <div style="${fg}flex:1;"><label style="${lb}">Nº da fatura</label><input id="cp-num" style="${inp}" value="${esc(c?.numero||'')}"></div>
+        <div style="${fg}flex:1;"><label style="${lb}">Valor total (€)</label><input id="cp-gross" type="number" step="0.01" style="${inp}" value="${c?.gross??''}" oninput="window._cpCalc()"></div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <div style="${fg}flex:1;"><label style="${lb}">Taxa de IVA</label>
+          <select id="cp-rate" style="${inp}" onchange="window._cpCalc()">
+            ${[23,13,6,0].map(t=>`<option value="${t}" ${(c?.ivarate??23)==t?'selected':''}>${t}%</option>`).join('')}
+          </select></div>
+        <div style="${fg}flex:1;"><label style="${lb}">IVA (€)</label><input id="cp-iva" style="${inp}background:#f1f5f9;" readonly></div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <div style="${fg}flex:1;"><label style="${lb}">Data da fatura</label><input id="cp-dtf" type="date" style="${inp}" value="${c?.dataFatura||iso()}"></div>
+        <div style="${fg}flex:1;"><label style="${lb}">Vencimento</label><input id="cp-venc" type="date" style="${inp}" value="${c?.vencimento||''}"></div>
+      </div>
+      <div style="${fg}"><label style="${lb}">Notas (opcional)</label><input id="cp-notas" style="${inp}" value="${esc(c?.notas||'')}"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+        <button onclick="document.getElementById('cp-form').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 16px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.cpGuardar('${id||''}')" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">Guardar</button>
+      </div>
+    </div>`;
+    window._cpCalc();
+  };
+  window._cpCalc=function(){
+    const g=num(document.getElementById('cp-gross')?.value);
+    const r=num(document.getElementById('cp-rate')?.value)/100;
+    const net=g/(1+r), iva=g-net;
+    const el=document.getElementById('cp-iva'); if(el) el.value=eur(iva);
+  };
+  window.cpGuardar=async function(id){
+    const gross=num(document.getElementById('cp-gross').value);
+    const rate=num(document.getElementById('cp-rate').value);
+    const forn=document.getElementById('cp-forn').value.trim();
+    const venc=document.getElementById('cp-venc').value;
+    if(!forn){toast('Falta o fornecedor.','⚠️');return;}
+    if(!gross){toast('Falta o valor.','⚠️');return;}
+    if(!venc){toast('Falta a data de vencimento.','⚠️');return;}
+    const net=gross/(1+rate/100), iva=gross-net;
+    const antiga=id?cpDB().find(x=>x.id===id):null;
+    const d={
+      id:id||('CP'+Date.now().toString(36)),
+      fornecedor:forn, numero:document.getElementById('cp-num').value.trim(),
+      gross:parseFloat(gross.toFixed(2)), ivarate:rate, iva:parseFloat(iva.toFixed(2)), net:parseFloat(net.toFixed(2)),
+      dataFatura:document.getElementById('cp-dtf').value, vencimento:venc,
+      notas:document.getElementById('cp-notas').value.trim(),
+      estado:antiga?.estado||'aberto', pagoEm:antiga?.pagoEm||null,
+      criadoPor:antiga?.criadoPor||(window.currentUser?.id||null),
+      criadoEm:antiga?.criadoEm||new Date().toISOString(),
+    };
+    try{ await window.fsSet('contasPagar', d.id, d);
+      if(typeof auditLog==='function') auditLog(id?'conta_editada':'conta_criada',`Conta ${d.id} — ${d.fornecedor} — ${eur(d.gross)}`);
+      document.getElementById('cp-form')?.remove(); toast(id?'Conta atualizada!':'Conta lançada!','✅'); cpRender();
+    }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
+  };
+  window.cpTogglePago=async function(id){
+    const c=cpDB().find(x=>x.id===id); if(!c) return;
+    const upd={...c, estado:c.estado==='pago'?'aberto':'pago', pagoEm:c.estado==='pago'?null:iso()};
+    try{ await window.fsSet('contasPagar', id, upd); cpRender(); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
+  };
+  window.cpApagar=async function(id){
+    const c=cpDB().find(x=>x.id===id); if(!c) return;
+    if(!confirm(`Apagar a conta de ${c.fornecedor} (${eur(c.gross)})?`)) return;
+    try{ await window.fsDel('contasPagar', id); cpRender(); toast('Conta apagada.','🗑️'); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
+  };
+
+  // ---------- menu ----------
+  function injetarNav(){
+    const nav=document.getElementById('main-nav'); if(!nav||!podeVer()) return;
+    let el=document.getElementById('ni-contas');
+    const abertas=cpDB().filter(c=>c.estado!=='pago');
+    const alerta=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d<=7;}).length;
+    const badge=alerta?`<span style="margin-left:auto;background:#b91c1c;color:#fff;border-radius:20px;font-size:11px;font-weight:700;padding:1px 7px;">${alerta}</span>`:'';
+    const html=`<span class="ico">📅</span> Contas a Pagar${badge}`;
+    if(!el){ el=document.createElement('div'); el.className='ni'; el.id='ni-contas'; el.onclick=window.cpAbrir; nav.appendChild(el); }
+    el.innerHTML=html;
+  }
+  if(typeof window.renderSidebar==='function'){ const orig=window.renderSidebar;
+    window.renderSidebar=function(){ orig.apply(this,arguments); try{injetarNav();}catch(e){} }; }
+  setInterval(injetarNav,2500); setTimeout(injetarNav,1400);
+
+  // ---------- subscrição da coleção ----------
+  window.addEventListener('load',()=>{ setTimeout(()=>{ try{
+    if(!window._db) return;
+    const {_collection,_onSnapshot}=window;
+    if(_collection&&_onSnapshot){
+      _onSnapshot(_collection(window._db,'contasPagar'), snap=>{
+        window.DB.contasPagar=snap.docs.map(d=>({...d.data(),id:d.id}));
+        try{injetarNav();}catch(e){}
+        if(document.getElementById('cp-ov')) cpRender();
+      });
+    }
+  }catch(e){} },2600); });
+})();
+</script>
+
 </body>
 </html>

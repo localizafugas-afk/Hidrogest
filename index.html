@@ -33423,8 +33423,9 @@ window.cliHistoricoImprimir = function(cliId){
 
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-     HidroGest — MÓDULO CONTAS A PAGAR (etapa 1)
-     Lançar faturas a pagar com vencimento e IVA. Coleção: contasPagar
+     HidroGest — MÓDULO CONTAS A PAGAR (etapa 1 + OCR de fatura)
+     Lançar faturas a pagar com vencimento e IVA. Upload lê a fatura (Claude).
+     Coleção: contasPagar
      ═══════════════════════════════════════════════════════════════════════ -->
 <script>
 (function(){
@@ -33439,7 +33440,6 @@ window.cliHistoricoImprimir = function(cliId){
   const toast=(m,i)=>{ if(typeof window.toast==='function') window.toast(m,i); else console.log(m); };
   const podeVer=()=>['admin','supervisor','gerente'].includes(window.currentUser&&window.currentUser.role);
 
-  // estado do vencimento -> cor/etiqueta
   function estadoVenc(c){
     if(c.estado==='pago') return {tag:'Paga',bg:'#dcfce7',fg:'#15803d',ord:4};
     const d=diasAte(c.vencimento);
@@ -33449,22 +33449,15 @@ window.cliHistoricoImprimir = function(cliId){
     if(d<=7) return {tag:`Vence em ${d}d`,bg:'#fef3c7',fg:'#b45309',ord:1};
     return {tag:`Vence em ${d}d`,bg:'#eef2f4',fg:'#0f2430',ord:2};
   }
-
-  // ---------- resumo ----------
   function resumo(){
     const abertas=cpDB().filter(c=>c.estado!=='pago');
-    const totAb=abertas.reduce((s,c)=>s+num(c.gross),0);
-    const totIva=abertas.reduce((s,c)=>s+num(c.iva),0);
     const venc=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d<0;});
     const sem7=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d>=0&&d<=7;});
-    return {
-      totAb, totIva,
+    return { totAb:abertas.reduce((s,c)=>s+num(c.gross),0), totIva:abertas.reduce((s,c)=>s+num(c.iva),0),
       vencN:venc.length, vencV:venc.reduce((s,c)=>s+num(c.gross),0),
-      sem7N:sem7.length, sem7V:sem7.reduce((s,c)=>s+num(c.gross),0)
-    };
+      sem7N:sem7.length, sem7V:sem7.reduce((s,c)=>s+num(c.gross),0) };
   }
 
-  // ---------- ecrã principal (overlay) ----------
   window.cpAbrir=function(){
     let ov=document.getElementById('cp-ov');
     if(!ov){ ov=document.createElement('div'); ov.id='cp-ov';
@@ -33477,12 +33470,9 @@ window.cliHistoricoImprimir = function(cliId){
   function cpRender(){
     const ov=document.getElementById('cp-ov'); if(!ov) return;
     const r=resumo();
-    const lista=[...cpDB()].sort((a,b)=>{
-      const ea=estadoVenc(a),eb=estadoVenc(b);
-      if(ea.ord!==eb.ord) return ea.ord-eb.ord;
-      return String(a.vencimento||'').localeCompare(String(b.vencimento||''));
-    });
-    const card=(k,v,m,bg,fg)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+    const lista=[...cpDB()].sort((a,b)=>{const ea=estadoVenc(a),eb=estadoVenc(b);
+      if(ea.ord!==eb.ord) return ea.ord-eb.ord; return String(a.vencimento||'').localeCompare(String(b.vencimento||''));});
+    const card=(k,v,m,fg)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b;">${k}</div>
       <div style="font-size:22px;font-weight:700;margin-top:6px;color:${fg||'#0f2430'};">${v}</div>
       <div style="font-size:12px;color:#64748b;margin-top:2px;">${m||''}</div></div>`;
@@ -33497,11 +33487,10 @@ window.cliHistoricoImprimir = function(cliId){
           <span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${e.bg};color:${e.fg};margin-top:3px;">${e.tag}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <button onclick="window.cpTogglePago('${c.id}')" title="${pago?'Reabrir':'Marcar como paga'}" style="border:1px solid ${pago?'#cbd5e1':'#15803d'};background:${pago?'#fff':'#15803d'};color:${pago?'#64748b':'#fff'};border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">${pago?'↺':'✓ Pago'}</button>
+          <button onclick="window.cpTogglePago('${c.id}')" style="border:1px solid ${pago?'#cbd5e1':'#15803d'};background:${pago?'#fff':'#15803d'};color:${pago?'#64748b':'#fff'};border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">${pago?'↺':'✓ Pago'}</button>
           <button onclick="window.cpNova('${c.id}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Editar</button>
           <button onclick="window.cpApagar('${c.id}')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Apagar</button>
-        </div>
-      </div>`;
+        </div></div>`;
     };
     ov.innerHTML=`<div style="width:100%;max-width:820px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
@@ -33511,15 +33500,14 @@ window.cliHistoricoImprimir = function(cliId){
       </div>
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
         ${card('Total em aberto',eur(r.totAb),`${cpDB().filter(c=>c.estado!=='pago').length} faturas`)}
-        ${card('Vencidas',r.vencN,eur(r.vencV),null,'#b91c1c')}
-        ${card('Vencem em 7 dias',r.sem7N,eur(r.sem7V),null,'#b45309')}
+        ${card('Vencidas',r.vencN,eur(r.vencV),'#b91c1c')}
+        ${card('Vencem em 7 dias',r.sem7N,eur(r.sem7V),'#b45309')}
         ${card('IVA das compras',eur(r.totIva),'dedutível, em aberto')}
       </div>
       <div>${lista.length?lista.map(linha).join(''):'<div style="text-align:center;color:#64748b;padding:30px;">Ainda não há faturas lançadas. Carrega em <b>+ Nova conta</b>.</div>'}</div>
     </div>`;
   }
 
-  // ---------- formulário ----------
   window.cpNova=function(id){
     const c=id?cpDB().find(x=>x.id===id):null;
     const forns=[...new Set((window.DB.fornecedores||[]).map(f=>f.nome||f.name||f.fornecedor).filter(Boolean))];
@@ -33529,11 +33517,14 @@ window.cliHistoricoImprimir = function(cliId){
       ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
       document.body.appendChild(ov);
     }
-    const fg='margin-bottom:12px;';
-    const lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;';
-    const inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
+    const fg='margin-bottom:12px;', lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;',
+          inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
     ov.innerHTML=`<div style="width:100%;max-width:520px;background:#fff;border-radius:16px;padding:22px;box-shadow:0 10px 40px rgba(15,36,48,.3);">
       <h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar conta':'Nova conta a pagar'}</h2>
+      ${id?'':`<div id="cp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
+        <b style="color:#0f2430;">📎 Arrasta aqui a fatura (PDF ou foto)</b><br><span style="font-size:12px;">para preencher sozinho — ou toca para escolher do computador</span>
+        <input id="cp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
+      <div id="cp-ocr-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`}
       <div style="${fg}"><label style="${lb}">Fornecedor</label>
         <input id="cp-forn" list="cp-forn-list" style="${inp}" value="${esc(c?.fornecedor||'')}" placeholder="Nome do fornecedor">
         <datalist id="cp-forn-list">${forns.map(f=>`<option value="${esc(f)}">`).join('')}</datalist></div>
@@ -33544,8 +33535,7 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="display:flex;gap:12px;">
         <div style="${fg}flex:1;"><label style="${lb}">Taxa de IVA</label>
           <select id="cp-rate" style="${inp}" onchange="window._cpCalc()">
-            ${[23,13,6,0].map(t=>`<option value="${t}" ${(c?.ivarate??23)==t?'selected':''}>${t}%</option>`).join('')}
-          </select></div>
+            ${[23,13,6,0].map(t=>`<option value="${t}" ${(c?.ivarate??23)==t?'selected':''}>${t}%</option>`).join('')}</select></div>
         <div style="${fg}flex:1;"><label style="${lb}">IVA (€)</label><input id="cp-iva" style="${inp}background:#f1f5f9;" readonly></div>
       </div>
       <div style="display:flex;gap:12px;">
@@ -33556,36 +33546,67 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
         <button onclick="document.getElementById('cp-form').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 16px;cursor:pointer;">Cancelar</button>
         <button onclick="window.cpGuardar('${id||''}')" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">Guardar</button>
-      </div>
-    </div>`;
+      </div></div>`;
     window._cpCalc();
+    if(!id){ const dz=document.getElementById('cp-drop'), fi=document.getElementById('cp-file');
+      dz.onclick=()=>fi.click();
+      fi.onchange=()=>{ if(fi.files[0]) cpOCR(fi.files[0]); };
+      dz.ondragover=e=>{e.preventDefault();dz.style.borderColor='#0e7c86';};
+      dz.ondragleave=()=>{dz.style.borderColor='#cbd5e1';};
+      dz.ondrop=e=>{e.preventDefault();dz.style.borderColor='#cbd5e1'; if(e.dataTransfer.files[0]) cpOCR(e.dataTransfer.files[0]);};
+    }
   };
   window._cpCalc=function(){
-    const g=num(document.getElementById('cp-gross')?.value);
-    const r=num(document.getElementById('cp-rate')?.value)/100;
-    const net=g/(1+r), iva=g-net;
-    const el=document.getElementById('cp-iva'); if(el) el.value=eur(iva);
+    const g=num(document.getElementById('cp-gross')?.value), r=num(document.getElementById('cp-rate')?.value)/100;
+    const el=document.getElementById('cp-iva'); if(el) el.value=eur(g-g/(1+r));
   };
+
+  // ---------- OCR da fatura (mesma via que o HidroGest já usa) ----------
+  async function cpOCR(file){
+    const msg=document.getElementById('cp-ocr-msg'); if(!msg) return;
+    const key=(window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+    if(!key){ msg.style.color='#b45309'; msg.innerHTML='⚠️ Falta a chave da Claude (Configurações → Email → API Key Claude). Preenche à mão.'; return; }
+    msg.style.color='#0e7c86'; msg.innerHTML='🤖 A ler a fatura…';
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('falha a ler o ficheiro'));r.readAsDataURL(file);});
+      const isPdf=file.type==='application/pdf';
+      const block=isPdf?{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}}
+                       :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}};
+      const prompt=`Analisa esta fatura de fornecedor e responde APENAS em JSON puro (sem markdown):
+{"fornecedor":"","nif":"","numero":"número da fatura","total":"valor total com IVA, só números e ponto decimal","iva":"taxa de IVA: 23, 13, 6 ou 0","data":"data da fatura AAAA-MM-DD","vencimento":"data de vencimento AAAA-MM-DD se existir","descricao":"breve descrição"}
+Deixa vazio o que não conseguires ler.`;
+      const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
+      if(!resp.ok) throw new Error('API '+resp.status);
+      const data=await resp.json();
+      const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
+      let p=null; try{p=JSON.parse(txt.replace(/```json|```/g,'').trim());}catch(e){}
+      if(!p) throw new Error('não veio em JSON');
+      const set=(id,v)=>{const el=document.getElementById(id); if(el&&v) el.value=v;};
+      set('cp-forn',p.fornecedor); set('cp-num',p.numero);
+      if(p.total){const n=parseFloat(String(p.total).replace(',','.')); if(!isNaN(n)&&n>0) document.getElementById('cp-gross').value=n.toFixed(2);}
+      if(p.iva&&['23','13','6','0'].includes(String(parseInt(p.iva)))) document.getElementById('cp-rate').value=String(parseInt(p.iva));
+      set('cp-dtf',p.data); set('cp-venc',p.vencimento); set('cp-notas',p.descricao);
+      window._cpCalc();
+      msg.style.color='#15803d'; msg.innerHTML='✓ Fatura lida — confere os campos e guarda.';
+    }catch(e){ msg.style.color='#b91c1c'; msg.innerHTML='Não consegui ler ('+(e.message||e)+'). Preenche à mão.'; }
+  }
+
   window.cpGuardar=async function(id){
-    const gross=num(document.getElementById('cp-gross').value);
-    const rate=num(document.getElementById('cp-rate').value);
-    const forn=document.getElementById('cp-forn').value.trim();
-    const venc=document.getElementById('cp-venc').value;
+    const gross=num(document.getElementById('cp-gross').value), rate=num(document.getElementById('cp-rate').value);
+    const forn=document.getElementById('cp-forn').value.trim(), venc=document.getElementById('cp-venc').value;
     if(!forn){toast('Falta o fornecedor.','⚠️');return;}
     if(!gross){toast('Falta o valor.','⚠️');return;}
     if(!venc){toast('Falta a data de vencimento.','⚠️');return;}
-    const net=gross/(1+rate/100), iva=gross-net;
-    const antiga=id?cpDB().find(x=>x.id===id):null;
-    const d={
-      id:id||('CP'+Date.now().toString(36)),
+    const net=gross/(1+rate/100), iva=gross-net, antiga=id?cpDB().find(x=>x.id===id):null;
+    const d={ id:id||('CP'+Date.now().toString(36)),
       fornecedor:forn, numero:document.getElementById('cp-num').value.trim(),
       gross:parseFloat(gross.toFixed(2)), ivarate:rate, iva:parseFloat(iva.toFixed(2)), net:parseFloat(net.toFixed(2)),
       dataFatura:document.getElementById('cp-dtf').value, vencimento:venc,
       notas:document.getElementById('cp-notas').value.trim(),
       estado:antiga?.estado||'aberto', pagoEm:antiga?.pagoEm||null,
-      criadoPor:antiga?.criadoPor||(window.currentUser?.id||null),
-      criadoEm:antiga?.criadoEm||new Date().toISOString(),
-    };
+      criadoPor:antiga?.criadoPor||(window.currentUser?.id||null), criadoEm:antiga?.criadoEm||new Date().toISOString() };
     try{ await window.fsSet('contasPagar', d.id, d);
       if(typeof auditLog==='function') auditLog(id?'conta_editada':'conta_criada',`Conta ${d.id} — ${d.fornecedor} — ${eur(d.gross)}`);
       document.getElementById('cp-form')?.remove(); toast(id?'Conta atualizada!':'Conta lançada!','✅'); cpRender();
@@ -33593,8 +33614,7 @@ window.cliHistoricoImprimir = function(cliId){
   };
   window.cpTogglePago=async function(id){
     const c=cpDB().find(x=>x.id===id); if(!c) return;
-    const upd={...c, estado:c.estado==='pago'?'aberto':'pago', pagoEm:c.estado==='pago'?null:iso()};
-    try{ await window.fsSet('contasPagar', id, upd); cpRender(); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
+    try{ await window.fsSet('contasPagar', id, {...c, estado:c.estado==='pago'?'aberto':'pago', pagoEm:c.estado==='pago'?null:iso()}); cpRender(); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
   };
   window.cpApagar=async function(id){
     const c=cpDB().find(x=>x.id===id); if(!c) return;
@@ -33602,30 +33622,26 @@ window.cliHistoricoImprimir = function(cliId){
     try{ await window.fsDel('contasPagar', id); cpRender(); toast('Conta apagada.','🗑️'); }catch(e){ toast('Erro: '+(e.message||e),'❌'); }
   };
 
-  // ---------- menu ----------
   function injetarNav(){
     const nav=document.getElementById('main-nav'); if(!nav||!podeVer()) return;
     let el=document.getElementById('ni-contas');
     const abertas=cpDB().filter(c=>c.estado!=='pago');
     const alerta=abertas.filter(c=>{const d=diasAte(c.vencimento);return d!==null&&d<=7;}).length;
     const badge=alerta?`<span style="margin-left:auto;background:#b91c1c;color:#fff;border-radius:20px;font-size:11px;font-weight:700;padding:1px 7px;">${alerta}</span>`:'';
-    const html=`<span class="ico">📅</span> Contas a Pagar${badge}`;
     if(!el){ el=document.createElement('div'); el.className='ni'; el.id='ni-contas'; el.onclick=window.cpAbrir; nav.appendChild(el); }
-    el.innerHTML=html;
+    el.innerHTML=`<span class="ico">📅</span> Contas a Pagar${badge}`;
   }
   if(typeof window.renderSidebar==='function'){ const orig=window.renderSidebar;
     window.renderSidebar=function(){ orig.apply(this,arguments); try{injetarNav();}catch(e){} }; }
   setInterval(injetarNav,2500); setTimeout(injetarNav,1400);
 
-  // ---------- subscrição da coleção ----------
   window.addEventListener('load',()=>{ setTimeout(()=>{ try{
     if(!window._db) return;
     const {_collection,_onSnapshot}=window;
     if(_collection&&_onSnapshot){
       _onSnapshot(_collection(window._db,'contasPagar'), snap=>{
         window.DB.contasPagar=snap.docs.map(d=>({...d.data(),id:d.id}));
-        try{injetarNav();}catch(e){}
-        if(document.getElementById('cp-ov')) cpRender();
+        try{injetarNav();}catch(e){} if(document.getElementById('cp-ov')) cpRender();
       });
     }
   }catch(e){} },2600); });

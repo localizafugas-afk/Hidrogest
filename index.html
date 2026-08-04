@@ -209,6 +209,7 @@ const SERVICOS_MASTER = [
   {id:'sv_reab1', nome:'Reabilitação Spray Epóxi / CIPP', h1:615, hadd:615, iva:6, tempo:480, diasTrabalho:1},
   {id:'sv_reab2', nome:'Reabilitação Spray Epóxi', h1:615, hadd:0, iva:6, tempo:480, diasTrabalho:1},
   {id:'sv8', nome:'Recuperação de Tubagem com Epóxi', h1:100, hadd:70, iva:23, tempo:480, diasTrabalho:2},
+  {id:'sv_desloc', nome:'Deslocação', unidade:'km', precoUnd:0.60, h1:0, hadd:0, iva:23},
 ];
 const DEMO_RECIBOS  = ['R001','R002','R003','R004'];
 const DEMO_DESPESAS = ['D001','D002'];
@@ -232,6 +233,10 @@ async function seedIfEmpty() {
   // Seed serviços se não existirem
   const svsnap = await getDocs(COLS.servicos);
   if(svsnap.empty) SERVICOS_MASTER.forEach(s=>batch.set(doc(db,'servicos',s.id),s));
+  // Garantir que o serviço "Deslocação" (por km) existe mesmo em bases já povoadas
+  else if(!svsnap.docs.some(d=>d.id==='sv_desloc')){
+    batch.set(doc(db,'servicos','sv_desloc'), {id:'sv_desloc', nome:'Deslocação', unidade:'km', precoUnd:0.60, h1:0, hadd:0, iva:23});
+  }
   const msnap = await getDocs(COLS.meta);
   if(msnap.empty){
     batch.set(doc(db,'meta','nextRec'),  {value:1});
@@ -1215,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.22<br>
+      HidroGest v15.28<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1226,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.22 · Jul 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.28 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1240,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.22<br>
+      HidroGest v15.28<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -2856,6 +2861,7 @@ Localiza Fugas
             <option value="m2">📐 Metro quadrado (m²)</option>
             <option value="ml">📏 Metro linear (ml)</option>
             <option value="un">📦 Unidade</option>
+            <option value="ui">🔍 Unidade inspecionada</option>
             <option value="vb">📋 Verba (valor fixo)</option>
           </select>
         </div>
@@ -3087,6 +3093,10 @@ Localiza Fugas
         <div id="os-sug-nota" style="font-size:10px;color:#6b7280;margin-top:6px;border-top:1px solid #bbf7d0;padding-top:6px;"></div>
       </div>
       <div id="os-tec-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+      <div id="os-tec-principal-group" style="display:none;margin-bottom:12px;">
+        <label style="font-size:12px;color:#64748b;display:block;margin-bottom:4px;">👷 Técnico principal <span style="color:#94a3b8;">(faz a OS e o relatório; o outro fica auxiliar, só ocupa a agenda)</span></label>
+        <select class="fi" id="os-tec-principal" style="width:100%;"></select>
+      </div>
       <div id="os-tec-sugestao" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-bottom:14px;"></div>
 
       <!-- ── GRELHA DE HORÁRIOS DO DIA (gerada por região) ── -->
@@ -3116,6 +3126,24 @@ Localiza Fugas
         <div class="fg"><label>Total estimado c/ IVA (€)</label>
           <input class="fi" id="os-total" readonly style="background:var(--s2);font-weight:700;font-size:15px;color:var(--accent)">
         </div>
+      </div>
+
+      <!-- ── CALCULADORA DE DESLOCAÇÃO (só p/ serviço Deslocação) ── -->
+      <div id="os-desloc-calc" style="display:none;background:#f0f9ff;border:1px solid #7dd3fc;border-radius:10px;padding:14px 16px;margin-bottom:14px;">
+        <div style="font-weight:700;color:#0369a1;margin-bottom:4px;font-size:13px;">🚗 Calcular distância</div>
+        <div style="font-size:11px;color:#0284c7;margin-bottom:10px;">Indica o concelho de partida e de chegada — calcula os km ida e volta. Não é preciso para trabalhos em Lisboa, Porto, Braga, Guimarães ou Famalicão.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:11px;color:#0369a1;font-weight:600;">Concelho de partida</label>
+            <input class="fi" id="os-desloc-partida" placeholder="Ex: Braga" style="width:160px;">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:11px;color:#0369a1;font-weight:600;">Concelho de chegada</label>
+            <input class="fi" id="os-desloc-chegada" placeholder="Ex: Viana do Castelo" style="width:160px;">
+          </div>
+          <button type="button" onclick="osDeslocCalcular()" style="padding:9px 14px;border:none;border-radius:8px;background:#0284c7;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">Calcular km</button>
+        </div>
+        <div id="os-desloc-status" style="font-size:12px;color:#0369a1;margin-top:8px;font-weight:600;"></div>
       </div>
 
       <!-- ── CAMPO DE MEDIDA (m² ou ml) — aparece só para Impermeabilização / Recuperação ── -->
@@ -3451,6 +3479,7 @@ Localiza Fugas
             <option value="">Por hora (padrão)</option>
             <option value="ml">Por metro linear (ml)</option>
             <option value="m2">Por metro quadrado (m²)</option>
+            <option value="km">Por quilómetro (km)</option>
           </select>
         </div>
         <div class="fg" id="srv-preco-und-group" style="display:none;">
@@ -5002,7 +5031,7 @@ function tecRenderBriefingRelatorios(){
       </div>
       <!-- Lista top 5 -->
       <div style="padding:0 12px 12px;">
-        `+pendentes.slice(0,5).map(p=>{
+        `+[].map(p=>{
           const cor = rpDiasCor(p.dias);
           const q2="'";
           return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,.08);border-radius:8px;margin-bottom:6px;cursor:pointer;" onclick="rpAbrirLinhaRelatorio('+q2+p.os.id+q2+')">'
@@ -5014,14 +5043,8 @@ function tecRenderBriefingRelatorios(){
             +'<span style="font-size:14px;color:#93c5fd;">›</span>'
             +'</div>';
         }).join('')
-        +(pendentes.length>5?'<div style="text-align:center;padding:4px 0;font-size:11px;color:#93c5fd;">+'+(pendentes.length-5)+' mais</div>':'')
+        +(false?'<div style="text-align:center;padding:4px 0;font-size:11px;color:#93c5fd;">+'+(pendentes.length-5)+' mais</div>':'')
         +`
-      </div>
-      <!-- Botão ver todos -->
-      <div style="padding:0 12px 14px;">
-        <button onclick="tecVerRelatoriosAtraso()" style="width:100%;padding:11px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">
-          📋 Ver todos os relatórios pendentes
-        </button>
       </div>
     </div>`;
 }
@@ -8834,6 +8857,73 @@ function osCalcMedida(){
   if(h1El) h1El.value = precoUnd;
 }
 
+// ── Calculadora de deslocação por concelho (km ida e volta) ──
+// Cidades onde o trabalho é local e não se cobra deslocação.
+const OS_DESLOC_ISENTOS = ['lisboa','porto','braga','guimaraes','famalicao','vila nova de famalicao'];
+function osDeslocNorm(s){
+  return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+async function osDeslocGeocodConcelho(nome){
+  const q = encodeURIComponent(nome + ', Portugal');
+  const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=3&countrycodes=pt`,
+    { headers:{'User-Agent':'HidroGest/1.0','Accept-Language':'pt'} });
+  const d = await r.json();
+  const pt = (d||[]).find(x => { const la=parseFloat(x.lat), lo=parseFloat(x.lon); return la>36&&la<42&&lo>-10&&lo<-6; });
+  if(!pt) return null;
+  return { lat: parseFloat(pt.lat), lon: parseFloat(pt.lon) };
+}
+async function osDeslocCalcular(){
+  const partida = (document.getElementById('os-desloc-partida')?.value||'').trim();
+  const chegada = (document.getElementById('os-desloc-chegada')?.value||'').trim();
+  const status  = document.getElementById('os-desloc-status');
+  const setStatus = (t,cor)=>{ if(status){ status.textContent=t; status.style.color=cor||'#0369a1'; } };
+  if(!chegada){ setStatus('Indica pelo menos o concelho de chegada.', '#b91c1c'); return; }
+  // Isenção: trabalhos nas cidades locais não precisam de deslocação
+  if(OS_DESLOC_ISENTOS.includes(osDeslocNorm(chegada))){
+    const q = document.getElementById('os-medida-qtd'); if(q){ q.value = 0; osCalcMedida(); }
+    setStatus(`Trabalho local em ${chegada} — deslocação não aplicável (0 km).`, '#047857');
+    return;
+  }
+  if(!partida){ setStatus('Indica o concelho de partida.', '#b91c1c'); return; }
+  setStatus('A calcular distância…');
+  try{
+    const [a,b] = await Promise.all([ osDeslocGeocodConcelho(partida), osDeslocGeocodConcelho(chegada) ]);
+    if(!a || !b){ setStatus('Não foi possível localizar um dos concelhos. Verifica os nomes.', '#b91c1c'); return; }
+    const linha = haversineKm(a, b);          // distância em linha reta
+    const estrada = linha * 1.3;              // aproximação da distância por estrada
+    const idaVolta = Math.round(estrada * 2); // ida e volta
+    const q = document.getElementById('os-medida-qtd'); if(q){ q.value = idaVolta; osCalcMedida(); }
+    setStatus(`≈ ${idaVolta} km ida e volta (${Math.round(estrada)} km só ida). Ajusta se necessário.`, '#047857');
+  }catch(err){
+    setStatus('Erro ao calcular. Tenta novamente.', '#b91c1c');
+  }
+}
+
+// ── Calculadora de deslocação para a proposta (valor em € a 0,60 €/km) ──
+async function propDeslocCalcular(){
+  const partida = (document.getElementById('prop-desloc-partida')?.value||'').trim();
+  const chegada = (document.getElementById('prop-desloc-chegada')?.value||'').trim();
+  const status  = document.getElementById('prop-desloc-status');
+  const setStatus = (t,cor)=>{ if(status){ status.textContent=t; status.style.color=cor||'#047857'; } };
+  const campo = document.getElementById('prop-desloc');
+  if(!chegada){ setStatus('Indica pelo menos o concelho de chegada.', '#b91c1c'); return; }
+  if(OS_DESLOC_ISENTOS.includes(osDeslocNorm(chegada))){
+    if(campo){ campo.value = 0; propostaCalcTotal(); }
+    setStatus(`Trabalho local em ${chegada} — deslocação não aplicável.`, '#047857');
+    return;
+  }
+  if(!partida){ setStatus('Indica o concelho de partida.', '#b91c1c'); return; }
+  setStatus('A calcular…', '#0369a1');
+  try{
+    const [a,b] = await Promise.all([ osDeslocGeocodConcelho(partida), osDeslocGeocodConcelho(chegada) ]);
+    if(!a || !b){ setStatus('Não foi possível localizar um dos concelhos.', '#b91c1c'); return; }
+    const idaVolta = Math.round(haversineKm(a,b) * 1.3 * 2);
+    const valor = +(idaVolta * 0.60).toFixed(2);
+    if(campo){ campo.value = valor; propostaCalcTotal(); }
+    setStatus(`≈ ${idaVolta} km ida e volta × 0,60 € = ${valor.toFixed(2).replace('.',',')} €`, '#047857');
+  }catch(err){ setStatus('Erro ao calcular. Tenta novamente.', '#b91c1c'); }
+}
+
 function osAutoFillCliente(){
   // Se cliente seleccionado foi eliminado ou arquivado, limpar
   const _cliSelVal = document.getElementById('os-cli-sel')?.value;
@@ -9311,6 +9401,9 @@ function srvUnidadeChange(){
   } else if(und === 'm2'){
     grp.style.display = 'block';
     if(lbl) lbl.textContent = 'Preço por metro quadrado — m² (€)';
+  } else if(und === 'km'){
+    grp.style.display = 'block';
+    if(lbl) lbl.textContent = 'Preço por quilómetro — km (€)';
   } else {
     grp.style.display = 'none';
   }
@@ -9405,6 +9498,8 @@ function osAutoFillServico(){
   const UNIDADE_LABELS = { m2:{lbl:'m²', titulo:'metros quadrados (m²)'},
                             ml:{lbl:'ml', titulo:'metros lineares (ml)'},
                             un:{lbl:'unidade(s)', titulo:'unidades'},
+                            ui:{lbl:'un. inspec.', titulo:'unidades inspecionadas'},
+                            km:{lbl:'km', titulo:'quilómetros (km)'},
                             vb:{lbl:'verba', titulo:'verba (valor fixo)'} };
   const undInfo  = UNIDADE_LABELS[srv.unidade];
   const ehMedida = !!undInfo;
@@ -9413,6 +9508,8 @@ function osAutoFillServico(){
   if(medGrp){
     if(ehMedida){
       medGrp.style.display = 'block';
+      const _dcalc = document.getElementById('os-desloc-calc');
+      if(_dcalc) _dcalc.style.display = (srv.id === 'sv_desloc' || srv.unidade === 'km') ? 'block' : 'none';
       document.getElementById('os-medida-titulo').textContent   = `${undInfo.titulo} de ${srv.nome||'serviço'}`;
       document.getElementById('os-medida-unidade').textContent  = undInfo.lbl;
       document.getElementById('os-medida-und-label2').textContent = undInfo.lbl;
@@ -9431,6 +9528,8 @@ function osAutoFillServico(){
       osCalcMedida();
     } else {
       medGrp.style.display = 'none';
+      const _dcalc2 = document.getElementById('os-desloc-calc');
+      if(_dcalc2) _dcalc2.style.display = 'none';
       if(haddGrp) haddGrp.style.display = '';
     }
   }
@@ -9715,6 +9814,13 @@ function osOpenModal(preData={}){
       <span style="font-weight:${checked?'700':'400'}">${u.name}</span>
     </label>`;
   }).join('');
+
+  // Restaurar/mostrar o seletor de técnico principal
+  if(typeof osAtualizarPrincipal==='function'){
+    osAtualizarPrincipal();
+    const _sp=document.getElementById('os-tec-principal');
+    if(_sp && preData.tecnicoPrincipal && [...(_sp.options||[])].some(o=>o.value===preData.tecnicoPrincipal)) _sp.value=preData.tecnicoPrincipal;
+  }
 
   // Valores
   const agora = new Date();
@@ -10678,6 +10784,7 @@ function osSelecionarTecnico(tecId){
     }
   });
   osAvisarSobreposicaoTempoReal();
+  if(typeof osAtualizarPrincipal==='function') osAtualizarPrincipal();
   toast('👷 Técnico seleccionado!');
 }
 
@@ -10894,6 +11001,7 @@ async function osSalvar(){
   const camposFormulario={
     id, clienteId:cliId, clienteNomeSnapshot:(cli?.nome||window._osCliObjPendente?.nome||''), servicoId:srvId,
     tecnicos:tecs,
+    tecnicoPrincipal:(document.getElementById('os-tec-principal')?.value)||tecs[0]||null,
     data:document.getElementById('os-data').value,
     horaIni:document.getElementById('os-hora-ini').value,
     horaFim:document.getElementById('os-hora-fim').value,
@@ -12734,11 +12842,32 @@ function osLimparFiltros(){
 }
 
 // ── DETALHE OS ────────────────────────────────────────────────
+// ── Técnico principal / auxiliar ──────────────────────────────
+// O principal é quem faz a OS e o relatório. O auxiliar só ocupa a agenda
+// e vê o trabalho em modo leitura (cliente/morada), sem registar nada.
+function osTecnicoPrincipal(o){ return (o && (o.tecnicoPrincipal || (o.tecnicos||[])[0])) || null; }
+function osEhTecnicoAuxiliar(o){
+  const u = window.currentUser;
+  if(!u || u.role!=='tecnico') return false;
+  const tecs = (o && o.tecnicos) || [];
+  return tecs.includes(u.id) && osTecnicoPrincipal(o) !== u.id;
+}
+function osBloquearAuxiliar(o, acao){
+  if(osEhTecnicoAuxiliar(o)){
+    const nomePrinc = (window.DB.users||[]).find(u=>u.id===osTecnicoPrincipal(o))?.name || 'o técnico principal';
+    const msg = `És técnico auxiliar nesta OS. ${acao||'Esta ação'} é da responsabilidade de ${nomePrinc}.`;
+    if(typeof toast==='function') toast(msg, '🔒', 5000); else alert(msg);
+    return true;
+  }
+  return false;
+}
+
 function osAbrirDetalhe(id){
   const o=(window.DB.ordens||[]).find(x=>x.id===id); if(!o) return;
   const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
   const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
   const isMeuTec=(o.tecnicos||[]).includes(window.currentUser.id);
+  const ehAux=osEhTecnicoAuxiliar(o);
   const isSup=window.currentUser.role==='supervisor'||window.currentUser.role==='gerente'||window.currentUser.role==='admin';
   // Morada de serviço
   const {morada:moradaSrv, mapsUrl, cpOk:_moradaCpOk} = _tecBuildMaps(cli);  // Data/hora criação
@@ -12852,6 +12981,7 @@ function osAbrirDetalhe(id){
     </div>`;
 
   body.innerHTML=`
+    ${ehAux?`<div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;">🔒 És <strong>técnico auxiliar</strong> nesta OS — vês os dados em modo leitura. A OS e o relatório ficam a cargo do técnico principal.</div>`:''}
     <!-- CABEÇALHO DA OS -->
     <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;margin:-16px -16px 16px;padding:16px 20px;border-radius:var(--r) var(--r) 0 0;">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -13121,6 +13251,8 @@ function osAbrirDetalhe(id){
 
 // ── Iniciar trabalho (Passo 1) ───────────────────────────────
 async function osIniciarTrabalho(id){
+  const _oAux=(window.DB.ordens||[]).find(x=>x.id===id);
+  if(_oAux && osBloquearAuxiliar(_oAux,'Iniciar o trabalho')) return;
   const ini=document.getElementById('os-hora-ini-real')?.value||new Date().toTimeString().slice(0,5);
   const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
   await window.fsSetMerge('ordens',id,{...os,estado:'em_curso',horaIniReal:ini,iniciadoEm:new Date().toISOString()});
@@ -18481,6 +18613,24 @@ function osTecLabelClick(label, cor){
   const bgLight=`rgba(${r},${g},${b},0.12)`;
   label.style.background=cb.checked?bgLight:'var(--s2)';
   label.style.borderColor=cb.checked?cor:'var(--border)';
+  osAtualizarPrincipal();
+}
+
+// Mostra o seletor de "técnico principal" quando há 2+ técnicos escolhidos
+// e preenche-o com os técnicos marcados, mantendo a escolha anterior se válida.
+function osAtualizarPrincipal(){
+  const checked=[...document.querySelectorAll('#os-tec-checkboxes input:checked')].map(x=>x.value);
+  const grp=document.getElementById('os-tec-principal-group');
+  const sel=document.getElementById('os-tec-principal');
+  if(!grp||!sel) return;
+  if(checked.length<2){ grp.style.display='none'; sel.innerHTML=''; return; }
+  const anterior=sel.value;
+  sel.innerHTML=checked.map(id=>{
+    const nome=(window.DB.users||[]).find(u=>u.id===id)?.name||id;
+    return `<option value="${id}">${nome}</option>`;
+  }).join('');
+  if(checked.includes(anterior)) sel.value=anterior;
+  grp.style.display='block';
 }
 
 async function osSugerirTecnicoPainel(){
@@ -22297,6 +22447,7 @@ function tecHistoricoCliente(clienteId, excludeOsId){
 // ── Abrir formulário de preenchimento (wizard simplificado) ──
 function rpAbrirFormulario(osId, preserveTemp){
   const os  = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  if(osBloquearAuxiliar(os,'O relatório')) return;
   const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
   const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
   const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
@@ -22544,6 +22695,8 @@ function rpAbrirFormulario(osId, preserveTemp){
     <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
       <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px;">📍 Localização (obrigatório)</div>
       <div style="font-size:11px;color:#9a3412;margin-bottom:10px;line-height:1.5;">Identifique de forma <strong>específica</strong>. Se houver mais do que uma casa de banho ou quarto, diga <strong>qual</strong> (ex.: &quot;WC da suite&quot;, &quot;quarto das crianças&quot;). Indique sempre a <strong>fração ou local</strong>.</div>
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Nº da fração inspecionada <span style="color:#dc2626;">*</span></label>
+      <input class="fi" id="rp-num-fracao" placeholder="Ex.: 2.º Dto, Fração K, Loja 3" style="font-size:13px;margin-bottom:10px;" value="${c.numeroFracao||''}">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local / fração onde o problema se manifesta</label>
       <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;margin-bottom:10px;">${c.localManifestacao||''}</textarea>
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local(is) / fração onde se fez a pesquisa</label>
@@ -22589,9 +22742,10 @@ function rpAbrirFormulario(osId, preserveTemp){
       ${fotosHTML}
       <label style="aspect-ratio:1;align-self:start;border-radius:8px;border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#f8fafc;color:#64748b;font-size:12px;">
         <span style="font-size:24px;">📷</span>Adicionar
-        <input type="file" accept="image/*" multiple style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
+        <input type="file" accept="image/*" style="display:none;" onchange="rpAdicionarFotosAdmin(event,'${osId}')">
       </label>
     </div>
+    <div style="font-size:11px;color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 9px;margin:-4px 0 10px;">📍 Indique o local de cada foto antes de adicionar a próxima.</div>
 
     ${secTit(7,'Documentos Anexos','Ficheiros a enviar com o relatório')}
     <div id="rp-anexos-lista" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
@@ -22674,6 +22828,14 @@ function rpAtualizarLegendaFoto(i, valor){
 }
 
 function rpAdicionarFotosAdmin(evt, osId){
+  // Só liberta nova foto depois de o local (legenda) da foto anterior estar preenchido
+  const _semLocal = (window._rpFotosTemp||[]).findIndex(f => !((f.legenda||'').trim()));
+  if(_semLocal >= 0){
+    if(typeof toast === 'function') toast(`Indique o local da foto ${_semLocal+1} antes de inserir a próxima.`, '📍', 5000);
+    else alert(`Indique o local da foto ${_semLocal+1} antes de inserir a próxima.`);
+    evt.target.value = '';
+    return;
+  }
   const files = [...evt.target.files];
   if(!files.length) return;
   let loaded = 0;
@@ -22837,6 +22999,7 @@ function rpRecolherCampos(){
     planta:        plantaVal,
     obsPlanta:     gc('rp-obs-planta')    || existing.obsPlanta || '',
     divisoes:      temControlo('rp-zona') ? getChecked('rp-zona') : (existing.divisoes||[]),
+    numeroFracao: gc('rp-num-fracao') || existing.numeroFracao || '',
     localManifestacao: gc('rp-local-manifestacao') || existing.localManifestacao || '',
     locaisPesquisados: gc('rp-locais-pesquisados') || existing.locaisPesquisados || '',
     // Campos de compatibilidade com o viewer/Word (mapeados dos novos)
@@ -25885,6 +26048,7 @@ async function osConcluirComAssinaturas(){
     const _cps = _rel.campos || {};
     const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;
     const _faltam = [];
+    if(!_cps.numeroFracao || !_cps.numeroFracao.trim()) _faltam.push('número da fração inspecionada');
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
     if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
     if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
@@ -26175,6 +26339,7 @@ async function rpSyncFinanceiro(os){
     if(recibo){
       // Notificação visual
       osNotifPagamento(os.id,'verde',pagLabel,os.total);
+      osCriarAvisoFatura(os, pagLabel); // avisar a gestão p/ emitir a Fatura-Recibo (pagamento direto ao técnico: MB, dinheiro, MBway, cheque)
       // Alerta na tela
       const notif = document.createElement('div');
       notif.style.cssText='position:fixed;bottom:80px;right:20px;z-index:9999;background:#1e3a5f;color:#fff;border-radius:12px;padding:14px 18px;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.3);animation:slideIn .3s;';
@@ -29030,10 +29195,9 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos a seguinte proposta para realização do serviço de Detecção de Fuga de Água na sua propriedade.\n\nA Localiza Fugas utiliza tecnologias de ponta — deteção acústica, termografia, eletroacústica e correlação de pressão — para localizar fugas com precisão, sem obras destrutivas.',
     procedimento: '',
     descritivo: `Diagnóstico completo com recurso às seguintes metodologias combinadas, aplicadas conforme as necessidades identificadas no local:\n\n• Termografia de infravermelhos (FLIR): Detecção de anomalias térmicas em paredes, tetos e pavimentos, revelando zonas húmidas e percursos de água invisíveis a olho nu.\n• Higrómetro e medição de humidade: Quantificação dos níveis de humidade nos materiais de construção para confirmação e localização precisa das zonas afectadas.\n• Endoscopia / vídeo-inspeção: Inspeção visual interior de cavidades, paredes e canalizações com câmara de alta resolução, sem necessidade de obras.\n• Gás traçador (azoto/hidrogénio): Localização precisa de fugas em canalizações enterradas ou embutidas, sem escavação.\n• Pressurização e teste de estanqueidade: Verificação da integridade de tubagens e redes, com detecção de perdas de pressão.\n• Eletroacústica: A tecnologia eletroacústica permite detectar a fuga de água através do som. É muito utilizada em grandes fugas, em redes de incêndio e em redes onde sabemos o caminho da tubulação. Para o uso desta metodologia temos de levar em conta a pressão, o material do tubo, o diâmetro, a profundidade, o tipo de enchimento, a compactação, a saturação da água na área e o ruído ambiente.\n• Rastreador químico: Técnica utilizada para a detecção de infiltrações de água em tubagens, terraços e paredes. Aplicamos em tubagens não pressurizadas (descida de esgoto sanitário, gordura e águas pluviais) e estruturalmente em lajes, pisos e piscinas. O produto não é tóxico, não mancha e não prejudica o meio ambiente.`,
-    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. Os valores indicados incluem deslocamento.\n8. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n9. Relatório técnico somente é entregue após confirmação do pagamento.`,
+    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n8. Relatório técnico somente é entregue após confirmação do pagamento.`,
     condicoes: [
       'Válido por 30 dias.',
-      'Inclui deslocamento.',
       'Pagamento no ato da conclusão da intervenção.',
       'Relatório entregue após confirmação do pagamento.',
       'Margens de segurança: 1 m (interior) / 3 m (exterior).',
@@ -29044,10 +29208,9 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos a seguinte proposta para realização do serviço de Pesquisa Não Destrutiva de Infiltrações na sua propriedade.\n\nA nossa equipa técnica certificada identifica a origem e o percurso de infiltrações por métodos não destrutivos, evitando obras desnecessárias.',
     procedimento: '',
     descritivo: `Diagnóstico completo com recurso às seguintes metodologias combinadas, aplicadas conforme as necessidades identificadas no local:\n\n• Termografia de infravermelhos (FLIR): Detecção de anomalias térmicas em paredes, tetos e pavimentos, revelando zonas húmidas e percursos de água invisíveis a olho nu.\n• Higrómetro e medição de humidade: Quantificação dos níveis de humidade nos materiais de construção para confirmação e localização precisa das zonas afectadas.\n• Endoscopia / vídeo-inspeção: Inspeção visual interior de cavidades, paredes e canalizações com câmara de alta resolução, sem necessidade de obras.\n• Gás traçador (azoto/hidrogénio): Localização precisa de fugas em canalizações enterradas ou embutidas, sem escavação.\n• Pressurização e teste de estanqueidade: Verificação da integridade de tubagens e redes, com detecção de perdas de pressão.\n• Eletroacústica: A tecnologia eletroacústica permite detectar a fuga de água através do som. É muito utilizada em grandes fugas, em redes de incêndio e em redes onde sabemos o caminho da tubulação. Para o uso desta metodologia temos de levar em conta a pressão, o material do tubo, o diâmetro, a profundidade, o tipo de enchimento, a compactação, a saturação da água na área e o ruído ambiente.\n• Rastreador químico: Técnica utilizada para a detecção de infiltrações de água em tubagens, terraços e paredes. Aplicamos em tubagens não pressurizadas (descida de esgoto sanitário, gordura e águas pluviais) e estruturalmente em lajes, pisos e piscinas. O produto não é tóxico, não mancha e não prejudica o meio ambiente. A detecção é feita com lâmpada ultravioleta que identifica o corante mesmo em baixas concentrações.`,
-    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. Os valores indicados incluem deslocamento.\n8. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n9. Relatório técnico somente é entregue após confirmação do pagamento.`,
+    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n8. Relatório técnico somente é entregue após confirmação do pagamento.`,
     condicoes: [
       'Válido por 30 dias.',
-      'Inclui deslocamento.',
       'Pagamento no ato da conclusão da intervenção.',
       'Relatório entregue após confirmação do pagamento.',
       'Margens de segurança: 1 m (interior) / 3 m (exterior).',
@@ -29061,7 +29224,6 @@ const PROPOSTA_MODELOS = {
     obs: `Termos e Condições para a Prestação dos Serviços\n\n1. Condições de Acesso Técnicas\nPara a realização da vídeo inspeção nos tubos de queda (águas pluviais, esgoto de cozinhas e instalações sanitárias), é indispensável o acesso seguro à cobertura/telhado do edifício.\nResponsabilidade do Condomínio: É de total responsabilidade do cliente (ou da administração do condomínio) garantir e facultar o livre acesso ao telhado, disponibilizando escadas adequadas e seguras que cumpram as normas de segurança no trabalho.\n\n2. Impossibilidade de Acesso e Taxa de Deslocação\nCaso a nossa equipa técnica fique impossibilitada de realizar os trabalhos por motivos alheios à nossa vontade (como falta de chaves, ausência de responsável ou falta de condições de segurança no acesso), aplicar-se-á a seguinte política:\nTempo de Espera: A equipa técnica aguardará no local por um período máximo de 30 minutos, contados a partir da hora agendada/chegada.\nTaxa de Frustração/Deslocação: Findo o tempo de espera sem que o acesso seja garantido, o serviço será cancelado e será cobrado o valor fixo de € 150,00 (cento e cinquenta euros), a título de deslocação, custos logísticos e tempo de espera da equipa.`,
     condicoes: [
       'Válido por 30 dias.',
-      'Inclui deslocamento.',
       'Pagamento no ato da conclusão da intervenção.',
       'Relatório entregue após confirmação do pagamento.',
       'Acesso seguro à cobertura/telhado é responsabilidade do cliente/condomínio.',
@@ -29072,10 +29234,9 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos proposta para serviço de Desentupimento de tubagem/ramal.\n\nA nossa equipa dispõe de equipamento de hidrojato de alta pressão e sondas mecânicas para resolver obstruções de forma rápida e eficaz.',
     procedimento: '',
     descritivo: `Diagnóstico completo com recurso às seguintes metodologias combinadas, aplicadas conforme as necessidades identificadas no local:\n\n• Termografia de infravermelhos (FLIR): Detecção de anomalias térmicas em paredes, tetos e pavimentos, revelando zonas húmidas e percursos de água invisíveis a olho nu.\n• Higrómetro e medição de humidade: Quantificação dos níveis de humidade nos materiais de construção para confirmação e localização precisa das zonas afectadas.\n• Endoscopia / vídeo-inspeção: Inspeção visual interior de cavidades, paredes e canalizações com câmara de alta resolução, sem necessidade de obras.\n• Gás traçador (azoto/hidrogénio): Localização precisa de fugas em canalizações enterradas ou embutidas, sem escavação.\n• Pressurização e teste de estanqueidade: Verificação da integridade de tubagens e redes, com detecção de perdas de pressão.\n• Eletroacústica: A tecnologia eletroacústica permite detectar a fuga de água através do som. É muito utilizada em grandes fugas, em redes de incêndio e em redes onde sabemos o caminho da tubulação. Para o uso desta metodologia temos de levar em conta a pressão, o material do tubo, o diâmetro, a profundidade, o tipo de enchimento, a compactação, a saturação da água na área e o ruído ambiente.\n• Rastreador químico: Técnica utilizada para a detecção de infiltrações de água em tubagens, terraços e paredes. Aplicamos em tubagens não pressurizadas (descida de esgoto sanitário, gordura e águas pluviais) e estruturalmente em lajes, pisos e piscinas. O produto não é tóxico, não mancha e não prejudica o meio ambiente. A detecção é feita com lâmpada ultravioleta que identifica o corante mesmo em baixas concentrações.`,
-    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. Os valores indicados incluem deslocamento.\n8. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n9. Relatório técnico somente é entregue após confirmação do pagamento.`,
+    obs: `A) Termo de Responsabilidade e Limitação de Garantia\n1. Plantas de Infraestrutura: Na falta de plantas de tubagens, a localização de fugas baseia-se exclusivamente em métodos de diagnóstico técnico. Caso existam plantas, estas serão usadas como referência, não sendo a empresa responsável por falhas de localização uma vez que possam ter ocorrido desvios de traçado ou obras não registadas na documentação fornecida.\n2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas: Raio de 1 metro a partir do ponto indicado. Áreas Externas (Solos Porosos/Areia/Terra): Raio de 3 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia, por não ter localizado a fuga, e ao chegarmos ao local constatarmos que a mesma se encontra dentro da margem de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.\n3. Manuseamento de Equipamentos: Para a execução do diagnóstico, é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos decorrentes do seu estado de conservação ou fragilidade.\n4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, sendo que focos secundários podem existir e apenas ser detetados após a reparação do primeiro.\n\nB) Condições Comerciais e de Faturação\n1. Relatórios Técnicos: Serão enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.\n2. Pagamento no ato da conclusão da intervenção. Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Solicitamos enviar o comprovativo para localizafugas@gmail.com.\n3. Alterações de Fatura: Após a emissão do documento fiscal, não será possível alterar o nome ou o NIF do cliente.\n4. Tabela de Taxas Adicionais: Leitura de Rastreador Químico: €150,00 + IVA por retorno. Tempo de Espera: hora adicional + IVA. Trabalho à Hora: retornos cobrados como horas adicionais.\n5. Logística e Estacionamento: Em serviços faturados à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos adicionais são integrados no tempo total.\n6. Orçamento válido por 30 dias a partir da data de emissão.\n7. O acesso a coberturas ou espaços técnicos deve estar disponível no dia.\n8. Relatório técnico somente é entregue após confirmação do pagamento.`,
     condicoes: [
       'Válido por 30 dias.',
-      'Inclui deslocamento.',
       'Pagamento no ato da conclusão da intervenção.',
       'Relatório entregue após confirmação do pagamento.',
       'Margens de segurança: 1 m (interior) / 3 m (exterior).',
@@ -29086,7 +29247,7 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos proposta para execução de trabalhos de Impermeabilização.\n\nA aplicação de membranas impermeabilizantes de alta qualidade resolve definitivamente problemas de infiltração em coberturas, terraços e superfícies expostas.',
     procedimento: '',
     descritivo: `• Preparação e limpeza da superfície a tratar\n• Regularização e tratamento de fissuras e juntas\n• Aplicação de membrana impermeabilizante de alta performance\n• Tratamento de remates, platibandas e pontos singulares\n• Teste de estanquidade após aplicação\n• Relatório fotográfico de início e fim dos trabalhos\n• Garantia de execução`,
-    obs: `1. Orçamento válido por 30 dias.\n2. Os valores incluem deslocamento.\n3. Duração estimada: 3 dias úteis.\n4. As superfícies devem estar secas e acessíveis no dia do início.\n5. A área de intervenção deve ser previamente medida e confirmada.\n6. Adjudicação: 50% no início dos trabalhos, restante na conclusão.`,
+    obs: `1. Orçamento válido por 30 dias.\n2. Duração estimada: 3 dias úteis.\n3. As superfícies devem estar secas e acessíveis no dia do início.\n4. A área de intervenção deve ser previamente medida e confirmada.\n5. Adjudicação: 50% no início dos trabalhos, restante na conclusão.`,
     condicoes: [
       'Válido por 30 dias.',
       'Adjudicação: 50% início, 50% conclusão.',
@@ -29098,7 +29259,7 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos proposta para Substituição de Contador de Água.\n\nA substituição do contador garante medições precisas e evita futuros litígios com a entidade gestora de água.',
     procedimento: '',
     descritivo: `• Remoção do contador existente com registo da leitura final\n• Fornecimento e instalação de novo contador homologado\n• Verificação de estanquidade após montagem\n• Registo da leitura inicial\n• Relatório de substituição para apresentar à entidade gestora\n• Deslocação e mão de obra incluídas`,
-    obs: `1. Orçamento válido por 30 dias.\n2. Os valores incluem deslocamento e o contador.\n3. IVA à taxa reduzida de 6% aplicável.\n4. Confirmar localização e diâmetro do contador existente antes do início.\n5. Pode ser necessária autorização prévia da entidade gestora de águas.`,
+    obs: `1. Orçamento válido por 30 dias.\n2. Os valores incluem o contador.\n3. IVA à taxa reduzida de 6% aplicável.\n4. Confirmar localização e diâmetro do contador existente antes do início.\n5. Pode ser necessária autorização prévia da entidade gestora de águas.`,
     condicoes: [
       'Válido por 30 dias.',
       'IVA 6% (taxa reduzida).',
@@ -29110,10 +29271,9 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos proposta para Reparação de Rotura de Tubagem.\n\nA intervenção rápida limita os danos causados por rotura e repõe o serviço de água no menor tempo possível.',
     procedimento: '',
     descritivo: `• Localização e diagnóstico do ponto de rotura\n• Abertura mínima e controlada (quando necessário)\n• Reparação ou substituição do troço danificado\n• Materiais homologados e certificados\n• Teste de pressão após reparação\n• Fecho e acabamento básico da abertura\n• Relatório fotográfico de intervenção`,
-    obs: `1. Orçamento válido por 30 dias.\n2. Os valores incluem deslocamento.\n3. O valor final pode variar conforme a extensão da rotura.\n4. Obras de alvenaria extensas são orçamentadas separadamente.\n5. Pagamento no final do serviço.`,
+    obs: `1. Orçamento válido por 30 dias.\n2. O valor final pode variar conforme a extensão da rotura.\n3. Obras de alvenaria extensas são orçamentadas separadamente.\n4. Pagamento no final do serviço.`,
     condicoes: [
       'Válido por 30 dias.',
-      'Inclui deslocamento.',
       'Extensões de obra cobradas adicionalmente.',
       'Pagamento na conclusão.',
     ]
@@ -29124,7 +29284,7 @@ const PROPOSTA_MODELOS = {
     intro: 'Apresentamos proposta para Recuperação de Tubagem sem abertura de vala, pelo método CIPP (Cured-In-Place Pipe — Tubo Curado In Situ).\n\nEste método instala um novo tubo dentro do tubo existente, com resistência estrutural total e vida útil estimada de 50 anos, sem necessidade de escavação.',
     procedimento: `1 — Limpeza, diagnóstico e configuração\nLimpeza com hidrojato de alta pressão e inspeção com câmara de vídeo para avaliação do estado da tubagem e dimensionamento da manga.\n\n2 — Instalação da manga\nIntrodução da manga de feltro/fibra impregnada com resina epóxi ou poliéster no interior da tubagem.\n\n3 — Cura\nInflagem da manga contra as paredes do tubo e cura por vapor, água quente ou UV conforme o diâmetro e comprimento.\n\n4 — Remontagem e avaliação\nAbertura de ramais laterais por robot fresador, inspeção final com câmara e entrega de relatório técnico com vídeo.`,
     descritivo: `• Limpeza com hidrojato e inspeção com câmara\n• Instalação de manga CIPP (feltro/fibra impregnada com resina)\n• Cura por UV, vapor ou água quente\n• Abertura de ramais por robot fresador\n• Inspeção final por câmara com relatório e vídeo\n• Sem escavação — mínima perturbação\n• Vida útil estimada: 50 anos\n• Garantia de estanquidade total`,
-    obs: `1. Orçamento válido por 30 dias.\n2. Os valores incluem deslocamento.\n3. Duração estimada: 5 dias úteis.\n4. Adjudicação: 60% no momento da confirmação; restante no início dos trabalhos.\n5. Após a recuperação, a tubagem não pode receber água por 12 horas.\n6. Relatório técnico entregue após confirmação do pagamento.\n7. Garantia de execução: 5 anos.`,
+    obs: `1. Orçamento válido por 30 dias.\n2. Duração estimada: 5 dias úteis.\n3. Adjudicação: 60% no momento da confirmação; restante no início dos trabalhos.\n4. Após a recuperação, a tubagem não pode receber água por 12 horas.\n5. Relatório técnico entregue após confirmação do pagamento.\n6. Garantia de execução: 5 anos.`,
     condicoes: [
       'Válido por 30 dias.',
       'Adjudicação: 60% confirmação, 40% início.',
@@ -29170,11 +29330,10 @@ Após a cura do revestimento, todas as peças removidas são devolvidas aos seus
 Nota: Uma vez confirmada a aplicabilidade das duas tecnologias (Spray Epóxi e CIPP), a definição do método fica a critério do cliente no ato da contratação do serviço. Esta decisão permite selecionar o melhor custo-benefício para a sua necessidade. Garantimos a execução técnica de excelência independentemente da modalidade de reabilitação escolhida.
 
 1. Orçamento válido por 30 dias a partir da data de emissão.
-2. Os valores indicados incluem deslocamento.
-3. Adjudicação: 60% do valor total no momento da confirmação. O restante é pago no início dos trabalhos.
-4. Após a conclusão da recuperação da tubagem, a mesma não pode receber água por um período de 12 horas.
-5. O relatório técnico é entregue unicamente após confirmação do pagamento.
-6. Garantia: A recuperação com resina tem uma garantia de 2 anos, sendo a vida útil estimada do produto de 25 anos.
+2. Adjudicação: 60% do valor total no momento da confirmação. O restante é pago no início dos trabalhos.
+3. Após a conclusão da recuperação da tubagem, a mesma não pode receber água por um período de 12 horas.
+4. O relatório técnico é entregue unicamente após confirmação do pagamento.
+5. Garantia: A recuperação com resina tem uma garantia de 2 anos, sendo a vida útil estimada do produto de 25 anos.
 
 Formas de Pagamento Aceites: Transferência Bancária | MB Way | Numerário | Multibanco`,
     condicoes: [
@@ -29304,11 +29463,10 @@ Verificação final por teste de inundação ou pressão, conforme o tipo de sup
 • Sem necessidade de obras de demolição
 • Relatório fotográfico entregue após conclusão`,
   obs: `1. Orçamento válido por 30 dias a partir da data de emissão.
-2. Os valores incluem deslocamento.
-3. A superfície deve estar seca e limpa antes da intervenção.
-4. Não pisar a superfície durante 24h após a aplicação.
-5. Garantia de estanqueidade: 2 anos.
-6. Relatório técnico entregue após confirmação do pagamento.`,
+2. A superfície deve estar seca e limpa antes da intervenção.
+3. Não pisar a superfície durante 24h após a aplicação.
+4. Garantia de estanqueidade: 2 anos.
+5. Relatório técnico entregue após confirmação do pagamento.`,
   condicoes: [
     'Válido por 30 dias.',
     'Superfície deve estar seca e limpa.',
@@ -29658,6 +29816,29 @@ function propostaAbrir(clienteId){
 
 
     <!-- Totais -->
+    <!-- ── DESLOCAÇÃO (opcional) ── -->
+    <div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:10px;padding:12px 16px;margin-bottom:4px;">
+      <div style="font-weight:700;color:#0369a1;margin-bottom:8px;font-size:13px;">🚗 Deslocação (opcional)</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:#0369a1;font-weight:600;">Concelho de partida</label>
+          <input class="fi" id="prop-desloc-partida" placeholder="Ex: Braga" style="width:150px;">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:#0369a1;font-weight:600;">Concelho de chegada</label>
+          <input class="fi" id="prop-desloc-chegada" placeholder="Ex: Viana do Castelo" style="width:150px;">
+        </div>
+        <button type="button" onclick="propDeslocCalcular()" style="padding:9px 12px;border:none;border-radius:8px;background:#0284c7;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">Calcular km</button>
+        <div class="fg" style="margin:0;">
+          <label style="font-size:11px;color:#0369a1;font-weight:600;">Valor deslocação (€ s/IVA)</label>
+          <input class="fi" id="prop-desloc" type="number" step="0.01" min="0" placeholder="0.00" oninput="propostaCalcTotal()" style="width:130px;font-weight:700;">
+        </div>
+      </div>
+      <div style="font-size:11px;color:#0284c7;margin-top:6px;">Não é preciso para trabalhos em Lisboa, Porto, Braga, Guimarães ou Famalicão. Deixa a 0 se estiver incluída.</div>
+      <div id="prop-desloc-status" style="font-size:11px;color:#047857;margin-top:4px;font-weight:600;"></div>
+    </div>
+
+    <!-- Totais -->
     <div id="prop-totais" style="background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(168,85,247,.06));border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:12px 16px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">
       <div><span style="color:var(--text3);">Subtotal s/IVA:</span> <strong id="prop-t-net">—</strong></div>
       <div><span style="color:var(--text3);">IVA:</span> <strong id="prop-t-iva">—</strong></div>
@@ -29771,6 +29952,7 @@ function propostaEditar(propId){
       set('prop-hadd', p.hadd);
       set('prop-horas', p.horas);
       set('prop-iva', p.iva);
+      set('prop-desloc', p.deslocacao);
       const corte=document.getElementById('prop-corte-metros'); if(corte && p.corteMetros!=null) corte.value=p.corteMetros;
       set('prop-validade', p.validade);
       set('prop-intro', p.intro);
@@ -30015,6 +30197,7 @@ function propostaCalcTotal(){
     // metro_linear, metro_quadrado, unidade: preço × qtd + mobilização
     net = (h1 * Math.max(1,horas)) + hadd;
   }
+  net += parseFloat(document.getElementById('prop-desloc')?.value)||0;
   const ivaVal=net*iva/100;
   const total=net+ivaVal;
   const fmt=v=>isNaN(v)||!v?'—':'€'+v.toFixed(2);
@@ -30571,6 +30754,7 @@ async function propostaGuardar(){
     h1:parseFloat(document.getElementById('prop-h1')?.value)||0,
     hadd:parseFloat(document.getElementById('prop-hadd')?.value)||0,
     horas:parseFloat(document.getElementById('prop-horas')?.value)||1,
+    deslocacao:parseFloat(document.getElementById('prop-desloc')?.value)||0,
     tipoCobranca:(typeof _propTipoActual!=='undefined'?_propTipoActual:'hora'),
     corteMetros:parseFloat(document.getElementById('prop-corte-metros')?.value)||0,
     iva:parseFloat(document.getElementById('prop-iva')?.value)||23,
@@ -31181,6 +31365,8 @@ function _propostaHtmlPDF(dados){
 
   // ── Valores (conforme tipo de cobrança) ────────────────────
   const _tabHtml = propostaLinhasPreco(tipoCobranca, h1, hadd, horas, iva, corteMetros);
+  const _desloc = +(parseFloat(dados.deslocacao)||0).toFixed(2);
+  if(_desloc>0) _tabHtml.linhas.push({label:'Deslocação', net:_desloc});
   let net = _tabHtml.linhas.reduce((s,l)=>s+l.net, 0);
   const ivaVal = +(net * iva / 100).toFixed(2);
   const total  = +(net + ivaVal).toFixed(2);
@@ -31493,6 +31679,7 @@ function propostaGerarPDF(){
     tipoCobranca:(typeof _propTipoActual!=='undefined'?_propTipoActual:'hora'),
     corteMetros: parseFloat(document.getElementById('prop-corte-metros')?.value)||0,
     iva:         parseFloat(document.getElementById('prop-iva')?.value)||23,
+    deslocacao:  parseFloat(document.getElementById('prop-desloc')?.value)||0,
     intro:       document.getElementById('prop-intro')?.value||'',
     descritivo:  document.getElementById('prop-descritivo')?.value||'',
     obs:         document.getElementById('prop-obs')?.value||'',
@@ -31525,6 +31712,7 @@ function propostaGerarPDFFromObj(p){
     tipoCobranca:p.tipoCobranca||'hora',
     corteMetros: p.corteMetros||0,
     iva:         p.iva||23,
+    deslocacao:  p.deslocacao||0,
     intro:       p.intro||'',
     descritivo:  p.descritivo||'',
     obs:         p.obs||'',
@@ -32582,7 +32770,7 @@ window.cliHistoricoImprimir = function(cliId){
 
 
 /* ══════════════════════════════════════════════════════════════════════════
-   HidroGest — Correção 7 (v15.22)
+   HidroGest — Correção 7 (v15.23)
    RELATÓRIO NO CORPO DO EMAIL, COM FOTOS
    ──────────────────────────────────────────────────────────────────────────
    Antes: o Brevo enviava o relatório como anexo .docx — o mesmo ficheiro que
@@ -32630,7 +32818,7 @@ window.cliHistoricoImprimir = function(cliId){
     try{
       htmlRel = rpGerarHTMLRelatorio(os, cli, srv, rel, rel.campos||{}, tecs);
     }catch(e){
-      console.error('[v15.22] falha a gerar o relatório:', e);
+      console.error('[v15.23] falha a gerar o relatório:', e);
       _toast('❌ Não foi possível gerar o relatório para envio.','❌');
       return {ok:false, motivo:'html-erro'};
     }
@@ -32710,7 +32898,7 @@ window.cliHistoricoImprimir = function(cliId){
     }
   };
 
-  console.log('[v15.22] envio de relatório por Brevo substituído — relatório no corpo do email');
+  console.log('[v15.23] envio de relatório por Brevo substituído — relatório no corpo do email');
 })();
 
 </script>

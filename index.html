@@ -1220,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.28<br>
+      HidroGest v15.30<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.28 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.30 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.28<br>
+      HidroGest v15.30<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -13244,6 +13244,7 @@ function osAbrirDetalhe(id){
   const _isTec = window.currentUser?.role==='tecnico';
   if(footer) footer.innerHTML=`
     <button class="btn btn-ghost" onclick="closeMo('mo-os-tec')">Fechar</button>
+    ${['admin','gerente','supervisor'].includes(window.currentUser?.role)?`<button class="btn btn-sm" style="background:#0f766e;color:#fff;" onclick="osVerEmailAgendamento('${id}')">📧 Ver email de agendamento</button>`:''}
     ${_podeProp?`<button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;" onclick="closeMo('mo-os-tec');propostaAbrir('${_osCli||''}')">📋 Enviar Proposta</button>`:''}
     ${(_temRastr)?`<button class="btn btn-sm" style="background:#7c3aed;color:#fff;font-weight:700;" onclick="tecAbrirRetorno('${id}')">🔬 Agendar Retorno UV</button>`:''}
   `;
@@ -16627,6 +16628,65 @@ function osMenuContexto(evt, osId){
 }
 
 // ── Enviar email via menu de contexto (abre mailto:) ─────────
+// ── Ver o email de agendamento enviado ao cliente (reconstrói o mesmo
+//    conteúdo a partir dos dados da OS; funciona mesmo com a OS fechada) ──
+async function osVerEmailAgendamento(osId){
+  const os  = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os){ toast('OS não encontrada','⚠️'); return; }
+  const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+  const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+  // 1) Preferir a CÓPIA EXATA guardada no momento do envio
+  const _guardado = os.emailsEnviados?.nova || os.emailsEnviados?.alteracao || os.emailsEnviados?.lembrete || null;
+  let dados, origem, enviadoInfo='';
+  if(_guardado && _guardado.htmlBody){
+    dados = _guardado;
+    origem = 'original';
+    const _dt = _guardado.enviadoEm ? new Date(_guardado.enviadoEm).toLocaleString('pt-PT') : '';
+    enviadoInfo = _dt ? `Enviado em ${_dt}` : '';
+  } else {
+    // 2) Sem cópia guardada (OS antiga) → reconstruir a partir dos dados da OS
+    try{
+      window._osEmailPreview = true;
+      dados = await window.osEnviarEmailCliente(os, cli, srv, 'nova', false);
+    } finally { window._osEmailPreview = false; }
+    origem = 'reconstruido';
+  }
+  if(!dados || !dados.htmlBody){ toast('Não foi possível obter o email.','⚠️'); return; }
+  const destinatario = dados.destinatario || cli.email || '—';
+  const _selo = origem==='original'
+    ? `<span style="background:#dcfce7;color:#166534;font-weight:700;padding:2px 8px;border-radius:999px;font-size:11px;">✓ Cópia original enviada</span>`
+    : `<span style="background:#fef3c7;color:#92400e;font-weight:700;padding:2px 8px;border-radius:999px;font-size:11px;">Reconstruído dos dados da OS</span>`;
+  const _rodapeNota = origem==='original'
+    ? (enviadoInfo || 'Cópia exata guardada no envio.')
+    : 'Sem cópia guardada (envio anterior a esta função). Reflete os dados atuais da OS.';
+  const wrap = document.createElement('div');
+  wrap.className = 'os-ctx-menu';
+  wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  wrap.onclick = (e)=>{ if(e.target===wrap) wrap.remove(); };
+  wrap.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:600px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.35);">
+      <div style="padding:14px 18px;background:#1e3a5f;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="min-width:0;">
+          <div style="font-size:15px;font-weight:800;">📧 Email de agendamento — OS ${os.id}</div>
+          <div style="font-size:12px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Para: ${destinatario}</div>
+        </div>
+        <button onclick="this.closest('.os-ctx-menu').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:none;width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer;flex-shrink:0;">✕</button>
+      </div>
+      <div style="padding:10px 18px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span><strong style="color:#1e3a5f;">Assunto:</strong> ${dados.assunto}</span>
+        ${_selo}
+      </div>
+      <div style="padding:18px;overflow:auto;background:#f8fafc;">${dados.htmlBody}</div>
+      <div style="padding:10px 18px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <span style="font-size:11px;color:#94a3b8;">${_rodapeNota}</span>
+        <div style="display:flex;gap:8px;">
+          ${cli.email?`<button class="btn btn-sm" style="background:#1e3a5f;color:#fff;" onclick="this.closest('.os-ctx-menu').remove();osCtxEnviarEmail('${os.id}','nova')">↗ Reenviar ao cliente</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="this.closest('.os-ctx-menu').remove()">Fechar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+}
+
 function osCtxEnviarEmail(osId, tipo){
   document.querySelectorAll('.os-ctx-menu').forEach(m=>m.remove());
   const os  = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
@@ -20517,6 +20577,11 @@ Aos valores indicados acresce IVA à taxa legal em vigor.
   </div>
 </div>`;
 
+  // ── Modo pré-visualização: devolve o conteúdo sem enviar ──
+  if(window._osEmailPreview){
+    return { assunto, corpo, htmlBody };
+  }
+
   if(forcar || autoOk){
     const tplTipo = isCancelamento ? 'cancelamento' : 'agendamento';
     const r = await ejsEnviarComInit(tplTipo, {
@@ -20536,6 +20601,21 @@ Aos valores indicados acresce IVA à taxa legal em vigor.
     else if(r.modo==='emailjs')    toast(`📧 Email enviado para ${cli2.email} via Gmail`,'✅');
     else if(forcar)                toast(`📧 Gmail aberto para ${cli2.email}`,'📧');
     else                           toast(`📧 Email de ${tipo} preparado`,'📧');
+
+    // ── Guardar CÓPIA EXATA do email enviado na OS (para histórico fiel) ──
+    if(r.modo==='brevo' || r.modo==='emailjs'){
+      try{
+        const _snap = { tipo, assunto, corpo, htmlBody, destinatario: cli2.email||'', enviadoEm: new Date().toISOString(), enviadoPor: window.currentUser?.id||'', modo: r.modo };
+        const _oAtual = (window.DB.ordens||[]).find(x=>x.id===os.id) || os;
+        const _emails = { ...(_oAtual.emailsEnviados||{}) };
+        _emails[tipo] = _snap;                    // última cópia por tipo (ex.: 'nova')
+        const _hist = [ ...((_oAtual.emailsEnviados||{})._hist||[]), _snap ].slice(-20);
+        _emails._hist = _hist;
+        if(os.id && window.fsSetMerge) await window.fsSetMerge('ordens', os.id, { emailsEnviados: _emails });
+        const _idx = (window.DB.ordens||[]).findIndex(x=>x.id===os.id);
+        if(_idx>=0) window.DB.ordens[_idx] = { ...window.DB.ordens[_idx], emailsEnviados: _emails };
+      }catch(e){ console.error('[email] falha ao guardar cópia do email:', e?.message); }
+    }
   }
   auditLog('email_enviado',`Email ${tipo} → ${cli2.email} — OS ${os.id||'—'}`);
 };

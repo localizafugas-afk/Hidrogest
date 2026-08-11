@@ -6272,6 +6272,8 @@ function captureInvoice(e){
 
       // Mostrar indicador de carregamento na área da foto
       const prevEl=document.getElementById('d-photo-preview');
+      document.getElementById('desp-ai-loading')?.remove();
+      document.getElementById('desp-nokey')?.remove();
       const loadDiv=document.createElement('div');
       loadDiv.id='desp-ai-loading';
       loadDiv.style.cssText='font-size:12px;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;margin-top:8px;text-align:center;';
@@ -6279,10 +6281,12 @@ function captureInvoice(e){
       prevEl.appendChild(loadDiv);
 
       // Obter chave da API do Firebase (guardada nas configurações)
-      const _apiKey = (window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+      const _apiKey = ((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
       if(!_apiKey){
         document.getElementById('desp-ai-loading')?.remove();
+        document.getElementById('desp-nokey')?.remove();
         const noKeyDiv=document.createElement('div');
+        noKeyDiv.id='desp-nokey';
         noKeyDiv.style.cssText='font-size:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-top:8px;color:#92400e;';
         noKeyDiv.innerHTML='⚠️ API Key não configurada. Configure em <strong>Configurações → Email → API Key Claude</strong> para activar o OCR automático.';
         document.getElementById('d-photo-preview').appendChild(noKeyDiv);
@@ -12941,7 +12945,7 @@ function osAbrirDetalhe(id){
         const _rel = (window.DB.relatorios_pesquisa||[]).find(r=>r.id===h.id);
         return `<div style="border-top:1px solid #bae6fd;padding-top:8px;margin-top:8px;font-size:12px;">
           <div style="font-weight:600;color:#0c4a6e;">${h.data||'—'} · ${_hs?.nome||h.servicoId||'—'}</div>
-          ${h.obs?`<div style="color:#075985;margin-top:2px;">📝 ${h.obs}</div>`:''}
+          ${osLimparClausulas(h.obs)?`<div style="color:#075985;margin-top:2px;">📝 ${osLimparClausulas(h.obs)}</div>`:''}
           ${_rel?.campos?.conclusao?`<div style="color:#065f46;margin-top:2px;">✅ ${_rel.campos.conclusao}</div>`:''}
         </div>`;
       }).join('')}
@@ -12955,7 +12959,7 @@ function osAbrirDetalhe(id){
   const _fracaoMissao = cli?.condFracao || cli?.fracao || '';
   const _numPortaMissao = cli?.numPorta || '';
   const _locMissao = [_ruaMissao, _numPortaMissao?`nº ${_numPortaMissao}`:'', _fracaoMissao?`(${_fracaoMissao})`:'', _cpMissao, cli?.srvLocalidade||cli?.localidade||''].filter(Boolean).join(' ');
-  const _descMissao = o.obs || '—';
+  const _descMissao = osLimparClausulas(o.obs) || (srv&&srv.nome) || '—';
   const _notaIntMissao = o.notaInterna || '';
   const _missaoBloco = `
     <div style="background:linear-gradient(135deg,#1e40af,#1d4ed8);border-radius:10px;padding:16px;margin-bottom:12px;color:#fff;">
@@ -13229,7 +13233,7 @@ function osAbrirDetalhe(id){
       </div>`}
     </div><!-- fim passos -->
 
-    ${o.obs?`<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:8px;border-left:3px solid #94a3b8;font-size:12px;color:#64748b;"><strong>Nota:</strong> ${o.obs}</div>`:''}
+    ${osLimparClausulas(o.obs)?`<div style="margin-top:12px;padding:10px 12px;background:#f8fafc;border-radius:8px;border-left:3px solid #94a3b8;font-size:12px;color:#64748b;"><strong>Nota:</strong> ${osLimparClausulas(o.obs)}</div>`:''}
     ${condBloco?`<div style="margin-top:12px;">${condBloco}</div>`:''}
 
     `:`
@@ -13237,7 +13241,7 @@ function osAbrirDetalhe(id){
     <div style="font-size:13px;color:var(--text2);">
       <div style="margin-bottom:6px;">🔧 ${srv?.nome||'—'} · <strong>€${osFmt(o.total||0)}</strong></div>
       <div>👷 ${osTecNomes(o.tecnicos)||'—'}</div>
-      ${o.obs?`<div style="margin-top:8px;font-style:italic;color:var(--text3);">"${o.obs}"</div>`:''}
+      ${osLimparClausulas(o.obs)?`<div style="margin-top:8px;font-style:italic;color:var(--text3);">"${osLimparClausulas(o.obs)}"</div>`:''}
     </div>
     `}
   `;
@@ -14669,7 +14673,7 @@ function osRenderMinhas(){
           ${o.horaFimReal?`<span>Fim: <strong>${o.horaFimReal}</strong></span>`:'<span style="color:#d97706;font-weight:600;">A decorrer...</span>'}
         </div>`:''}
 
-        ${o.obs?`<div style="padding:8px 16px;font-size:12px;color:#94a3b8;border-top:1px solid var(--border);font-style:italic;">"${o.obs}"</div>`:''}
+        ${osLimparClausulas(o.obs)?`<div style="padding:8px 16px;font-size:12px;color:#94a3b8;border-top:1px solid var(--border);font-style:italic;">"${osLimparClausulas(o.obs)}"</div>`:''}
 
         ${o.notaInterna?`<div style="padding:10px 16px;background:#fefce8;border-top:2px solid #fde047;font-size:12px;color:#713f12;display:flex;gap:8px;align-items:flex-start;">
           <span style="font-size:15px;flex-shrink:0;">🔒</span>
@@ -14862,7 +14866,7 @@ async function rpMelhorarTexto(fieldId){
   const texto = el.value.trim();
   if(!texto || texto.length < 10){ toast('Escreva algum texto primeiro.','⚠️'); return; }
 
-  const apiKey = (window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+  const apiKey = ((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
   if(!apiKey){
     toast('Configure a API Key do Claude nas Configurações → Email para usar esta função.','⚠️');
     return;
@@ -14951,7 +14955,7 @@ ${texto}`;
 async function rpGerarConclusao(osId){
   const elConc = document.getElementById('rp-conclusao');
   if(!elConc) return;
-  const apiKey = (window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+  const apiKey = ((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
   if(!apiKey){
     toast('Configure a API Key do Claude nas Configurações → Email para usar esta função.','⚠️');
     return;
@@ -16253,7 +16257,7 @@ function osAgendaPopover(evt,osId){
       ${tecs?`<div class="os-popover-row">👷 ${tecs}</div>`:''}
       ${(()=>{const ag=window.DB.users?.find(u=>u.id===o.agendadoPor);return ag?`<div class="os-popover-row">🧑‍💼 Agendado por: <strong>${ag.name}</strong></div>`:''})()}
       <div class="os-popover-row">💰 €${osFmt(o.total)} (IVA ${o.iva}%)</div>
-      ${o.obs?`<div class="os-popover-row" style="font-style:italic;font-size:12px;">"${o.obs}"</div>`:''}
+      ${osLimparClausulas(o.obs)?`<div class="os-popover-row" style="font-style:italic;font-size:12px;">"${osLimparClausulas(o.obs)}"</div>`:''}
       ${(o.notificadoTecnico===true||o.vistoEm)?`<div style="font-size:10px;color:#15803d;margin-top:6px;">👁 Vista pelo técnico${o.vistoEm?' em '+new Date(o.vistoEm).toLocaleString('pt-PT',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):''}</div>`:'<div style="font-size:10px;color:#f59e0b;margin-top:6px;">👁 Ainda não vista pelo técnico</div>'}
     </div>
     <div class="os-popover-actions">
@@ -32327,7 +32331,7 @@ window.cliHistorico = function(cliId){
             </div>
           </div>
 
-          ${o.obs?`<div style="margin-top:8px;font-size:12px;color:var(--text2);background:var(--s2);border-radius:7px;padding:7px 9px;">📝 ${nl(o.obs)}</div>`:''}
+          ${osLimparClausulas(o.obs)?`<div style="margin-top:8px;font-size:12px;color:var(--text2);background:var(--s2);border-radius:7px;padding:7px 9px;">📝 ${nl(osLimparClausulas(o.obs))}</div>`:''}
 
           ${rel&&linhas.length?`
             <div id="cli-hist-det-${esc(o.id)}" style="display:none;margin-top:8px;border:1px solid #bae6fd;background:#f0f9ff;border-radius:8px;padding:10px 12px;">
@@ -33826,7 +33830,7 @@ window.cliHistoricoImprimir = function(cliId){
 
   // ---------- OCR genérico (mesma via do HidroGest) ----------
   async function ocrDoc(file,prompt){
-    const key=(window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+    const key=((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
     if(!key) throw new Error('SEM_CHAVE');
     const b64=await readB64(file);
     const isPdf=file.type==='application/pdf';
@@ -34158,7 +34162,7 @@ Deixa vazio o que não conseguires ler.`);
     [...list].forEach(f=>{ if(f.type==='application/pdf'||f.type.startsWith('image/')) tcFiles.push({file:f,tecId:'',tecNome:'',banco:g(f.name),status:''}); }); tcRender(); }
 
   async function extrairExtrato(file){
-    const key=(window._emailCfg||window.DB?.emailConfig||{}).claudeApiKey||'';
+    const key=((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
     if(!key) throw new Error('SEM_CHAVE');
     const b64=await readB64(file);
     const isPdf=file.type==='application/pdf';
@@ -34265,6 +34269,226 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
   if(typeof window.renderSidebar==='function'){ const orig=window.renderSidebar;
     window.renderSidebar=function(){ orig.apply(this,arguments); try{injetarNav();}catch(e){} }; }
   setInterval(injetarNav,2600); setTimeout(injetarNav,1500);
+})();
+</script>
+
+<!-- Técnico — não repetir as cláusulas do orçamento no meio da ficha da OS.
+     Filtra o bloco "A) Termo de Responsabilidade ..." apenas na exibição; o
+     campo de observações continua guardado inteiro e editável. -->
+<script>
+function osLimparClausulas(t){
+  if(!t) return '';
+  const s = String(t);
+  const i = s.indexOf('A) Termo de Responsabilidade');
+  return (i >= 0 ? s.slice(0, i) : s).trim();
+}
+window.osLimparClausulas = osLimparClausulas;
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HidroGest — Relatório do cliente em PDF (idêntico ao ecrã)   v15.40
+     ─────────────────────────────────────────────────────────────────────
+     COLAR NO FIM do index.html (logo antes de </body>). Por ser o último
+     bloco a definir window.brevoEnviarRelatorio, é este que passa a valer.
+
+     O que faz:
+       • Gera o PDF a partir do MESMO rpGerarHTMLRelatorio que vês no ecrã
+         → a secção 3 e todas as outras saem iguais (acaba a divergência).
+       • Envia o PDF em anexo; o corpo do email passa a ser uma nota curta.
+         Um PDF é igual em qualquer sítio (Gmail, Outlook, telemóvel).
+
+     Depende de: as fotos guardadas no Firebase Storage precisam de CORS
+     activo no bucket, senão saem em branco no PDF. Instruções no fim.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+  if(window._hgPdfClienteV1540) return;
+  window._hgPdfClienteV1540 = true;
+
+  const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
+
+  // ── 1. Carregar bibliotecas só uma vez ──────────────────────────────
+  function carregarScript(src){
+    return new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src=src; s.onload=res; s.onerror=()=>rej(new Error('falhou a carregar: '+src));
+      document.head.appendChild(s);
+    });
+  }
+  async function garantirLibs(){
+    if(typeof window.html2canvas==='undefined'){
+      await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    }
+    if(typeof window.jspdf==='undefined'){
+      await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    }
+  }
+
+  // ── 2. Converter imagens https em base64 (evita o CORS manchar o canvas) ─
+  async function embutirImagens(container){
+    const imgs = Array.from(container.querySelectorAll('img'));
+    await Promise.all(imgs.map(async img=>{
+      const src = img.getAttribute('src')||'';
+      if(!src || src.startsWith('data:')) return;   // já é base64
+      try{
+        const r = await fetch(src, {mode:'cors'});
+        const blob = await r.blob();
+        const dataUrl = await new Promise((ok,ko)=>{
+          const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=ko;
+          fr.readAsDataURL(blob);
+        });
+        img.setAttribute('src', dataUrl);
+      }catch(e){
+        // Sem CORS no Storage: deixa o src original e tenta com useCORS.
+        img.setAttribute('crossorigin','anonymous');
+        console.warn('[PDF] imagem sem CORS, pode sair em branco:', src);
+      }
+    }));
+  }
+
+  function esperarImagens(container){
+    const imgs = Array.from(container.querySelectorAll('img'));
+    return Promise.all(imgs.map(img=> (img.complete && img.naturalWidth)
+      ? Promise.resolve()
+      : new Promise(res=>{ img.onload=res; img.onerror=res; })
+    ));
+  }
+
+  // ── 3. Gerar o PDF (base64, sem o prefixo data:) a partir do HTML do ecrã ─
+  window.rpGerarPdfRelatorioBase64 = async function(osId){
+    await garantirLibs();
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId)||{};
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    const c   = rel.campos||{};
+    const tecs=(os.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
+
+    // MESMO HTML que aparece no ecrã:
+    const html = rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs);
+
+    // Palco invisível a 800px (a largura para que o relatório foi desenhado)
+    const palco = document.createElement('div');
+    palco.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:#fff;';
+    palco.innerHTML = html;
+    document.body.appendChild(palco);
+
+    try{
+      await embutirImagens(palco);
+      await esperarImagens(palco);
+
+      const alvo = palco.firstElementChild || palco;
+      const canvas = await window.html2canvas(alvo, {
+        scale: 2, useCORS:true, allowTaint:false,
+        backgroundColor:'#ffffff', windowWidth: 800,
+      });
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+      const pw = 210, ph = 297;                 // A4 em mm
+      const imgW = pw;
+      const imgH = canvas.height * pw / canvas.width;
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+      // Espalhar a imagem alta por várias páginas A4
+      let restante = imgH, pos = 0;
+      pdf.addImage(imgData, 'JPEG', 0, pos, imgW, imgH);
+      restante -= ph;
+      while(restante > 0){
+        pos -= ph;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, pos, imgW, imgH);
+        restante -= ph;
+      }
+
+      const blob = pdf.output('blob');
+      return await new Promise((ok,ko)=>{
+        const fr=new FileReader();
+        fr.onload=()=> ok(String(fr.result).split(',')[1]||'');   // só o base64
+        fr.onerror=ko; fr.readAsDataURL(blob);
+      });
+    } finally {
+      palco.remove();
+    }
+  };
+
+  // ── 4. Enviar ao cliente: PDF em anexo + corpo curto ────────────────
+  window.brevoEnviarRelatorio = async function(osId){
+    const cfg = window._emailCfg || window.DB?.emailConfig || {};
+    const apiKey = cfg.brevoApiKey || '';
+    if(!apiKey){ _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️'); return {ok:false,motivo:'sem-api-key'}; }
+
+    const os  = (window.DB.ordens||[]).find(x=>x.id===osId);
+    const cli = (window.DB.clientes||[]).find(x=>x.id===os?.clienteId)||{};
+    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+    if(!cli.email){ _toast('⚠️ Cliente sem email registado.','⚠️'); return {ok:false}; }
+    if(!rel.campos){ _toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
+
+    const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
+    const empEmail = cfg.remetenteRelatorio || 'localizafugas@gmail.com';
+    const empTel   = cfg.tel || '253 000 000';
+
+    // Gerar o PDF idêntico ao ecrã
+    let pdfBase64 = '';
+    try{
+      _toast('⏳ A preparar o relatório em PDF...','📄');
+      pdfBase64 = await window.rpGerarPdfRelatorioBase64(osId);
+    }catch(e){
+      console.error('[v15.40] falha a gerar PDF:', e);
+      _toast('❌ Não foi possível gerar o PDF do relatório.','❌');
+      return {ok:false, motivo:'pdf-erro'};
+    }
+
+    const nomePdf = `Relatorio_${osId}.pdf`;
+    const anexosAdmin = (rel.anexos||[]).filter(a=>a.base64).map(a=>({content:a.base64, name:a.nome}));
+    const anexos = [{content:pdfBase64, name:nomePdf}, ...anexosAdmin];
+
+    const [ano,mes,dia] = (os.data||'').split('-');
+    const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const dataAssunto = os.data ? `${dia} ${meses[parseInt(mes)-1]} ${ano}` : '';
+
+    const corpoHtml = `
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;font-size:14px;line-height:1.6;">
+        <p>Exmo(a). Sr(a). <strong>${cli.nome||''}</strong>,</p>
+        <p>Segue em anexo, em formato PDF, o relatório de peritagem não destrutiva
+           referente ao serviço prestado nas suas instalações (OS ${osId}).</p>
+        <p>Para qualquer esclarecimento estamos ao dispor:<br>
+           📞 ${empTel} &nbsp;·&nbsp; ✉️ ${empEmail}</p>
+        <p style="margin-top:22px;color:#64748b;font-size:13px;">
+           Com os melhores cumprimentos,<br><strong>${empNome}</strong></p>
+      </div>`;
+
+    const payload = {
+      sender:  {name:empNome, email:empEmail},
+      replyTo: {email: cfg.replyTo||'localizafugas@gmail.com', name:empNome},
+      to:      [{email:cli.email, name:cli.nome||''}],
+      subject: `Relatório de Peritagem — OS ${osId}${dataAssunto?' — '+dataAssunto:''}`,
+      htmlContent: corpoHtml,
+      attachment: anexos,
+    };
+
+    try{
+      _toast('⏳ A enviar o relatório ao cliente...','📧');
+      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+        method:'POST',
+        headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if(!r.ok){
+        const err = await r.json().catch(()=>({}));
+        _toast(`❌ Erro Brevo: ${err.message||r.status}`,'❌');
+        return {ok:false, motivo:'brevo-erro', status:r.status};
+      }
+      _toast('✅ Relatório enviado ao cliente em PDF.','✅');
+      return {ok:true};
+    }catch(e){
+      _toast(`❌ Erro de ligação ao Brevo: ${e.message}`,'❌');
+      return {ok:false, motivo:'ligacao-erro'};
+    }
+  };
+
+  console.log('[v15.40] envio do relatório ao cliente em PDF (idêntico ao ecrã) activo');
 })();
 </script>
 

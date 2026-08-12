@@ -16091,7 +16091,7 @@ async function tecReabrirParaRelatorio(osId){
       const cfg=window._emailCfg||{}, emp=window._empCfg||{};
       if(cfg.brevoApiKey){
         const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
-        const dest=cfg.remetente||emp.email||'localizafugas@gmail.com';
+        const dest=cfg.remetente||emp.email||'propostas@hidrogest.net';
         await fetch('https://api.brevo.com/v3/smtp/email',{
           method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
           body:JSON.stringify({
@@ -19580,9 +19580,9 @@ function cfgCarregarEmail(){
   const cfg = window._emailCfg || window.DB?.emailConfig || {};
   const set = (id,v)=>{ const el=document.getElementById(id); if(el&&v!==undefined) el.value=v; };
   set('cfg-email-empresa',    cfg.empresa    || 'Localiza Fugas — Valentim Fialho Unip. Lda.');
-  set('cfg-email-remetente',  cfg.remetente  || 'localizafugas@gmail.com');
+  set('cfg-email-remetente',  cfg.remetente  || 'propostas@hidrogest.net');
   set('cfg-email-replyto',    cfg.replyTo    || 'localizafugas@gmail.com');
-  set('cfg-email-remetente-relatorio', cfg.remetenteRelatorio || 'localizafugas@gmail.com');
+  set('cfg-email-remetente-relatorio', cfg.remetenteRelatorio || 'propostas@hidrogest.net');
   set('cfg-email-tel',        cfg.tel        || '253 000 000');
   set('cfg-email-website',    cfg.website    || 'www.localizafugas.com');
   set('cfg-email-assinatura', cfg.assinatura || 'Com os melhores cumprimentos,\nLocaliza Fugas — Valentim Fialho Unip. Lda.\nTel: 253 000 000\nlocalizafugas@gmail.com');
@@ -19636,8 +19636,8 @@ async function cfgSalvarEmail(){
     tel:               g('cfg-email-tel'),
     website:           g('cfg-email-website'),
     assinatura:        g('cfg-email-assinatura'),
-    brevoApiKey:       g('brevo-api-key'),
-    claudeApiKey:      g('claude-api-key'),
+    brevoApiKey:       g('brevo-api-key')  || (window._emailCfg&&window._emailCfg.brevoApiKey)  || (window.DB&&window.DB.emailConfig&&window.DB.emailConfig.brevoApiKey)  || '',
+    claudeApiKey:      g('claude-api-key') || (window._emailCfg&&window._emailCfg.claudeApiKey) || (window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey) || '',
     envioNovaOS:       chk('envio-nova-os'),
     envioAlteracaoOS:  chk('envio-alteracao-os'),
     envioCancelamento: chk('envio-cancelamento'),
@@ -19948,9 +19948,9 @@ async function rpNotificarAlteracaoTecnico(os, rel){
     const cfg = window._emailCfg||{};
     const emp = window._empCfg||{};
     if(cfg.brevoApiKey){
-      const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
+      const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
       const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
-      const destino   = cfg.remetente||emp.email||'localizafugas@gmail.com';
+      const destino   = cfg.remetente||emp.email||'propostas@hidrogest.net';
       const assunto   = `✏️ Relatório alterado pelo técnico — OS ${os.id}`;
       const corpo     =
         `O técnico ${tec} alterou o relatório de uma OS já finalizada.\n\n`+
@@ -20202,7 +20202,7 @@ async function ejsEnviar(tipoTemplate, params){
   if(brevoKey){
     const emp = getEmpDados();
     const nomeRem = (typeof emp.nome==='string'?emp.nome:'Localiza Fugas').trim();
-    const emailRem = cfg.remetente||emp.email||'localizafugas@gmail.com';
+    const emailRem = cfg.remetente||emp.email||'propostas@hidrogest.net';
 
     // Corpo HTML — usar html_body se disponível, senão converter texto em HTML simples
     const corpoTexto = params.corpo||params.message||params.body||'';
@@ -22231,7 +22231,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   const cfg = window._emailCfg||{};
   if(!cfg.brevoApiKey){ if(!auto) toast('Configure a API Key do Brevo em Configurações → Email.','⚠️'); return; }
   const emp = window._empCfg||{};
-  const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
+  const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
   const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
 
   // Estado do relatório por OS: "a_realizar", "enviado", ou em elaboração (o resto)
@@ -22822,7 +22822,7 @@ function rpAbrirFormulario(osId, preserveTemp){
     <div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
       <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:4px;">📍 Localização (obrigatório)</div>
       <div style="font-size:11px;color:#9a3412;margin-bottom:10px;line-height:1.5;">Identifique de forma <strong>específica</strong>. Se houver mais do que uma casa de banho ou quarto, diga <strong>qual</strong> (ex.: &quot;WC da suite&quot;, &quot;quarto das crianças&quot;). Indique sempre a <strong>fração ou local</strong>.</div>
-      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Nº da fração inspecionada <span style="color:#dc2626;">*</span></label>
+      <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Nº da fração inspecionada <span style="color:#94a3b8;font-weight:400;">(apartamentos / condomínios)</span></label>
       <input class="fi" id="rp-num-fracao" placeholder="Ex.: 2.º Dto, Fração K, Loja 3" style="font-size:13px;margin-bottom:10px;" value="${c.numeroFracao||''}">
       <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Local / fração onde o problema se manifesta</label>
       <textarea class="fta" id="rp-local-manifestacao" rows="2" placeholder="Ex.: Teto do quarto ao meio do 2.º Dto; mancha na parede da cozinha do 1.º Esq..." style="font-size:13px;margin-bottom:10px;">${c.localManifestacao||''}</textarea>
@@ -26175,7 +26175,11 @@ async function osConcluirComAssinaturas(){
     const _cps = _rel.campos || {};
     const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;
     const _faltam = [];
-    if(!_cps.numeroFracao || !_cps.numeroFracao.trim()) _faltam.push('número da fração inspecionada');
+    // A fração/nº de unidade só faz sentido em apartamentos/condomínios; numa moradia não se exige.
+    const _osFrac = (window.DB.ordens||[]).find(x=>x.id===osId) || {};
+    const _tipolFrac = ((_cps.tipologia || _osFrac.tipologia || '')+'').toLowerCase();
+    const _multiUnidade = _tipolFrac.includes('apart') || _tipolFrac.includes('condom') || _tipolFrac.includes('comum') || _tipolFrac.includes('fraç') || _tipolFrac.includes('frac');
+    if(_multiUnidade && (!_cps.numeroFracao || !_cps.numeroFracao.trim())) _faltam.push('número da fração inspecionada');
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
     if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
     if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
@@ -30804,7 +30808,7 @@ async function propostaEnviarLivre(){
 
   if(cfg.brevoApiKey){
     const emp=window._empCfg||{};
-    const remetente = cfg.remetente||emp.email||'localizafugas@gmail.com';
+    const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
     const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
     const replyToEmail = cfg.replyTo||'localizafugas@gmail.com';
     // Cópia interna por BCC para o email da empresa (oculta ao cliente)
@@ -30929,7 +30933,7 @@ async function propostaEnviarRascunho(propId){
   const ivaVal=net*iva/100; const total=net+ivaVal;
   const empresa2=emp.nome||cfg.empresa||'Localiza Fugas';
   const tel2=emp.tel||cfg.tel||'931 747 199';
-  const emailEmp2=cfg.remetente||emp.email||'localizafugas@gmail.com';
+  const emailEmp2=cfg.remetente||emp.email||'propostas@hidrogest.net';
   const assinatura=cfg.assinatura||`Com os melhores cumprimentos,\n${empresa2}\nTel: ${tel2}\n${emailEmp2}`;
   const valStr=p.validade?new Date(p.validade+'T00:00').toLocaleDateString('pt-PT',{day:'2-digit',month:'long',year:'numeric'}):'30 dias';
   const _tabR=propostaLinhasPreco(p.tipoCobranca||'hora',h1,hadd,horas,iva,p.corteMetros||0);
@@ -30951,7 +30955,7 @@ async function propostaEnviarRascunho(propId){
       }
   }catch(e){ console.warn('PDF err:',e); }
   if(cfg.brevoApiKey){
-    const remetente=cfg.remetente||emp.email||'localizafugas@gmail.com';
+    const remetente=cfg.remetente||emp.email||'propostas@hidrogest.net';
     const nomeRem=emp.nome||cfg.empresa||'Localiza Fugas';
     const replyToEmail=cfg.replyTo||'localizafugas@gmail.com';
     const _bccEmp = (p.email!=='localizafugas@gmail.com') ? [{email:'localizafugas@gmail.com',name:'Localiza Fugas'}] : [];
@@ -32936,7 +32940,7 @@ window.cliHistoricoImprimir = function(cliId){
     if(!rel.campos){ _toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
 
     const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
-    const empEmail = cfg.remetenteRelatorio || 'localizafugas@gmail.com';
+    const empEmail = cfg.remetenteRelatorio || cfg.remetente || 'propostas@hidrogest.net';
     const empTel   = cfg.tel || '253 000 000';
     const tecs = (os.tecnicos||[]).map(id=>window.DB.users?.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
 
@@ -34024,7 +34028,7 @@ Deixa vazio o que não conseguires ler.`);
     if(!cfg.brevoApiKey){ if(!auto) toast('Configura o Brevo em Configurações -> Email.','⚠️'); return false; }
     const lista=avisosLista();
     if(!lista.length){ if(!auto) toast('Nada a vencer nos próximos 7 dias. 🎉','✅'); return false; }
-    const dest=cfg.remetente||emp.email||'localizafugas@gmail.com';
+    const dest=cfg.remetente||emp.email||'propostas@hidrogest.net';
     const venc=lista.filter(c=>diasAte(c.vencimento)<0), total=lista.reduce((s,c)=>s+num(c.gross),0);
     const linhas=lista.map(c=>{ const d=diasAte(c.vencimento); const cor=d<0?'#b91c1c':(d<=2?'#b45309':'#0f2430');
       const est=d<0?('Vencida há '+(-d)+'d'):(d===0?'Vence hoje':'Vence em '+d+'d');
@@ -34426,7 +34430,7 @@ window.osLimparClausulas = osLimparClausulas;
     if(!rel.campos){ _toast('⚠️ Relatório sem dados.','⚠️'); return {ok:false}; }
 
     const empNome  = cfg.empresa || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
-    const empEmail = cfg.remetenteRelatorio || 'localizafugas@gmail.com';
+    const empEmail = cfg.remetenteRelatorio || cfg.remetente || 'propostas@hidrogest.net';
     const empTel   = cfg.tel || '253 000 000';
 
     // Gerar o PDF idêntico ao ecrã

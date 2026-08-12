@@ -12582,31 +12582,44 @@ async function osDragDrop(evt, novaData, novoTecId){
   const mesmoTec    = (os.tecnicos||[]).includes(novoTecId) && (os.tecnicos||[]).length===1;
   if(mesmaData && mesmoTec){ return; } // sem alteração
 
-  // Confirmar se é mover ou perguntar ao utilizador
   const dataNova = fmtDate(novaData);
   const tecNome  = (window.DB.users||[]).find(u=>u.id===novoTecId)?.name||novoTecId;
-  const opcao = confirm(
-    `Mover OS ${osId} para ${dataNova}${!mesmoTec?' — Técnico: '+tecNome:''}?\n\n` +
-    `OK = Mover (altera data/técnico)\nCancelar = Copiar para novo dia`
-  );
 
-  if(opcao){
-    // MOVER — actualiza a OS existente
+  // Decisão: mudança de técnico → mover e REATRIBUIR (sem cópia silenciosa).
+  // Só a mudança de data (mesmo técnico) mantém a opção de duplicar.
+  let acao;
+  if(!mesmoTec){
+    acao = confirm(
+      `Mover a OS ${osId} para ${dataNova} e ATRIBUIR ao técnico ${tecNome}?\n\n` +
+      `${tecNome} passa a poder abrir e fazer o relatório; o técnico anterior deixa de ver esta OS.\n\n` +
+      `OK = Mover e reatribuir\nCancelar = Não fazer nada`
+    ) ? 'mover' : null;
+  } else {
+    acao = confirm(
+      `Mover a OS ${osId} para ${dataNova}?\n\nOK = Mover\nCancelar = Duplicar para ${dataNova}`
+    ) ? 'mover' : 'copiar';
+  }
+
+  if(acao === 'mover'){
+    // MOVER — actualiza a OS existente (e reatribui o técnico se mudou)
     const novosTecs = mesmoTec ? os.tecnicos : [novoTecId];
     const updated = { ...os, data: novaData, tecnicos: novosTecs, alteradoEm: new Date().toISOString(), alteradoPor: window.currentUser?.id };
     await window.fsSet('ordens', osId, updated);
+    // refletir de imediato no cache local (evita a UI mostrar o técnico antigo)
+    { const _o=(window.DB.ordens||[]).find(x=>x.id===osId); if(_o){ _o.data=novaData; _o.tecnicos=novosTecs; _o.alteradoEm=updated.alteradoEm; } }
     const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId);
     const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId);
-    toast(`✅ OS ${osId} movida para ${dataNova}`,'📅');
-    auditLog('os_movida', `OS ${osId} movida para ${dataNova} (drag-and-drop)`);
+    toast(`✅ OS ${osId} movida para ${dataNova}${!mesmoTec?' — '+tecNome:''}`,'📅');
+    auditLog('os_movida', `OS ${osId} movida para ${dataNova}${!mesmoTec?' e reatribuída a '+tecNome:''} (drag-and-drop)`);
     await window.osNotificarTecnicos(updated, 'alteracao');
     await window.osEnviarEmailCliente(updated, cli, srv, updated.estado==='cancelada'?'cancelamento':'alteracao');
-  } else {
-    // COPIAR — abre modal de cópia pré-preenchido com nova data
+  } else if(acao === 'copiar'){
+    // DUPLICAR — abre modal de cópia pré-preenchido com nova data (só no mesmo técnico)
     window._copiarOsId = osId;
     osCopiarAbrir(osId);
     setTimeout(()=>{ document.getElementById('cop-data').value = novaData; }, 100);
   }
+  // acao === null → não faz nada (Cancelar numa mudança de técnico)
 
   osRenderAgenda();
 }

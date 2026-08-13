@@ -258,7 +258,7 @@ function attachListeners() {
   onSnapshot(COLS.recibos,      snap => { window.DB.recibos      = snap.docs.map(d=>d.data()); onDataChange(); });
   onSnapshot(COLS.despesas,     snap => { window.DB.despesas     = snap.docs.map(d=>d.data()); onDataChange(); });
   onSnapshot(COLS.clientes,     snap => { window.DB.clientes     = snap.docs.map(d=>d.data()); onDataChange(); });
-  onSnapshot(COLS.ordens,       snap => { window.DB.ordens       = snap.docs.map(d=>d.data()); window.DB._ordensCarregado = true; osCheckNotifs(); onDataChange(); if(typeof osReconciliarImediatos==='function') setTimeout(osReconciliarImediatos,400); if(typeof osReconciliarAvisosFatura==='function') setTimeout(osReconciliarAvisosFatura,700); });
+  onSnapshot(COLS.ordens,       snap => { window.DB.ordens       = snap.docs.map(d=>d.data()); window.DB._ordensCarregado = true; osCheckNotifs(); onDataChange(); if(typeof osReconciliarImediatos==='function') setTimeout(osReconciliarImediatos,400); });
   onSnapshot(COLS.servicos,     snap => { window.DB.servicos     = snap.docs.map(d=>d.data()); onDataChange(); });
   onSnapshot(query(COLS.auditoria,    orderBy('ts','desc')), snap => { window.DB.auditoria    = snap.docs.map(d=>d.data()); auditRefresh(); });
   onSnapshot(COLS.localizacoes, snap => {
@@ -4199,44 +4199,18 @@ function clienteTemAtrasoFinanceiro(clienteId){
   const hoje = new Date();
   return recibos.some(r=>{
     if(r.status!=='pending') return false;
-    if(!_reciboDoCliente(r, clienteId)) return false;
+    // Tentar associar recibo ao cliente pelo nome ou ID
+    const cli = (window.DB.clientes||[]).find(c=>c.id===clienteId);
+    if(!cli) return false;
+    const _rc = (r.client||'').toLowerCase().trim();
+    const _cn = (cli.nome||'').toLowerCase().trim();
+    const nomeMatch = _rc && _cn && _rc.includes(_cn); // nome COMPLETO, não só o primeiro nome
+    if(!nomeMatch) return false;
     // Verificar se está em atraso (data do recibo + 30 dias)
     const dataRec = new Date(r.date||r.criadoEm||0);
     const diasAtraso = Math.floor((hoje-dataRec)/(1000*60*60*24));
     return diasAtraso > 30;
   });
-}
-
-// Associa um recibo a um cliente por: (1) OS do recibo → clienteId (exacto), (2) NIF, (3) email, (4) nome.
-function _reciboDoCliente(r, clienteId){
-  if(!r || !clienteId) return false;
-  const cli = (window.DB.clientes||[]).find(c=>c.id===clienteId);
-  if(!cli) return false;
-  // (1) associação exacta pela OS do recibo
-  if(r.osId){
-    const os = (window.DB.ordens||[]).find(o=>o.id===r.osId);
-    if(os && os.clienteId===clienteId) return true;
-  }
-  const norm  = s => (s==null?'':String(s)).replace(/\s+/g,' ').trim().toLowerCase();
-  const nifN  = s => (s==null?'':String(s)).replace(/[^0-9]/g,'');
-  const nif   = nifN(cli.nif);
-  const email = norm(cli.email);
-  const nome  = norm(cli.nome);
-  // (2) NIF
-  if(nif && nifN(r.nif)===nif) return true;
-  // (3) email (caso o recibo o guarde)
-  const rEmail = norm(r.email||r.clientEmail);
-  if(email && rEmail && rEmail===email) return true;
-  // (4) nome (completo)
-  const rc = norm(r.client);
-  if(nome && rc && rc.includes(nome)) return true;
-  return false;
-}
-
-// Fatura em aberto = qualquer recibo do cliente no estado 'pending' (independentemente da idade).
-function clienteTemFaturaEmAberto(clienteId){
-  if(!clienteId) return false;
-  return (window.DB.recibos||[]).some(r => r.status==='pending' && _reciboDoCliente(r, clienteId));
 }
 
 function clienteBloqueadoManualmente(clienteId){
@@ -4248,7 +4222,12 @@ function clienteBloqueadoManualmente(clienteId){
 function mostrarModalBloqueio(clienteId, onLiberar){
   const cli = (window.DB.clientes||[]).find(c=>c.id===clienteId);
   const nomeCliente = cli?.nome || 'Cliente';
-  const recPend = (window.DB.recibos||[]).filter(r => r.status==='pending' && _reciboDoCliente(r, clienteId));
+  const recPend = (window.DB.recibos||[]).filter(r=>{
+    if(r.status!=='pending') return false;
+    const _rc = (r.client||'').toLowerCase().trim();
+    const _cn = (nomeCliente||'').toLowerCase().trim();
+    return _rc && _cn && _rc.includes(_cn); // nome COMPLETO
+  });
   const totalPend = recPend.reduce((s,r)=>s+(parseFloat(String(r.total||0).replace(',','.'))||0),0);
 
   const mo = document.createElement('div');
@@ -10866,16 +10845,6 @@ async function osSalvar(){
   // Verificar que o cliente existe no cache (incluindo cliente recém criado)
   const _cliCheck = (window.DB.clientes||[]).find(c=>c.id===cliId) || window._osCliObjPendente;
   if(!_cliCheck){ toast('Cliente não encontrado — tente selecionar novamente','⚠️'); return; }
-
-  // ── Bloqueio: cliente com fatura em aberto não pode agendar (salvo autorização do administrador) ──
-  if(!window._osBypassBloqueio && (clienteTemFaturaEmAberto(cliId) || clienteBloqueadoManualmente(cliId))){
-    mostrarModalBloqueio(cliId, ()=>{
-      window._osBypassBloqueio = true;
-      Promise.resolve(osSalvar()).finally(()=>{ window._osBypassBloqueio = false; });
-    });
-    return;
-  }
-
   const tecs=[...document.querySelectorAll('#os-tec-checkboxes input:checked')].map(x=>x.value);
   if(!tecs.length){ toast('Seleccione pelo menos um técnico!','⚠️'); return; }
 
@@ -12585,7 +12554,7 @@ async function osDragDrop(evt, novaData, novoTecId){
   const dataNova = fmtDate(novaData);
   const tecNome  = (window.DB.users||[]).find(u=>u.id===novoTecId)?.name||novoTecId;
 
-  // Decisão: mudança de técnico → mover e REATRIBUIR (sem cópia silenciosa).
+  // Decisão: mudança de técnico -> mover e REATRIBUIR (sem cópia silenciosa).
   // Só a mudança de data (mesmo técnico) mantém a opção de duplicar.
   let acao;
   if(!mesmoTec){
@@ -12601,11 +12570,9 @@ async function osDragDrop(evt, novaData, novoTecId){
   }
 
   if(acao === 'mover'){
-    // MOVER — actualiza a OS existente (e reatribui o técnico se mudou)
     const novosTecs = mesmoTec ? os.tecnicos : [novoTecId];
     const updated = { ...os, data: novaData, tecnicos: novosTecs, alteradoEm: new Date().toISOString(), alteradoPor: window.currentUser?.id };
     await window.fsSet('ordens', osId, updated);
-    // refletir de imediato no cache local (evita a UI mostrar o técnico antigo)
     { const _o=(window.DB.ordens||[]).find(x=>x.id===osId); if(_o){ _o.data=novaData; _o.tecnicos=novosTecs; _o.alteradoEm=updated.alteradoEm; } }
     const cli = (window.DB.clientes||[]).find(x=>x.id===os.clienteId);
     const srv = (window.DB.servicos||[]).find(x=>x.id===os.servicoId);
@@ -12614,12 +12581,10 @@ async function osDragDrop(evt, novaData, novoTecId){
     await window.osNotificarTecnicos(updated, 'alteracao');
     await window.osEnviarEmailCliente(updated, cli, srv, updated.estado==='cancelada'?'cancelamento':'alteracao');
   } else if(acao === 'copiar'){
-    // DUPLICAR — abre modal de cópia pré-preenchido com nova data (só no mesmo técnico)
     window._copiarOsId = osId;
     osCopiarAbrir(osId);
     setTimeout(()=>{ document.getElementById('cop-data').value = novaData; }, 100);
   }
-  // acao === null → não faz nada (Cancelar numa mudança de técnico)
 
   osRenderAgenda();
 }
@@ -12823,7 +12788,7 @@ function osRenderLista(){
         relBtn=`<button class="btn btn-sm btn-primary" style="background:#15803d;" onclick="rpEnviarEmailDireto('${o.id}')">📧 Enviar</button>`+(rel?.pendenteFoto?` <button class="btn btn-sm" style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;" onclick="rpAbrirFormulario('${o.id}')">📷 Add foto</button>`:'');
       } else if(relCampos){
         relBadge=`<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;">📝 Rascunho</span>`;
-        relBtn=`<button class="btn btn-sm" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;" onclick="rpVerRelatorio('${o.id}')">👁 Ver</button> <button class="btn btn-sm btn-primary" style="background:#1e3a5f;" onclick="rpAbrirFormulario('${o.id}')">✏️ Editar</button>${rpTemRastreadorQuimico(o.id)?` <button class="btn btn-sm" style="background:#7c3aed;color:#fff;font-size:11px;" onclick="tecAbrirRetorno('${o.id}')">🔬 Retorno UV</button>`:''}`;;
+        relBtn=`<button class="btn btn-sm" style="background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;" onclick="rpVerRelatorio('${o.id}')">👁 Ver</button> <button class="btn btn-sm btn-primary" style="background:#1e3a5f;" onclick="rpAbrirFormulario('${o.id}')">✏️ Editar</button>`;;
       } else {
         relBadge=`<span style="background:#fee2e2;color:#991b1b;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;">⏳ Por fazer</span>`;
         relBtn=`<button class="btn btn-sm btn-primary" onclick="rpAbrirFormulario('${o.id}')">📄 Criar</button>`;
@@ -13300,7 +13265,6 @@ function osAbrirDetalhe(id){
     <button class="btn btn-ghost" onclick="closeMo('mo-os-tec')">Fechar</button>
     ${['admin','gerente','supervisor'].includes(window.currentUser?.role)?`<button class="btn btn-sm" style="background:#0f766e;color:#fff;" onclick="osVerEmailAgendamento('${id}')">📧 Ver email de agendamento</button>`:''}
     ${_podeProp?`<button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;" onclick="closeMo('mo-os-tec');propostaAbrir('${_osCli||''}')">📋 Enviar Proposta</button>`:''}
-    ${(_temRastr)?`<button class="btn btn-sm" style="background:#7c3aed;color:#fff;font-weight:700;" onclick="tecAbrirRetorno('${id}')">🔬 Agendar Retorno UV</button>`:''}
   `;
 }
 
@@ -15017,7 +14981,6 @@ async function rpGerarComIA(osId){
     divisoes:      getChecked('rp-zona').length? getChecked('rp-zona'): (c.divisoes||[]),
   };
 
-  // Fotos de serviço em base64 (guardando o índice original em _rpFotosTemp p/ mapear legendas)
   const _fotos = window._rpFotosTemp || [];
   const vis = [];
   _fotos.forEach((f,idx)=>{
@@ -15077,7 +15040,6 @@ async function rpGerarComIA(osId){
     if(a<0||b<0) throw new Error('Resposta sem JSON');
     const obj = JSON.parse(raw.slice(a, b+1));
 
-    // Legendas → _rpFotosTemp + inputs visíveis
     const legendas = Array.isArray(obj.legendas) ? obj.legendas : [];
     const inputs = document.querySelectorAll('#rp-modal-body input[oninput^="rpAtualizarLegendaFoto"]');
     visLim.forEach((v,k)=>{
@@ -15087,7 +15049,6 @@ async function rpGerarComIA(osId){
       if(inputs[v.idx]) inputs[v.idx].value = leg;
     });
 
-    // Conclusão + recomendações
     const elC = document.getElementById('rp-conclusao');
     if(elC && obj.conclusao){ elC.value = String(obj.conclusao).trim(); elC.dataset.ia='1'; elC.style.borderColor='#15803d'; elC.style.background='#f0fdf4'; }
     const elR = document.getElementById('rp-sugestao');
@@ -16310,34 +16271,6 @@ async function osReconciliarImediatos(){
     if(typeof renderRecibos==='function') renderRecibos();
     if(typeof osRenderAgenda==='function') osRenderAgenda();
   } finally { _osReconcileBusy=false; }
-}
-
-async function osReconciliarAvisosFatura(){
-  // v15.42 — Cria o aviso de emissão de fatura para OS pagas DIRETO AO TÉCNICO
-  // (MB, MBWay, numerário, dinheiro, cheque) mesmo quando quem fechou a OS foi
-  // o técnico (app tecnico.hidrogest.net) e não passou por um fecho do admin.
-  // osReconciliarImediatos cria o recibo e marca "pago" mas NÃO cria o aviso;
-  // e ignora as OS que já chegam com pago=true — por isso o aviso nunca surgia.
-  // Idempotente: osCriarAvisoFatura só cria um aviso por OS (chave por osId).
-  try{
-    if(window.currentUser && window.currentUser.role==='tecnico') return;
-    const imed=['mb','mbway','numerario','dinheiro','cheque'];
-    const limite=new Date(); limite.setDate(limite.getDate()-30); // só OS recentes — não ressuscita antigas
-    const metLabels={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',numerario:'Numerário',cheque:'Cheque'};
-    (window.DB.ordens||[]).forEach(o=>{
-      if(!o || !o.id) return;
-      if(o.estado!=='concluida' && o.estado!=='os_fechada') return;
-      const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
-      if(!imed.includes(met)) return;                    // só pagamento direto ao técnico
-      if(o.faturaEmitida===true) return;                 // já foi faturado
-      if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return; // orçamento/garantia não precisam
-      const base=o.concluidoEm||o.pagamento?.data||o.data;
-      if(base && new Date(String(base).slice(0,10))<limite) return;
-      const jaAviso=(window.DB.mensagens_internas||[]).some(m=>m.tipo==='pedido_fatura'&&m.osId===o.id);
-      if(jaAviso) return;                                 // já existe aviso — não duplica
-      osCriarAvisoFatura(o, metLabels[met]||met);
-    });
-  }catch(e){ console.warn('osReconciliarAvisosFatura falhou:', e.message); }
 }
 
 function osMarcarFaturaEmitida(osId, fromDetalhe){
@@ -22412,14 +22345,9 @@ async function rpEnviarRelacaoTecnicos(auto){
   const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
   const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
 
-  // v15.43 — Só relatórios REALMENTE por entregar:
-  //  • OS já realizada (não um agendamento futuro): concluida / os_fechada
-  //  • serviço que pede relatório (exclui orçamento / garantia)
-  //  • ainda não enviado ao cliente
-  const _feito      = (o)=> o.estado==='concluida' || o.estado==='os_fechada';
-  const _precisaRel = (o)=> _feito(o) && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
-  const estA  = (o)=> _precisaRel(o) && rpEstadoRelatorio(o)==='pendente';               // realizada, relatório por iniciar
-  const estEl = (o)=>{ if(!_precisaRel(o)) return false; const e=rpEstadoRelatorio(o); return e!=='pendente' && e!=='a_realizar' && e!=='enviado'; }; // relatório em elaboração (rascunho/pronto/preliminar)
+  // Estado do relatório por OS: "a_realizar", "enviado", ou em elaboração (o resto)
+  const estA  = (o)=> rpEstadoRelatorio(o)==='a_realizar';
+  const estEl = (o)=>{ const e=rpEstadoRelatorio(o); return e!=='a_realizar' && e!=='enviado'; };
 
   // Técnicos ativos com email configurado
   const tecnicos = (window.DB.users||[]).filter(u=>u.role==='tecnico' && u.active!==false && u.email);
@@ -22444,13 +22372,13 @@ async function rpEnviarRelacaoTecnicos(auto){
     const emElab    = minhas.filter(estEl);
     if(!aRealizar.length && !emElab.length){ semOS++; continue; }
 
-    const secA = aRealizar.length ? `POR INICIAR (${aRealizar.length})\n${aRealizar.map(linha).join('\n')}` : '';
+    const secA = aRealizar.length ? `A REALIZAR (${aRealizar.length})\n${aRealizar.map(linha).join('\n')}` : '';
     const secE = emElab.length    ? `EM ELABORAÇÃO (${emElab.length})\n${emElab.map(linha).join('\n')}`    : '';
-    const corpo = `Olá ${tec.name||''},\n\nSegue a relação atualizada das ordens de serviço à tua responsabilidade que requerem ação:\n\n${[secA,secE].filter(Boolean).join('\n\n')}\n\nTotal: ${aRealizar.length+emElab.length} OS (${aRealizar.length} por iniciar, ${emElab.length} em elaboração).\nPor favor preenche e conclui os relatórios em falta dentro do prazo.\n\n${nomeRem}`;
+    const corpo = `Olá ${tec.name||''},\n\nSegue a relação atualizada das ordens de serviço à tua responsabilidade que requerem ação:\n\n${[secA,secE].filter(Boolean).join('\n\n')}\n\nTotal: ${aRealizar.length+emElab.length} OS (${aRealizar.length} a realizar, ${emElab.length} em elaboração).\nPor favor preenche e conclui os relatórios em falta dentro do prazo.\n\n${nomeRem}`;
     const assunto = `📋 Relatórios pendentes — ${aRealizar.length+emElab.length} OS (${new Date().toLocaleDateString('pt-PT')})`;
 
     // Acumular para a cópia consolidada da empresa
-    consolidado += `\n\n👷 ${tec.name||tec.email} — ${aRealizar.length+emElab.length} OS (${aRealizar.length} por iniciar, ${emElab.length} em elaboração)\n${[secA,secE].filter(Boolean).join('\n\n')}`;
+    consolidado += `\n\n👷 ${tec.name||tec.email} — ${aRealizar.length+emElab.length} OS (${aRealizar.length} a realizar, ${emElab.length} em elaboração)\n${[secA,secE].filter(Boolean).join('\n\n')}`;
     totalGlobalOS += (aRealizar.length+emElab.length);
     totalGlobalA  += aRealizar.length;
     totalGlobalE  += emElab.length;
@@ -22471,12 +22399,9 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.44 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
-  //          Os técnicos continuam a receber, cada um, a sua relação individual.
-  //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
-  if(false && consolidado.trim()){
-    const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} por iniciar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
+  if(consolidado.trim()){
+    const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} a realizar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
     const assuntoC = `📋 Relação consolidada — ${totalGlobalOS} OS pendentes (${new Date().toLocaleDateString('pt-PT')})`;
     try{
       const rc = await fetch('https://api.brevo.com/v3/smtp/email',{
@@ -23112,17 +23037,6 @@ function rpAbrirFormulario(osId, preserveTemp){
         style="font-size:13px;">${c.sugestao||''}</textarea>
     </div>
 
-    ${[...metsGuardadas].some(m=>/rastreador|tra[çc]ador|corante|uv|alagamento/i.test(m)) ? `
-    <div style="margin-top:16px;background:#faf5ff;border:2px solid #7c3aed;border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-      <div>
-        <div style="font-size:13px;font-weight:700;color:#6d28d9;">🔬 Rastreador Químico / Traçador UV detectado</div>
-        <div style="font-size:11px;color:#7c3aed;margin-top:2px;">Este serviço requer uma visita de retorno para leitura UV. Agende já o retorno.</div>
-      </div>
-      <button onclick="closeMo('mo-relat-pesquisa');agendarRetornoRastreador('${osId}')"
-        style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
-        📅 Agendar Retorno UV
-      </button>
-    </div>` : ''}
   `;
 
   // Renderizar fotos no grid depois de inserir HTML
@@ -24107,7 +24021,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
     const _u=(window.DB.users||[]).find(u=>u.name===_tecNome||u.login===_tecNome||u.id===_tecNome);
     if(_u&&(_u.nomeCompleto||_u.nomeReal||_u.nome)) _tecNome=_u.nomeCompleto||_u.nomeReal||_u.nome;
     if(_tecNome&&!_tecNome.includes(' ')&&empResp){
-      const _comp=s=>(s||'').toLowerCase().replace(/[^a-z]/g,'');
+      const _comp=x=>(x||'').toLowerCase().replace(/[^a-z]/g,'');
       const _resp=empResp.trim();
       const _ini=_resp.split(/\s+/).map((w,i,a)=>i<a.length-1?w[0]:w).join('');
       if(_comp(_tecNome)===_comp(_ini)||_comp(_tecNome)===_comp(_resp)) _tecNome=_resp;
@@ -24628,7 +24542,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
               ${sigTec
                 ?`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px;margin-bottom:8px;background:#f8fafc;"><img src="${sigTec}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;"></div>`
                 :`<div style="height:70px;border-bottom:1.5px solid #94a3b8;margin-bottom:8px;"></div>`}
-              <div style="font-size:11px;font-weight:700;color:#1e293b;">${c.tecnico||tecs||'Técnico'}</div>
+              <div style="font-size:11px;font-weight:700;color:#1e293b;">${_tecNome==='—'?(c.tecnico||tecs||'Técnico'):_tecNome}</div>
               <div style="font-size:9px;color:#94a3b8;">Responsável pela peritagem · ${dataServico}</div>
             </div>
             <div style="text-align:center;">
@@ -24814,7 +24728,7 @@ async function rpGerarDocxBase64(osId){
         const empNome = empCfg.nome    ||'Localiza Fugas — Valentim Fialho Unip. Lda.';
         const empNif  = empCfg.nif     ||'517551543';
         const empMorada=[empCfg.morada,empCfg.cp,empCfg.localidade].filter(Boolean).join(', ')||"Rua do Taxa, 13, 4710-448 Braga";
-        const empTel  = empCfg.tel     ||'253 049 535';
+        const empTel  = empCfg.tel     ||'253 000 000';
         const empEmail= empCfg.email   ||'localizafugas@gmail.com';
         const empResp = empCfg.responsavel||'Ronaldo Valentim Fialho';
         const empItc  = empCfg.itc     ||'2014BR09N001';
@@ -34007,7 +33921,6 @@ window.cliHistoricoImprimir = function(cliId){
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;">
           <button onclick="window.cpTogglePago('${c.id}')" style="border:1px solid ${pago?'#cbd5e1':'#15803d'};background:${pago?'#fff':'#15803d'};color:${pago?'#64748b':'#fff'};border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">${pago?'↺':'✓ Pago'}</button>
-          ${((c.fatura&&c.fatura.url)||(c.documento&&c.documento.url))?`<button onclick="window.cpVerFatura('${c.id}')" style="border:1px solid #0e7c86;background:#fff;color:#0e7c86;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">📎 ${imp?'PDF':'Fatura'}</button>`:''}
           <button onclick="window.${imp?'cpNovoImposto':'cpNova'}('${c.id}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Editar</button>
           <button onclick="window.cpApagar('${c.id}')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Apagar</button>
         </div></div>`;
@@ -34049,20 +33962,16 @@ window.cliHistoricoImprimir = function(cliId){
 
   // ---------- formulário: FATURA ----------
   window.cpNova=function(id){
-    _cpFaturaFile=null;
     const c=id?cpDB().find(x=>x.id===id):null;
     const forns=[...new Set((window.DB.fornecedores||[]).map(f=>f.nome||f.name||f.fornecedor).filter(Boolean))];
     const ov=mkForm();
     const fg='margin-bottom:12px;', lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;',
           inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
-    const _faturaAtual = (c&&c.fatura&&c.fatura.url)
-      ? `<div style="margin-bottom:8px;"><a href="${c.fatura.url}" target="_blank" style="display:inline-block;color:#0e7c86;font-weight:700;text-decoration:none;">📎 Ver fatura atual</a></div>` : '';
-    const _faturaZona = `${_faturaAtual}<div id="cp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
-        <b style="color:#0f2430;">📎 ${c?'Substituir / anexar fatura':'Arrasta aqui a fatura'} (PDF ou foto)</b><br><span style="font-size:12px;">${c?'toca para escolher':'para preencher sozinho — ou toca para escolher'}</span>
-        <input id="cp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
-      <div id="cp-ocr-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`;
     ov.firstChild.innerHTML=`<h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar conta':'Nova conta a pagar'}</h2>
-      ${_faturaZona}
+      ${id?'':`<div id="cp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
+        <b style="color:#0f2430;">📎 Arrasta aqui a fatura (PDF ou foto)</b><br><span style="font-size:12px;">para preencher sozinho — ou toca para escolher</span>
+        <input id="cp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
+      <div id="cp-ocr-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`}
       <div style="${fg}"><label style="${lb}">Fornecedor</label>
         <input id="cp-forn" list="cp-forn-list" style="${inp}" value="${esc(c?.fornecedor||'')}" placeholder="Nome do fornecedor">
         <datalist id="cp-forn-list">${forns.map(f=>`<option value="${esc(f)}">`).join('')}</datalist></div>
@@ -34087,19 +33996,12 @@ window.cliHistoricoImprimir = function(cliId){
       </div>`;
     window._cpCalc();
     if(!id) bindDrop('cp-drop','cp-file','cp-ocr-msg',cpFaturaOCR);
-    else    bindDrop('cp-drop','cp-file','cp-ocr-msg',cpFaturaAnexar);
   };
   window._cpCalc=function(){
     const g=num(document.getElementById('cp-gross')?.value), r=num(document.getElementById('cp-rate')?.value)/100;
     const el=document.getElementById('cp-iva'); if(el) el.value=eur(g-g/(1+r));
   };
-  let _cpFaturaFile=null, _cpImpostoFile=null;
-  const readDataUrl=f=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error('falha a ler'));r.readAsDataURL(f);});
-  async function cpFaturaAnexar(file,msg){ _cpFaturaFile=file; if(msg){ msg.style.color='#15803d'; msg.innerHTML='📎 Fatura pronta — guarda para anexar.'; } }
-  async function cpImpostoAnexar(file,msg){ _cpImpostoFile=file; if(msg){ msg.style.color='#15803d'; msg.innerHTML='📎 Documento pronto — guarda para anexar.'; } }
-  window.cpVerFatura=function(id){ const c=cpDB().find(x=>x.id===id); const f=c&&(c.fatura||c.documento); if(!f||!f.url){ toast('Sem documento anexado.','ℹ️'); return; } window.open(f.url,'_blank'); };
   async function cpFaturaOCR(file,msg){
-    _cpFaturaFile=file;
     msg.style.color='#0e7c86'; msg.innerHTML='🤖 A ler a fatura…';
     try{
       const p=await ocrDoc(file,`Analisa esta fatura de fornecedor e responde APENAS em JSON puro (sem markdown):
@@ -34116,20 +34018,16 @@ Deixa vazio o que não conseguires ler.`);
 
   // ---------- formulário: IMPOSTO ----------
   window.cpNovoImposto=function(id){
-    _cpImpostoFile=null;
     const c=id?cpDB().find(x=>x.id===id):null;
     const ov=mkForm();
     const fg='margin-bottom:12px;', lb='display:block;font-size:12px;font-weight:700;color:#4a5b66;margin-bottom:4px;',
           inp='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;box-sizing:border-box;';
     const tipos=['IVA','IRS','Segurança Social'];
-    const _docAtual = (c&&c.documento&&c.documento.url)
-      ? `<div style="margin-bottom:8px;"><a href="${c.documento.url}" target="_blank" style="display:inline-block;color:#0e7c86;font-weight:700;text-decoration:none;">📎 Ver documento atual</a></div>` : '';
-    const _docZona = `${_docAtual}<div id="imp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
-        <b style="color:#0f2430;">📎 ${c?'Substituir / anexar PDF':'Arrasta o PDF do contabilista'}</b><br><span style="font-size:12px;">${c?'toca para escolher':'para ler o tipo, o valor e o prazo — ou toca para escolher'}</span>
-        <input id="imp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
-      <div id="imp-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`;
     ov.firstChild.innerHTML=`<h2 style="margin:0 0 16px;font-size:18px;">${id?'Editar imposto':'Novo imposto'}</h2>
-      ${_docZona}
+      ${id?'':`<div id="imp-drop" style="border:2px dashed #cbd5e1;border-radius:10px;padding:16px;text-align:center;color:#64748b;cursor:pointer;margin-bottom:8px;background:#f8fafc;">
+        <b style="color:#0f2430;">📎 Arrasta o PDF do contabilista</b><br><span style="font-size:12px;">para ler o tipo, o valor e o prazo — ou toca para escolher</span>
+        <input id="imp-file" type="file" accept="application/pdf,image/*" style="display:none;"></div>
+      <div id="imp-msg" style="font-size:12px;margin:0 0 12px;min-height:16px;"></div>`}
       <div style="${fg}"><label style="${lb}">Imposto</label>
         <select id="imp-tipo" style="${inp}">${tipos.map(t=>`<option ${c?.imposto===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div style="display:flex;gap:12px;">
@@ -34142,10 +34040,8 @@ Deixa vazio o que não conseguires ler.`);
         <button onclick="window.cpGuardarImposto('${id||''}')" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">Guardar</button>
       </div>`;
     if(!id) bindDrop('imp-drop','imp-file','imp-msg',cpImpostoOCR);
-    else    bindDrop('imp-drop','imp-file','imp-msg',cpImpostoAnexar);
   };
   async function cpImpostoOCR(file,msg){
-    _cpImpostoFile=file;
     msg.style.color='#0e7c86'; msg.innerHTML='🤖 A ler o documento…';
     try{
       const p=await ocrDoc(file,`Este é um documento do contabilista sobre um imposto a pagar. Responde APENAS em JSON puro (sem markdown):
@@ -34174,18 +34070,8 @@ Deixa vazio o que não conseguires ler.`);
       dataFatura:iso(), vencimento:venc, notas:periodo,
       estado:antiga?.estado||'aberto', pagoEm:antiga?.pagoEm||null,
       criadoPor:antiga?.criadoPor||(window.currentUser?.id||null), criadoEm:antiga?.criadoEm||new Date().toISOString() };
-    d.documento = antiga?.documento || null;
-    if(_cpImpostoFile){
-      try{
-        const dataUrl = await readDataUrl(_cpImpostoFile);
-        const ext = (_cpImpostoFile.type==='application/pdf') ? 'pdf' : (((_cpImpostoFile.name||'').split('.').pop()||'pdf').toLowerCase());
-        const up = await window.fsUploadFoto('impostos/'+d.id+'/'+Date.now()+'.'+ext, dataUrl);
-        d.documento = { url:up.url, path:up.path, nome:_cpImpostoFile.name||('documento.'+ext), tipo:_cpImpostoFile.type||'' };
-      }catch(e){ console.warn('upload documento imposto falhou:', e); toast('Imposto guardado — mas o PDF não foi anexado: '+(e.message||e),'⚠️'); }
-    }
     try{ await window.fsSet('contasPagar', d.id, d);
       if(typeof auditLog==='function') auditLog(id?'imposto_editado':'imposto_criado',`${tipo} — ${eur(d.gross)} — vence ${fmtData(venc)}`);
-      _cpImpostoFile=null;
       document.getElementById('cp-form')?.remove(); toast(id?'Imposto atualizado!':'Imposto lançado!','✅'); cpRender();
     }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
   };
@@ -34229,18 +34115,8 @@ Deixa vazio o que não conseguires ler.`);
       notas:document.getElementById('cp-notas').value.trim(),
       estado:antiga?.estado||'aberto', pagoEm:antiga?.pagoEm||null,
       criadoPor:antiga?.criadoPor||(window.currentUser?.id||null), criadoEm:antiga?.criadoEm||new Date().toISOString() };
-    d.fatura = antiga?.fatura || null;
-    if(_cpFaturaFile){
-      try{
-        const dataUrl = await readDataUrl(_cpFaturaFile);
-        const ext = (_cpFaturaFile.type==='application/pdf') ? 'pdf' : (((_cpFaturaFile.name||'').split('.').pop()||'jpg').toLowerCase());
-        const up = await window.fsUploadFoto('faturas/'+d.id+'/'+Date.now()+'.'+ext, dataUrl);
-        d.fatura = { url:up.url, path:up.path, nome:_cpFaturaFile.name||('fatura.'+ext), tipo:_cpFaturaFile.type||'' };
-      }catch(e){ console.warn('upload fatura falhou:', e); toast('Conta guardada — mas a fatura não foi anexada: '+(e.message||e),'⚠️'); }
-    }
     try{ await window.fsSet('contasPagar', d.id, d);
       if(typeof auditLog==='function') auditLog(id?'conta_editada':'conta_criada',`Conta ${d.id} — ${d.fornecedor} — ${eur(d.gross)}`);
-      _cpFaturaFile=null;
       document.getElementById('cp-form')?.remove(); toast(id?'Conta atualizada!':'Conta lançada!','✅'); cpRender();
     }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
   };
@@ -34511,7 +34387,18 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
 })();
 </script>
 
-
+<!-- Técnico — não repetir as cláusulas do orçamento no meio da ficha da OS.
+     Filtra o bloco "A) Termo de Responsabilidade ..." apenas na exibição; o
+     campo de observações continua guardado inteiro e editável. -->
+<script>
+function osLimparClausulas(t){
+  if(!t) return '';
+  const s = String(t);
+  const i = s.indexOf('A) Termo de Responsabilidade');
+  return (i >= 0 ? s.slice(0, i) : s).trim();
+}
+window.osLimparClausulas = osLimparClausulas;
+</script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
      HidroGest — Relatório do cliente em PDF (idêntico ao ecrã)   v15.40
@@ -34718,25 +34605,6 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
 
   console.log('[v15.40] envio do relatório ao cliente em PDF (idêntico ao ecrã) activo');
 })();
-</script>
-
-<!-- ═══════════════════════════════════════════════════════════════════════
-     HidroGest — v15.41
-     Não repetir as cláusulas do orçamento no meio da ficha da OS.
-     As observações da OS (o.obs) trazem, vindas do orçamento, o bloco
-     "A) Termo de Responsabilidade ... B) Condições Comerciais ...".
-     Esse texto já aparece no fim (orçamento / email), por isso é filtrado
-     APENAS na exibição no meio da ficha. O campo continua guardado inteiro
-     e editável — só não se mostra em duplicado.
-     ═══════════════════════════════════════════════════════════════════════ -->
-<script>
-function osLimparClausulas(t){
-  if(!t) return '';
-  const s = String(t);
-  const i = s.indexOf('A) Termo de Responsabilidade');
-  return (i >= 0 ? s.slice(0, i) : s).trim();
-}
-window.osLimparClausulas = osLimparClausulas;
 </script>
 
 </body>

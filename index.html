@@ -3727,6 +3727,7 @@ Localiza Fugas
             <option value="20">20%</option><option value="0">0%</option>
           </select>
         </div>
+        <div class="fg" id="d-km-group" style="display:none;"><label>KM do carro <span style="color:#94a3b8;font-weight:400;">(abastecimento)</span></label><input class="fi" id="d-km" type="number" min="0" step="1" placeholder="Ex: 124500"></div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin:-2px 0 12px;font-size:13px;cursor:pointer;">
         <input type="checkbox" id="d-recibo-verde" onchange="despToggleReciboVerde()" style="width:16px;height:16px;">
@@ -6160,7 +6161,7 @@ function openNewDespesa(){
   editingDespId=null;
   document.getElementById('mo-desp-title').textContent='Nova Despesa';
   document.getElementById('d-date').value=today();
-  ['d-supplier','d-nif','d-total','d-desc'].forEach(id=>document.getElementById(id).value='');
+  ['d-supplier','d-nif','d-total','d-desc','d-km'].forEach(id=>{const _e=document.getElementById(id); if(_e) _e.value='';});
   document.getElementById('d-type').value='';
   document.getElementById('d-ivarate').value='23';
   if(document.getElementById('d-recibo-verde')) document.getElementById('d-recibo-verde').checked=false;
@@ -6191,6 +6192,7 @@ function editDesp(id){
   if(document.getElementById('d-irs-rate')) document.getElementById('d-irs-rate').value=d.irsRate||25;
   despToggleReciboVerde();
   document.getElementById('d-desc').value=d.desc||'';
+  if(document.getElementById('d-km')) document.getElementById('d-km').value=d.km||'';
   _despPopularSelectTecnico(d.tecnicoId||'');
   const photoEl=document.getElementById('d-photo-img');
   const previewEl=document.getElementById('d-photo-preview');
@@ -6211,6 +6213,7 @@ function despToggleReciboVerde(){
 }
 
 function calcDespIVA(){
+  { const _kmG=document.getElementById('d-km-group'); const _t=document.getElementById('d-type')?.value; if(_kmG) _kmG.style.display=(_t==='combustivel')?'':'none'; }
   const gross=parseFloat(document.getElementById('d-total').value)||0;
   const rv=document.getElementById('d-recibo-verde')?.checked;
   if(rv){
@@ -6432,6 +6435,8 @@ async function saveDespesa(){
   const supplier=document.getElementById('d-supplier').value.trim();
   const type=document.getElementById('d-type').value;
   const gross=parseFloat(document.getElementById('d-total').value)||0;
+  const kmVal=(document.getElementById('d-km')?.value||'').trim();
+  const kmEmFalta=(type==='combustivel' && !kmVal);
   if(!supplier||!type||!gross){toast('Preencha os campos obrigatórios!','⚠️');return;}
   const nifValDesp=document.getElementById('d-nif')?.value||'';
   if(nifValDesp && !validarNIF(nifValDesp)){if(!confirm('O NIF "'+nifValDesp+'" parece inválido. Continuar mesmo assim?'))return;}
@@ -6453,6 +6458,7 @@ async function saveDespesa(){
     iva:parseFloat(iva.toFixed(2)),net:parseFloat(net.toFixed(2)),
     reciboVerde, irsRate:reciboVerde?irsRate:0, irsRetido:parseFloat(irsRetido.toFixed(2)), valorPagar:parseFloat(valorPagar.toFixed(2)),
     desc:document.getElementById('d-desc').value,
+    km: kmVal||null, kmEmFalta,
     photo:img&&img.startsWith('data:')?img:'',
     tecnicoId:tecId||null,
     tecnicoNome:tecUser?.name||null,
@@ -6466,6 +6472,7 @@ async function saveDespesa(){
     if(!editingDespId){window.DB.nextDesp=nextDesp+1; await window.fsMeta('nextDesp', nextDesp+1);}
     closeMo('mo-despesa');
     toast(editingDespId?'Despesa atualizada!':'Despesa registada!','✅');
+    if(kmEmFalta) toast('⚠️ Abastecimento sem KM do carro. A administração será informada da falta desta informação.','🚗');
     auditLog(editingDespId?'despesa_editada':'despesa_criada',`Despesa ${d.id} — ${d.supplier} — €${d.gross||0}${tecUser?' · '+tecUser.name:''}`);
   }catch(e){
     console.error('saveDespesa falhou:', e);
@@ -19166,6 +19173,7 @@ function closeMo(id){
 }
 // Aviso persistente: OS com trabalho terminado mas ainda por assinar/fechar
 function cronoPendenteFecho(osId){
+  return; // Pop-up "OS por fechar" desativado: usa-se a notificação simples + a verificação no fecho da OS.
   if(window.currentUser?.role!=='tecnico') return;
   let box=document.getElementById('crono-pendente');
   if(!box){
@@ -22820,7 +22828,17 @@ function rpAbrirFormulario(osId, preserveTemp){
         style="font-size:11px;padding:6px 7px;border:1px solid #e2e8f0;border-radius:6px;background:#fff;color:#1e293b;width:100%;box-sizing:border-box;">
     </div>`).join('');
 
-  document.getElementById('rp-modal-body').innerHTML = `
+  const _rpBody = document.getElementById('rp-modal-body');
+  // Preservar a posição de scroll quando é apenas um re-render (ex.: adicionar foto),
+  // para o formulário não saltar para o topo.
+  if(preserveTemp && _rpBody){
+    let _rpSc=null, _n=_rpBody;
+    while(_n && _n!==document.body){ const _st=getComputedStyle(_n); if(/(auto|scroll)/.test(_st.overflowY) && _n.scrollHeight>_n.clientHeight){ _rpSc=_n; break; } _n=_n.parentElement; }
+    if(!_rpSc) _rpSc=document.scrollingElement||document.documentElement;
+    const _rpTop=_rpSc.scrollTop;
+    requestAnimationFrame(()=>{ try{ _rpSc.scrollTop=_rpTop; }catch(e){} });
+  }
+  _rpBody.innerHTML = `
 
     <!-- Banner informativo para técnico -->
     ${_isTecnico ? `
@@ -26226,8 +26244,21 @@ function osClearCanvas(canvasId){
 
 function osCanvasToDataURL(canvasId){
   const canvas=document.getElementById(canvasId); if(!canvas) return '';
-  if(canvas.dataset.signed!=='true') return '';
-  return canvas.toDataURL('image/png');
+  try{
+    const ctx=canvas.getContext('2d');
+    const w=canvas.width, h=canvas.height;
+    if(!w||!h) return canvas.dataset.signed==='true' ? canvas.toDataURL('image/png') : '';
+    // Procurar tinta: qualquer pixel com alpha>0 = há traço (funciona quer tenha sido
+    // desenhada agora quer tenha sido reposta de uma assinatura guardada).
+    const d=ctx.getImageData(0,0,w,h).data;
+    let hasInk=false;
+    for(let i=3;i<d.length;i+=4){ if(d[i]!==0){ hasInk=true; break; } }
+    if(!hasInk && canvas.dataset.signed!=='true') return '';
+    return canvas.toDataURL('image/png');
+  }catch(e){
+    // Se getImageData falhar (ex.: canvas "tainted"), recorre à flag.
+    return canvas.dataset.signed==='true' ? canvas.toDataURL('image/png') : '';
+  }
 }
 
 // ── Concluir OS com assinaturas ──────────────────────────────
@@ -26292,8 +26323,8 @@ async function osConcluirComAssinaturas(){
     const _multiUnidade = _tipolFrac.includes('apart') || _tipolFrac.includes('condom') || _tipolFrac.includes('comum') || _tipolFrac.includes('fraç') || _tipolFrac.includes('frac');
     if(_multiUnidade && (!_cps.numeroFracao || !_cps.numeroFracao.trim())) _faltam.push('número da fração inspecionada');
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
-    if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
-    if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
+    if(_multiUnidade && (!_cps.localManifestacao || !_cps.localManifestacao.trim())) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
+    if(_multiUnidade && (!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim())) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
     if(_estadoFecho==='definitivo' && !((_cps.conclusao&&_cps.conclusao.trim())||(_cps.trabalho&&_cps.trabalho.trim()))) _faltam.push('descrição do trabalho / conclusão (obrigatória num relatório definitivo)');
     if(_nFotos < 4) _faltam.push('mínimo de 4 fotos do problema (tem '+_nFotos+')');
     if(_faltam.length){
@@ -26476,7 +26507,7 @@ function rpMostrarAlertaBV(){
       : `⏱ Preenche os relatórios pendentes dentro de 5 dias úteis. O atraso <strong>reduz a tua comissão</strong> e pode gerar <strong>avaliações negativas</strong>.`;
   }
 
-  document.getElementById('bv-lista').innerHTML = pendentes.slice(0,10).map(p=>{
+  document.getElementById('bv-lista').innerHTML = (isTec?[]:pendentes.slice(0,10)).map(p=>{
     const corTipo = p.tipo==='atrasado'?'#fef2f2':p.tipo==='aviso'?'#fffbeb':'#f0fdf4';
     const bordaTipo= p.tipo==='atrasado'?'#fecaca':p.tipo==='aviso'?'#fde68a':'#86efac';
     const icone    = p.tipo==='atrasado'?'🔴':p.tipo==='aviso'?'🟡':'🟢';

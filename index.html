@@ -21923,6 +21923,9 @@ function rpDiasUteisAdicionar(dataBase, nDias){
 
 function rpDiasParaEnvio(os){
   const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  // Relatório já enviado ao cliente pelo admin → não tem prazo nem pode contar
+  // como atraso em lado nenhum da app (admin ou técnico). Regra central.
+  if(rel?.estado==='enviado') return null;
   // 1. Usar prazoRelatorio da OS (novo campo do osFecharSemRelatorio)
   if(os?.prazoRelatorio){
     const prazo = new Date(os.prazoRelatorio+'T12:00:00');

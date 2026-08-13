@@ -13679,6 +13679,16 @@ async function osGuardarEdicao(){
   }
   await window.fsSet('ordens',editingOsId,updated);
 
+  // Se o técnico mudou, limpar o nome de técnico antigo guardado no relatório,
+  // para o relatório passar a refletir o técnico atualmente atribuído à OS.
+  const _tecMudou = JSON.stringify((o.tecnicos||[]).slice().sort())!==JSON.stringify((updated.tecnicos||[]).slice().sort());
+  if(_tecMudou){
+    const _relT=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===editingOsId);
+    if(_relT && _relT.campos && _relT.campos.tecnico){
+      await window.fsSetMerge('relatorios_pesquisa', editingOsId, {campos:{...(_relT.campos||{}), tecnico:''}});
+    }
+  }
+
   // Se o cliente mudou, actualizar também o "carimbo" do cliente no relatório desta OS
   if(_clienteAlterado){
     const _nc=(window.DB.clientes||[]).find(c=>c.id===_novoCliId)||{};
@@ -24004,7 +24014,10 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
   const empItc    = empCfg.itc        || '2014BR09N001';
 
   // ── Nome do técnico para exibição: nome real; se vier o login, resolver ──
-  let _tecNome = (c.tecnico||tecs||'').trim();
+  // Nome do técnico: usar SEMPRE o técnico atualmente atribuído à OS (os.tecnicos),
+  // e só como último recurso o nome antigo guardado no relatório — assim, ao mudar
+  // de técnico, o relatório passa a refletir quem realmente vai fazer a OS.
+  let _tecNome = (tecs||c.tecnico||'').trim();
   {
     const _u=(window.DB.users||[]).find(u=>u.name===_tecNome||u.login===_tecNome||u.id===_tecNome);
     if(_u&&(_u.nomeCompleto||_u.nomeReal||_u.nome)) _tecNome=_u.nomeCompleto||_u.nomeReal||_u.nome;

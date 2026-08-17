@@ -34742,5 +34742,99 @@ function osLimparClausulas(t){
 window.osLimparClausulas = osLimparClausulas;
 </script>
 
+<!-- ══════════════════════════════════════════════════════════════
+     HidroGest — Janelas: X mais fácil de fechar + arrastar com o dedo
+     Acrescentado no fim; não altera openMo/closeMo nem os X existentes.
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+  /* 1) Área de toque do X maior (o círculo continua 30px, mas fica
+        ~46px "clicável" — resolve o X que às vezes não responde) */
+  .mc{position:relative;}
+  .mc::after{content:"";position:absolute;inset:-8px;border-radius:50%;}
+  /* 2) O cabeçalho da janela é a pega para arrastar */
+  .mh{touch-action:none;-webkit-user-select:none;user-select:none;cursor:move;}
+  .mh .mc{cursor:pointer;}
+  .mh-title{cursor:move;}
+</style>
+<script>
+(function(){
+  'use strict';
+
+  /* — repor a posição sempre que uma janela abre — */
+  if(typeof window.openMo==='function' && !window.openMo.__hgPatched){
+    var _openMo=window.openMo;
+    window.openMo=function(id){
+      _openMo(id);
+      var md=(document.getElementById(id)||{}).querySelector
+             ? document.getElementById(id).querySelector('.md') : null;
+      if(md){ md.style.transform=''; md.__hgx=0; md.__hgy=0; }
+    };
+    window.openMo.__hgPatched=true;
+  }
+
+  /* — 1) fechar ao tocar FORA do cartão (no fundo escurecido) —
+       fallback para quando o X é difícil de acertar; usa closeMo
+       para manter os efeitos já existentes. Excluir uma janela:
+       basta pôr data-nofundo no seu <div class="mo" ...>.            */
+  document.addEventListener('click', function(e){
+    var mo=e.target;
+    if(mo && mo.classList && mo.classList.contains('mo') && mo.classList.contains('open')
+       && !mo.hasAttribute('data-nofundo')){
+      if(typeof window.closeMo==='function') window.closeMo(mo.id);
+      else mo.classList.remove('open');
+    }
+  });
+
+  /* — 2) arrastar a janela pelo cabeçalho (dedo ou rato) — */
+  document.addEventListener('pointerdown', function(e){
+    var mh=e.target.closest && e.target.closest('.mh');
+    if(!mh) return;
+    if(e.target.closest('.mc,button,a,input,select,textarea,label')) return; // não roubar o toque a controlos
+    var md=mh.closest('.md'); if(!md) return;
+    var dx0=md.__hgx||0, dy0=md.__hgy||0, sx=e.clientX, sy=e.clientY;
+
+    function onMove(ev){
+      var r=md.getBoundingClientRect();
+      var baseLeft=r.left-(md.__hgx||0), baseTop=r.top-(md.__hgy||0);
+      var dx=dx0+(ev.clientX-sx), dy=dy0+(ev.clientY-sy);
+      var newLeft=baseLeft+dx, newTop=baseTop+dy;
+      // manter visível: >=80px na horizontal e o cabeçalho sempre alcançável
+      newLeft=Math.max(80-r.width, Math.min(newLeft, innerWidth-80));
+      newTop =Math.max(8,          Math.min(newTop,  innerHeight-44));
+      md.__hgx=newLeft-baseLeft; md.__hgy=newTop-baseTop;
+      md.style.transform='translate('+md.__hgx+'px,'+md.__hgy+'px)';
+    }
+    function onUp(){
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      document.removeEventListener('pointercancel',onUp);
+    }
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+    document.addEventListener('pointercancel',onUp);
+  });
+
+  /* — helper para tornar qualquer caixa flutuante arrastável à mão —
+       ex.: hgArrastavel(document.getElementById('crono-pendente'));   */
+  window.hgArrastavel=function(caixa,pega){
+    if(!caixa||caixa.__hgArr) return; caixa.__hgArr=true;
+    pega=pega||caixa; pega.style.touchAction='none'; pega.style.cursor='move';
+    pega.addEventListener('pointerdown',function(e){
+      if(e.target.closest('button,a,input,select,textarea,label,[data-close],[data-fechar]')) return;
+      var r=caixa.getBoundingClientRect();
+      caixa.style.position='fixed'; caixa.style.margin='0'; caixa.style.transform='none';
+      caixa.style.left=r.left+'px'; caixa.style.top=r.top+'px'; caixa.style.right='auto'; caixa.style.bottom='auto';
+      var ox=e.clientX-r.left, oy=e.clientY-r.top;
+      function mv(ev){
+        caixa.style.left=Math.max(0,Math.min(ev.clientX-ox, innerWidth -caixa.offsetWidth ))+'px';
+        caixa.style.top =Math.max(0,Math.min(ev.clientY-oy, innerHeight-caixa.offsetHeight))+'px';
+      }
+      function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); }
+      document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
+    });
+  };
+})();
+</script>
+
 </body>
 </html>

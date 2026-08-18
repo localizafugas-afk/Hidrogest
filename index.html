@@ -34335,6 +34335,468 @@ Deixa vazio o que não conseguires ler.`);
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
+     HidroGest — MÓDULO PREVISÃO DE RECEITA / FLUXO DE CAIXA
+     Lê os agendamentos (ordens em estado agendada/em_curso), soma o valor
+     previsto por dia e por tipo de serviço, e exporta CSV para o Excel do fluxo.
+     Regra da data: dia do agendamento (o.data); OS a transferência ou com
+     data de recebimento marcada são empurradas para a data de recebimento.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const num=v=>parseFloat(String(v==null?0:v).replace(',','.'))||0;
+  const eur=n=>(n||0).toLocaleString('pt-PT',{style:'currency',currency:'EUR'});
+  const iso=d=>{const x=d?new Date(d):new Date();x.setHours(0,0,0,0);return x.toISOString().slice(0,10);};
+  const fmtData=d=>{if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:String(d);};
+  const fimMes=()=>{const d=new Date();return iso(new Date(d.getFullYear(),d.getMonth()+1,0));};
+  const addDias=(s,n)=>{const d=new Date(String(s).slice(0,10));d.setDate(d.getDate()+n);return iso(d);};
+  const okData=s=>/^\d{4}-\d{2}-\d{2}/.test(String(s||''));
+  const toast=(m,i)=>{ if(typeof window.toast==='function') window.toast(m,i); else console.log(m); };
+  const podeVer=()=>['admin','supervisor','gerente'].includes(window.currentUser&&window.currentUser.role);
+
+  const ESTADOS_PREVISAO=['agendada','em_curso'];   // ainda não realizadas/pagas
+  window._frDiasDiferido = window._frDiasDiferido || 30;   // prazo p/ recebimentos diferidos
+
+  function svNome(o){
+    const s=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
+    return (s&&s.nome)||o.servicoNome||o.servico||'Outro';
+  }
+  // Data em que o DINHEIRO é esperado (não necessariamente o dia do trabalho)
+  function dataReceb(o){
+    if(okData(o.dataRecebimentoPrev)) return String(o.dataRecebimentoPrev).slice(0,10);
+    const met=(o.pagamento&&o.pagamento.metodo)||'';
+    if(met==='transferencia' && okData(o.data)) return addDias(o.data, window._frDiasDiferido);
+    return okData(o.data)?String(o.data).slice(0,10):null;
+  }
+
+  // Constrói a previsão no período [de, ate]
+  function construir(de, ate){
+    const linhas=[];                     // {data, tipo, valor, n, diferido}
+    (window.DB.ordens||[]).forEach(o=>{
+      if(!ESTADOS_PREVISAO.includes(o.estado)) return;
+      const dr=dataReceb(o); if(!dr) return;
+      if(dr<de || dr>ate) return;
+      linhas.push({ data:dr, tipo:svNome(o), valor:num(o.total),
+                    diferido: dr!==(String(o.data||'').slice(0,10)) });
+    });
+    return linhas;
+  }
+
+  window.frAbrir=function(){
+    let ov=document.getElementById('fr-ov');
+    if(!ov){ ov=document.createElement('div'); ov.id='fr-ov';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.35);z-index:9000;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      document.body.appendChild(ov);
+    }
+    if(!window._frDe) window._frDe=iso();
+    if(!window._frAte) window._frAte=fimMes();
+    frRender();
+  };
+
+  window.frMudarPeriodo=function(){
+    const de=document.getElementById('fr-de'), ate=document.getElementById('fr-ate'), dif=document.getElementById('fr-dif');
+    if(de&&okData(de.value)) window._frDe=de.value;
+    if(ate&&okData(ate.value)) window._frAte=ate.value;
+    if(dif) window._frDiasDiferido=parseInt(dif.value)||0;
+    frRender();
+  };
+
+  function frRender(){
+    const ov=document.getElementById('fr-ov'); if(!ov) return;
+    const de=window._frDe, ate=window._frAte;
+    const linhas=construir(de,ate);
+
+    // Totais por tipo e por dia
+    const porTipo={}, porDia={}; let total=0, nAg=linhas.length, nDif=0;
+    linhas.forEach(l=>{
+      total+=l.valor; if(l.diferido) nDif++;
+      porTipo[l.tipo]=porTipo[l.tipo]||{valor:0,n:0}; porTipo[l.tipo].valor+=l.valor; porTipo[l.tipo].n++;
+      porDia[l.data]=porDia[l.data]||{valor:0,tipos:{}}; porDia[l.data].valor+=l.valor;
+      porDia[l.data].tipos[l.tipo]=(porDia[l.data].tipos[l.tipo]||0)+l.valor;
+    });
+    const tiposOrd=Object.keys(porTipo).sort((a,b)=>porTipo[b].valor-porTipo[a].valor);
+    const diasOrd=Object.keys(porDia).sort();
+
+    const card=(k,v,m)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b;">${k}</div>
+      <div style="font-size:22px;font-weight:700;margin-top:6px;color:#0369a1;">${v}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:2px;">${m||''}</div></div>`;
+
+    const chipsTipo=tiposOrd.map(t=>`<div style="display:flex;justify-content:space-between;gap:10px;border:1px solid #e2e8f0;border-radius:9px;padding:8px 12px;background:#fff;">
+      <span style="font-size:13px;font-weight:600;">${esc(t)} <span style="color:#94a3b8;font-weight:500;">· ${porTipo[t].n}</span></span>
+      <span style="font-size:14px;font-weight:700;color:#0f2430;">${eur(porTipo[t].valor)}</span></div>`).join('');
+
+    const linhasDia=diasOrd.map(d=>{
+      const det=Object.keys(porDia[d].tipos).sort((a,b)=>porDia[d].tipos[b]-porDia[d].tipos[a])
+        .map(t=>`${esc(t)} ${eur(porDia[d].tipos[t])}`).join('  ·  ');
+      return `<tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:8px 10px;font-weight:600;white-space:nowrap;">${fmtData(d)}</td>
+        <td style="padding:8px 10px;font-size:12px;color:#475569;">${det}</td>
+        <td style="padding:8px 10px;text-align:right;font-weight:700;white-space:nowrap;">${eur(porDia[d].valor)}</td></tr>`;
+    }).join('');
+
+    ov.innerHTML=`<div style="width:100%;max-width:860px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <h2 style="margin:0;font-size:20px;">📈 Previsão de Receita</h2>
+        <button onclick="window.frExportar()" style="margin-left:auto;border:1px solid #15803d;background:#15803d;color:#fff;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;">⬇️ Exportar CSV</button>
+        <button onclick="document.getElementById('fr-ov').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:10px 14px;cursor:pointer;">Fechar</button>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+        <label style="font-size:12px;color:#475569;">De<br><input type="date" id="fr-de" value="${de}" onchange="window.frMudarPeriodo()" style="margin-top:3px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:12px;color:#475569;">Até<br><input type="date" id="fr-ate" value="${ate}" onchange="window.frMudarPeriodo()" style="margin-top:3px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;"></label>
+        <label style="font-size:12px;color:#475569;" title="Nº de dias a somar à data do agendamento para OS a transferência/diferidas">Dias p/ diferidos<br><input type="number" id="fr-dif" value="${window._frDiasDiferido}" min="0" onchange="window.frMudarPeriodo()" style="margin-top:3px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;width:90px;"></label>
+        <div style="font-size:11px;color:#94a3b8;flex:1;min-width:200px;line-height:1.4;">Conta no dia do agendamento. OS a <b>transferência</b> ou com data de recebimento marcada entram na data prevista de recebimento.</div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        ${card('Total previsto', eur(total), fmtData(de)+' → '+fmtData(ate))}
+        ${card('Agendamentos', nAg, nDif?(nDif+' diferido(s)'):'todos no dia')}
+        ${card('Tipos de serviço', tiposOrd.length, '')}
+      </div>
+
+      ${tiposOrd.length?`<div style="margin-bottom:16px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:8px;">Por tipo de serviço</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">${chipsTipo}</div></div>`:''}
+
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#f8fafc;text-align:left;">
+            <th style="padding:9px 10px;">Data</th><th style="padding:9px 10px;">Por tipo</th><th style="padding:9px 10px;text-align:right;">Total do dia</th>
+          </tr></thead>
+          <tbody>${linhasDia||'<tr><td colspan="3" style="padding:24px;text-align:center;color:#94a3b8;">Sem agendamentos neste período.</td></tr>'}</tbody>
+          ${diasOrd.length?`<tfoot><tr style="border-top:2px solid #cbd5e1;background:#f8fafc;">
+            <td style="padding:10px;font-weight:700;">TOTAL</td><td></td><td style="padding:10px;text-align:right;font-weight:800;color:#0369a1;">${eur(total)}</td></tr></tfoot>`:''}
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // CSV longo (uma linha por dia × tipo) — pronto para o Excel do fluxo
+  window.frExportar=function(){
+    const de=window._frDe, ate=window._frAte;
+    const linhas=construir(de,ate);
+    const acc={};   // chave data||tipo → {valor,n}
+    linhas.forEach(l=>{ const k=l.data+'||'+l.tipo; acc[k]=acc[k]||{data:l.data,tipo:l.tipo,valor:0,n:0}; acc[k].valor+=l.valor; acc[k].n++; });
+    const rows=Object.values(acc).sort((a,b)=>a.data.localeCompare(b.data)||a.tipo.localeCompare(b.tipo,'pt'));
+    const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+    const money=n=>String((n||0).toFixed(2)).replace('.',',');   // decimal PT
+    let csv='\ufeff'+'Data;Serviço;Nº agendamentos;Valor previsto (€)\r\n';
+    rows.forEach(r=>{ csv+=[q(r.data),q(r.tipo),r.n,money(r.valor)].join(';')+'\r\n'; });
+    const total=rows.reduce((s,r)=>s+r.valor,0);
+    csv+=['','"TOTAL"','',money(total)].join(';')+'\r\n';
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`Previsao_Receita_${de}_${ate}.csv`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1500);
+    toast('CSV exportado — abre no Excel do fluxo.','⬇️');
+  };
+
+  function injetarNav(){
+    const nav=document.getElementById('main-nav'); if(!nav||!podeVer()) return;
+    let el=document.getElementById('ni-previsao');
+    if(!el){ el=document.createElement('div'); el.className='ni'; el.id='ni-previsao'; el.onclick=window.frAbrir; nav.appendChild(el);
+      el.innerHTML='<span class="ico">📈</span> Previsão de Receita'; }
+  }
+  if(typeof window.renderSidebar==='function'){ const orig=window.renderSidebar;
+    window.renderSidebar=function(){ orig.apply(this,arguments); try{injetarNav();}catch(e){} }; }
+  setInterval(injetarNav,2500); setTimeout(injetarNav,1500);
+  // Re-render suave enquanto o ecrã está aberto (os agendamentos são subscritos pela app)
+  setInterval(()=>{ if(document.getElementById('fr-ov')) frRender(); },5000);
+})();
+</script>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HidroGest — MÓDULO FLUXO DE CAIXA (Orçado × Real)
+     Projeta receita (agendamentos) e despesas em 3 vistas: Projetado
+     (real até hoje + orçado à frente), Orçado (template) e Real (lançado).
+     Variáveis com categoria: o real consome a estimativa (projeta o que falta).
+     Coleção: despesasRecorrentes (o template do orçamento mensal).
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const num=v=>parseFloat(String(v==null?0:v).replace(',','.'))||0;
+  const eur=n=>(n||0).toLocaleString('pt-PT',{style:'currency',currency:'EUR'});
+  const iso=d=>{const x=d?new Date(d):new Date();x.setHours(0,0,0,0);return x.toISOString().slice(0,10);};
+  const fmtData=d=>{if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:String(d);};
+  const nomeMes=ym=>{const [y,m]=ym.split('-');return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][(+m)-1]+'/'+y.slice(2);};
+  const okData=s=>/^\d{4}-\d{2}-\d{2}/.test(String(s||''));
+  const addDias=(s,n)=>{const d=new Date(String(s).slice(0,10));d.setDate(d.getDate()+n);return iso(d);};
+  const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const toast=(m,i)=>{ if(typeof window.toast==='function') window.toast(m,i); else console.log(m); };
+  const podeVer=()=>['admin','supervisor','gerente'].includes(window.currentUser&&window.currentUser.role);
+  const recDB=()=>window.DB.despesasRecorrentes||[];
+  window._fcSaldo=(window._fcSaldo!=null)?window._fcSaldo:8726;
+  window._fcMeses=window._fcMeses||3;
+  window._fcModo=window._fcModo||'proj';   // proj | orc | real
+  const ESTADOS_PREVISAO=['agendada','em_curso'];
+
+const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","dia":1,"valor":80.0},{"desc":"Seguro Comp. Seguros","grupo":"Seguros","tipo":"Fixo","dia":1,"valor":207.93},{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","dia":2,"valor":80.0},{"desc":"Publicidade 4UP","grupo":"Publicidade","tipo":"Fixo","dia":2,"valor":369.0},{"desc":"Seguro AEGON","grupo":"Seguros","tipo":"Fixo","dia":2,"valor":181.36},{"desc":"Seguro AEGON","grupo":"Seguros","tipo":"Fixo","dia":2,"valor":30.56},{"desc":"NOS Comunicações","grupo":"Contas Publicas","tipo":"Fixo","dia":6,"valor":67.25},{"desc":"Financiamento CETELEM","grupo":"Financiamentos","tipo":"Fixo","dia":6,"valor":540.64},{"desc":"Financiamento COFIDIS","grupo":"Financiamentos","tipo":"Fixo","dia":6,"valor":324.99},{"desc":"Financiamento ARVAL","grupo":"Financiamentos","tipo":"Fixo","dia":6,"valor":655.65},{"desc":"Renda Sobral","grupo":"Renda","tipo":"Fixo","dia":6,"valor":600.0},{"desc":"Seguro Zurich","grupo":"Seguros","tipo":"Fixo","dia":6,"valor":111.91},{"desc":"Outros variáveis","grupo":"Outros","tipo":"Variável","dia":6,"valor":447.91},{"desc":"Imposto de Selo","grupo":"Impostos","tipo":"Fixo","dia":7,"valor":0.64},{"desc":"Seguro Comp. Seguros","grupo":"Seguros","tipo":"Fixo","dia":7,"valor":111.58},{"desc":"COMISSãO DE GESTãO","grupo":"Tarifa","tipo":"Fixo","dia":7,"valor":15.9},{"desc":"Salários (líquidos)","grupo":"Salario","tipo":"Salário","dia":7,"valor":14222.21},{"desc":"Seguro Zurich","grupo":"Seguros","tipo":"Fixo","dia":9,"valor":81.17},{"desc":"Seguro Zurich","grupo":"Seguros","tipo":"Fixo","dia":9,"valor":37.49},{"desc":"Manutenção Sewerin","grupo":"Manutenção Equipamento","tipo":"Fixo","dia":10,"valor":158.67},{"desc":"Aluguel Rua do Taxa","grupo":"Renda","tipo":"Fixo","dia":10,"valor":335.0},{"desc":"Seguro Comp. Seguros","grupo":"Seguros","tipo":"Fixo","dia":10,"valor":157.16},{"desc":"Financiamento BPI","grupo":"Financiamentos","tipo":"Fixo","dia":13,"valor":294.74},{"desc":"Financiamento (cobrança)","grupo":"Financiamentos","tipo":"Fixo","dia":13,"valor":829.98},{"desc":"Publicidade Montepio","grupo":"Publicidade","tipo":"Fixo","dia":13,"valor":1300.0},{"desc":"Publicidade Montepio","grupo":"Publicidade","tipo":"Fixo","dia":13,"valor":300.0},{"desc":"Comissão GetNet","grupo":"Tarifa","tipo":"Fixo","dia":13,"valor":70.0},{"desc":"Material de obra","grupo":"Fornecedor","tipo":"Variável","dia":13,"valor":6578.28},{"desc":"Financiamento COFIDIS","grupo":"Financiamentos","tipo":"Fixo","dia":14,"valor":294.74},{"desc":"Financiamento BPI 321","grupo":"Financiamentos","tipo":"Fixo","dia":14,"valor":250.0},{"desc":"Combustível (mês)","grupo":"Combustivel","tipo":"Variável","dia":15,"valor":1907.19},{"desc":"Seguro Zurich","grupo":"Seguros","tipo":"Fixo","dia":16,"valor":29.64},{"desc":"Seguro Zurich","grupo":"Seguros","tipo":"Fixo","dia":16,"valor":128.79},{"desc":"Imposto DUC","grupo":"Impostos","tipo":"Fixo","dia":20,"valor":1556.0},{"desc":"Imposto DUC","grupo":"Impostos","tipo":"Fixo","dia":20,"valor":71.76},{"desc":"Imposto DUC","grupo":"Impostos","tipo":"Fixo","dia":20,"valor":20.7},{"desc":"Imposto DUC","grupo":"Impostos","tipo":"Fixo","dia":20,"valor":82.8},{"desc":"Imposto DUC","grupo":"Impostos","tipo":"Fixo","dia":20,"valor":200.0},{"desc":"Portagens","grupo":"Portagem","tipo":"Variável","dia":21,"valor":872.78},{"desc":"Publicidade Montepio","grupo":"Publicidade","tipo":"Fixo","dia":22,"valor":400.0},{"desc":"Limpeza Elisabete","grupo":"Limpeza","tipo":"Fixo","dia":23,"valor":749.28},{"desc":"Publicidade Montepio","grupo":"Publicidade","tipo":"Fixo","dia":24,"valor":100.0},{"desc":"Publicidade Gráfica","grupo":"Publicidade","tipo":"Fixo","dia":24,"valor":200.0},{"desc":"NOS Comunicações","grupo":"Contas Publicas","tipo":"Fixo","dia":27,"valor":228.71},{"desc":"Publicidade Montepio","grupo":"Publicidade","tipo":"Fixo","dia":27,"valor":1300.0},{"desc":"TSU patronal","grupo":"TSU","tipo":"TSU","dia":27,"valor":4651.74},{"desc":"Financiamento Credibom","grupo":"Financiamentos","tipo":"Fixo","dia":28,"valor":359.55},{"desc":"Papelaria","grupo":"Papelaria","tipo":"Fixo","dia":30,"valor":14.01},{"desc":"Publicidade Gráfica","grupo":"Publicidade","tipo":"Fixo","dia":30,"valor":631.1},{"desc":"Seguro Comp. Seguros","grupo":"Seguros","tipo":"Fixo","dia":30,"valor":18.96},{"desc":"Contabilidade","grupo":"Contabilidade","tipo":"Fixo","dia":8,"valor":0.0}];
+  function dataReceb(o){
+    if(okData(o.dataRecebimentoPrev)) return String(o.dataRecebimentoPrev).slice(0,10);
+    const met=(o.pagamento&&o.pagamento.metodo)||''; const dif=window._frDiasDiferido||30;
+    if(met==='transferencia' && okData(o.data)) return addDias(o.data,dif);
+    return okData(o.data)?String(o.data).slice(0,10):null;
+  }
+
+  // Projeta o horizonte devolvendo 3 séries de saldo (orçado, real, projetado) + desvio mensal
+  function projetar(saldoIni, de, ate){
+    const hoje=iso();
+    const receita={}, real={}, orc={}, orcDedup={};
+    const cpPorMes={}, orcMes={}, realMes={}, realCatMes={};
+    const add=(o,d,v)=>{o[d]=(o[d]||0)+v;};
+    const addCat=(ym,cat,v)=>{ if(!cat)return; (realCatMes[ym]=realCatMes[ym]||{}); realCatMes[ym][cat]=(realCatMes[ym][cat]||0)+v; };
+
+    // RECEITA — agendamentos (igual nas 3 vistas)
+    (window.DB.ordens||[]).forEach(o=>{
+      if(!ESTADOS_PREVISAO.includes(o.estado)) return;
+      const d=dataReceb(o); if(!d||d<de||d>ate) return; add(receita,d,num(o.total));
+    });
+
+    // REAL — contas a pagar em aberto (por vencimento) + despesas dos técnicos (por data)
+    (window.DB.contasPagar||[]).forEach(c=>{
+      if(c.estado==='pago') return; const d=String(c.vencimento||'').slice(0,10); if(!okData(d)) return;
+      const ym=d.slice(0,7); (cpPorMes[ym]=cpPorMes[ym]||new Set()).add(norm(c.fornecedor));
+      if(d>=de&&d<=ate){ add(real,d,num(c.gross)); add(realMes,ym,num(c.gross)); addCat(ym,c.tipo_despesa||c.categoria,num(c.gross)); }
+    });
+    (window.DB.despesas||[]).forEach(x=>{
+      const d=String(x.date||'').slice(0,10); if(!okData(d)||d<de||d>ate) return;
+      add(real,d,num(x.gross)); add(realMes,d.slice(0,7),num(x.gross)); addCat(d.slice(0,7),x.type,num(x.gross));
+    });
+
+    // ORÇADO — template mensal (fixas + variáveis), repetido pelo dia de cada uma
+    const ini=new Date(de), fim=new Date(ate);
+    for(let m=new Date(ini.getFullYear(),ini.getMonth(),1); m<=fim; m.setMonth(m.getMonth()+1)){
+      const ym=iso(m).slice(0,7); const ult=new Date(m.getFullYear(),m.getMonth()+1,0).getDate();
+      const nomesReais=cpPorMes[ym]||new Set();
+      const catRest=Object.assign({},realCatMes[ym]||{});   // real por categoria ainda por "consumir" neste mês
+      recDB().forEach(r=>{
+        const dia=Math.min(parseInt(r.dia)||1,ult); const d=`${ym}-${String(dia).padStart(2,'0')}`;
+        if(d<de||d>ate) return;
+        const valor=num(r.valor);
+        add(orc,d,valor); add(orcMes,ym,valor);                            // orçado puro (o plano)
+        const variavel=/vari/i.test(r.tipo||'');
+        if(variavel && r.categoria){
+          // o real dessa categoria consome a estimativa; só se projeta o que falta
+          const disp=catRest[r.categoria]||0; const consumido=Math.min(valor,disp);
+          catRest[r.categoria]=disp-consumido; const falta=valor-consumido;
+          if(falta>0.005){ const dp=(d>hoje)?d:addDias(hoje,1); if(dp<=ate) add(orcDedup,dp,falta); }
+        } else if(!variavel){
+          if(!nomesReais.has(norm(r.desc))) add(orcDedup,d,valor);         // fixa: dedup por nome
+        } else {
+          add(orcDedup,d,valor);                                          // variável sem categoria: estimativa cheia
+        }
+      });
+    }
+
+    // SÉRIES de saldo corrido
+    const dias=[...new Set([...Object.keys(receita),...Object.keys(real),...Object.keys(orc)])].sort();
+    let sO=saldoIni,sR=saldoIni,sP=saldoIni;
+    const linhas=[]; let totR=0,totDO=0,totDR=0;
+    const menor={proj:{v:saldoIni,d:de},orc:{v:saldoIni,d:de},real:{v:saldoIni,d:de}};
+    dias.forEach(d=>{
+      const r=receita[d]||0, dO=orc[d]||0, dR=real[d]||0;
+      const dP=(d<=hoje)?dR:(dR+(orcDedup[d]||0));     // real até hoje, orçado à frente
+      sO+=r-dO; sR+=r-dR; sP+=r-dP; totR+=r; totDO+=dO; totDR+=dR;
+      if(sP<menor.proj.v)menor.proj={v:sP,d}; if(sO<menor.orc.v)menor.orc={v:sO,d}; if(sR<menor.real.v)menor.real={v:sR,d};
+      linhas.push({d,r,dO,dR,dP,sO,sR,sP});
+    });
+    // desvio por mês
+    const meses=[...new Set([...Object.keys(orcMes),...Object.keys(realMes)])].sort();
+    const desvio=meses.map(ym=>({ym,orc:orcMes[ym]||0,real:realMes[ym]||0}));
+    return {linhas,totR,totDO,totDR,saldo:{orc:sO,real:sR,proj:sP},menor,desvio,hoje};
+  }
+
+  window.fcAbrir=function(){
+    let ov=document.getElementById('fc-ov');
+    if(!ov){ ov=document.createElement('div'); ov.id='fc-ov';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.35);z-index:9000;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      document.body.appendChild(ov);
+    }
+    fcRender();
+  };
+  window.fcMudar=function(){
+    const s=document.getElementById('fc-saldo'), m=document.getElementById('fc-meses');
+    if(s) window._fcSaldo=num(s.value); if(m) window._fcMeses=parseInt(m.value)||1;
+    try{ if(window.fsSetMerge) window.fsSetMerge('meta','fluxoCaixa',{saldoInicial:window._fcSaldo,meses:window._fcMeses}); }catch(e){}
+    fcRender();
+  };
+  window.fcModo=function(md){ window._fcModo=md; fcRender(); };
+
+  function fcRender(){
+    const ov=document.getElementById('fc-ov'); if(!ov) return;
+    const de=iso(); const fimD=new Date(); fimD.setMonth(fimD.getMonth()+window._fcMeses); const ate=iso(fimD);
+    const P=projetar(window._fcSaldo,de,ate);
+    const modo=window._fcModo;
+    const selDesp=l=>modo==='orc'?l.dO:modo==='real'?l.dR:l.dP;
+    const selSaldo=l=>modo==='orc'?l.sO:modo==='real'?l.sR:l.sP;
+    const saldoFim=P.saldo[modo], menor=P.menor[modo];
+
+    const card=(k,v,m,cor)=>`<div style="flex:1;min-width:140px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b;">${k}</div>
+      <div style="font-size:21px;font-weight:700;margin-top:6px;color:${cor||'#0f2430'};">${v}</div>
+      <div style="font-size:12px;color:#64748b;margin-top:2px;">${m||''}</div></div>`;
+    const btnModo=(md,txt)=>`<button onclick="window.fcModo('${md}')" style="border:1px solid ${modo===md?'#0e7c86':'#cbd5e1'};background:${modo===md?'#0e7c86':'#fff'};color:${modo===md?'#fff':'#334155'};border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;cursor:pointer;">${txt}</button>`;
+
+    const rows=P.linhas.map(l=>{const dx=selDesp(l),sx=selSaldo(l);
+      return `<tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:8px 10px;font-weight:600;white-space:nowrap;">${fmtData(l.d)}${l.d<=P.hoje&&modo==='proj'?' <span style="font-size:10px;color:#0e7c86;">real</span>':''}</td>
+        <td style="padding:8px 10px;text-align:right;color:#15803d;white-space:nowrap;">${l.r?('+'+eur(l.r)):'—'}</td>
+        <td style="padding:8px 10px;text-align:right;color:#b91c1c;white-space:nowrap;">${dx?('−'+eur(dx)):'—'}</td>
+        <td style="padding:8px 10px;text-align:right;font-weight:700;white-space:nowrap;color:${sx<0?'#b91c1c':'#0f2430'};">${eur(sx)}</td></tr>`;}).join('');
+
+    const desvio=P.desvio.map(x=>{const d=x.real-x.orc;
+      return `<tr style="border-top:1px solid #e2e8f0;">
+        <td style="padding:7px 10px;font-weight:600;">${nomeMes(x.ym)}</td>
+        <td style="padding:7px 10px;text-align:right;">${eur(x.orc)}</td>
+        <td style="padding:7px 10px;text-align:right;">${eur(x.real)}</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:700;color:${d>0?'#b91c1c':'#15803d'};">${d>0?'+':''}${eur(d)}</td></tr>`;}).join('');
+
+    ov.innerHTML=`<div style="width:100%;max-width:900px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <h2 style="margin:0;font-size:20px;">💰 Fluxo de Caixa</h2>
+        <button onclick="window.fcRecorrentes()" style="margin-left:auto;border:1px solid #0e7c86;background:#fff;color:#0e7c86;border-radius:9px;padding:9px 13px;font-weight:600;cursor:pointer;">⚙️ Recorrentes (${recDB().length})</button>
+        <button onclick="window.fcExportar()" style="border:1px solid #15803d;background:#15803d;color:#fff;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;">⬇️ Exportar</button>
+        <button onclick="document.getElementById('fc-ov').remove()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:9px 13px;cursor:pointer;">Fechar</button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
+        ${btnModo('proj','Projetado')} ${btnModo('orc','Orçado')} ${btnModo('real','Real')}
+        <span style="font-size:11px;color:#94a3b8;margin-left:4px;">${modo==='proj'?'Real até hoje, orçado daqui para a frente.':modo==='orc'?'Só o plano (template mensal).':'Só o que já foi lançado.'}</span>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+        <label style="font-size:12px;color:#475569;">Saldo inicial €<br><input type="number" id="fc-saldo" value="${window._fcSaldo}" step="0.01" onchange="window.fcMudar()" style="margin-top:3px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;width:140px;"></label>
+        <label style="font-size:12px;color:#475569;">Horizonte (meses)<br><input type="number" id="fc-meses" value="${window._fcMeses}" min="1" max="12" onchange="window.fcMudar()" style="margin-top:3px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;width:90px;"></label>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        ${card('Saldo hoje',eur(window._fcSaldo),fmtData(de))}
+        ${card('Saldo no fim',eur(saldoFim),'até '+fmtData(ate),saldoFim<0?'#b91c1c':'#0369a1')}
+        ${card('Menor saldo',eur(menor.v),'em '+fmtData(menor.d),menor.v<0?'#b91c1c':'#0f2430')}
+        ${card('Orçado / Real',eur(P.totDO)+' / '+eur(P.totDR),'despesa no período')}
+      </div>
+
+      ${menor.v<0?`<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:600;">⚠️ Saldo negativo (${eur(menor.v)}) a ${fmtData(menor.d)} — atenção à tesouraria.</div>`:''}
+
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:16px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#f8fafc;text-align:left;"><th style="padding:9px 10px;">Data</th><th style="padding:9px 10px;text-align:right;">Receita</th><th style="padding:9px 10px;text-align:right;">Despesa</th><th style="padding:9px 10px;text-align:right;">Saldo</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="4" style="padding:24px;text-align:center;color:#94a3b8;">Sem movimentos.</td></tr>'}</tbody>
+        </table>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;">Desvio Orçado × Real (por mês)</div>
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="background:#f8fafc;text-align:left;"><th style="padding:7px 10px;">Mês</th><th style="padding:7px 10px;text-align:right;">Orçado</th><th style="padding:7px 10px;text-align:right;">Real</th><th style="padding:7px 10px;text-align:right;">Desvio</th></tr></thead>
+          <tbody>${desvio||'<tr><td colspan="4" style="padding:16px;text-align:center;color:#94a3b8;">—</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // ── gestão das recorrentes (template do orçamento) ──
+  window.fcRecorrentes=function(){
+    let ov=document.getElementById('fcr-ov');
+    if(!ov){ ov=document.createElement('div'); ov.id='fcr-ov';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.45);z-index:9100;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+      ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+      document.body.appendChild(ov);
+    }
+    fcrRender();
+  };
+  function fcrRender(){
+    const ov=document.getElementById('fcr-ov'); if(!ov) return;
+    const lista=[...recDB()].sort((a,b)=>(parseInt(a.dia)||0)-(parseInt(b.dia)||0)||String(a.desc).localeCompare(String(b.desc),'pt'));
+    const total=lista.reduce((s,r)=>s+num(r.valor),0);
+    const badge=t=>{const v=/vari/i.test(t||''); return `<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;background:${v?'#fef3c7':'#e0e7ff'};color:${v?'#b45309':'#3730a3'};">${v?'variável':'fixa'}</span>`;};
+    const tipos=(typeof window.cfgGetTiposDesp==='function')?window.cfgGetTiposDesp():[{id:'combustivel',label:'Combustível'},{id:'refeicao',label:'Refeição'},{id:'consumiveis',label:'Consumíveis'},{id:'equipamentos',label:'Equipamentos'},{id:'outro',label:'Outro'}];
+    const selCat=r=>{ if(!/vari/i.test(r.tipo||'')) return ''; 
+      const opts=['<option value="">— categoria —</option>'].concat(tipos.map(t=>`<option value="${t.id}" ${r.categoria===t.id?'selected':''}>${esc((t.ico?t.ico+' ':'')+t.label)}</option>`)).join('');
+      return `<select onchange="window.fcrEditar('${r.id}','categoria',this.value)" title="Casar com o tipo de despesa real dos técnicos/contas" style="padding:5px 6px;border:1px solid #fde68a;border-radius:7px;font-size:11px;background:#fffbeb;max-width:130px;">${opts}</select>`;
+    };
+    const linha=r=>`<div style="display:flex;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px;margin:6px 0;background:#fff;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:700;color:#0e7c86;width:44px;">dia ${r.dia}</span>
+      <div style="flex:1;min-width:120px;"><div style="font-weight:600;font-size:13px;">${esc(r.desc)} ${badge(r.tipo)}</div><div style="font-size:11px;color:#94a3b8;">${esc(r.grupo||'')}</div></div>
+      ${selCat(r)}
+      <input type="number" value="${num(r.valor)}" step="0.01" onchange="window.fcrEditar('${r.id}','valor',this.value)" style="width:96px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:7px;text-align:right;">
+      <button onclick="window.fcrApagar('${r.id}')" style="border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;">Apagar</button>
+    </div>`;
+    ov.innerHTML=`<div style="width:100%;max-width:660px;background:#eef2f4;border-radius:16px;padding:20px;box-shadow:0 10px 40px rgba(15,36,48,.25);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <h2 style="margin:0;font-size:18px;">⚙️ Orçamento mensal (recorrentes)</h2>
+        <span style="margin-left:auto;font-weight:700;color:#0f2430;">${eur(total)}/mês</span>
+        <button onclick="document.getElementById('fcr-ov').remove();if(document.getElementById('fc-ov'))window.fcAbrir()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:8px 12px;cursor:pointer;">Fechar</button>
+      </div>
+      ${!lista.length?`<div style="background:#fff;border:1px dashed #cbd5e1;border-radius:12px;padding:24px;text-align:center;color:#64748b;">
+        <div style="margin-bottom:12px;">Ainda não há orçamento. Importa o template do teu Excel (fixas + variáveis):</div>
+        <button onclick="window.fcrImportar()" style="border:none;background:#0e7c86;color:#fff;border-radius:9px;padding:10px 18px;font-weight:600;cursor:pointer;">📥 Importar do Excel (${RECORRENTES_SEED.length})</button>
+      </div>`:`<div style="max-height:60vh;overflow:auto;">${lista.map(linha).join('')}</div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="window.fcrNova()" style="border:1px solid #0e7c86;background:#fff;color:#0e7c86;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;">+ Nova</button>
+        <button onclick="window.fcrImportar()" style="border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:9px 14px;cursor:pointer;">📥 Repor do Excel</button>
+      </div>`}
+    </div>`;
+  }
+  const recId=r=>'rec_'+norm(r.desc).replace(/ /g,'_')+'_'+(r.dia||1);
+  const catDoGrupo=g=>{ g=norm(g); if(g.includes('combust'))return 'combustivel'; if(g.includes('refei'))return 'refeicao'; if(g.includes('outro'))return 'outro'; return ''; };
+  window.fcrImportar=async function(){
+    try{ for(const r of RECORRENTES_SEED){ const variavel=/vari/i.test(r.tipo||''); const d={id:recId(r),desc:r.desc,grupo:r.grupo,tipo:r.tipo,dia:r.dia,valor:r.valor,categoria:variavel?catDoGrupo(r.grupo):''}; await window.fsSet('despesasRecorrentes',d.id,d); }
+      toast('Orçamento importado do Excel.','📥'); fcrRender(); }catch(e){ toast('Erro a importar: '+(e.message||e),'❌'); }
+  };
+  window.fcrEditar=async function(id,campo,val){ const r=recDB().find(x=>x.id===id); if(!r) return;
+    try{ await window.fsSet('despesasRecorrentes',id,{...r,[campo]:campo==='valor'?num(val):val}); }catch(e){ toast('Erro: '+(e.message||e),'❌'); } };
+  window.fcrApagar=async function(id){ if(!confirm('Apagar esta recorrente?')) return;
+    try{ await window.fsDel('despesasRecorrentes',id); fcrRender(); }catch(e){ toast('Erro: '+(e.message||e),'❌'); } };
+  window.fcrNova=async function(){ const desc=prompt('Descrição:'); if(!desc) return;
+    const dia=parseInt(prompt('Dia do mês (1-31):','1'))||1; const valor=num(prompt('Valor (€):','0'));
+    const tipo=(prompt('Tipo (Fixo/Variável):','Fixo')||'Fixo');
+    const d={id:'rec_'+Date.now(),desc:desc.trim(),grupo:'',tipo,dia,valor};
+    try{ await window.fsSet('despesasRecorrentes',d.id,d); fcrRender(); }catch(e){ toast('Erro: '+(e.message||e),'❌'); } };
+
+  window.fcExportar=function(){
+    const de=iso(); const fimD=new Date(); fimD.setMonth(fimD.getMonth()+window._fcMeses);
+    const P=projetar(window._fcSaldo,de,iso(fimD)); const modo=window._fcModo;
+    const selD=l=>modo==='orc'?l.dO:modo==='real'?l.dR:l.dP; const selS=l=>modo==='orc'?l.sO:modo==='real'?l.sR:l.sP;
+    const money=n=>String((n||0).toFixed(2)).replace('.',',');
+    let csv='\ufeff'+`Data;Receita (€);Despesa (€);Saldo (€) [${modo}]\r\n`;
+    P.linhas.forEach(l=>{ csv+=[`"${l.d}"`,money(l.r),money(selD(l)),money(selS(l))].join(';')+'\r\n'; });
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`Fluxo_${modo}_${de}.csv`;
+    document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+    toast('Fluxo exportado ('+modo+').','⬇️');
+  };
+
+  function injetarNav(){
+    const nav=document.getElementById('main-nav'); if(!nav||!podeVer()) return;
+    let el=document.getElementById('ni-fluxocaixa');
+    if(!el){ el=document.createElement('div'); el.className='ni'; el.id='ni-fluxocaixa'; el.onclick=window.fcAbrir; nav.appendChild(el);
+      el.innerHTML='<span class="ico">💰</span> Fluxo de Caixa'; }
+  }
+  if(typeof window.renderSidebar==='function'){ const orig=window.renderSidebar;
+    window.renderSidebar=function(){ orig.apply(this,arguments); try{injetarNav();}catch(e){} }; }
+  setInterval(injetarNav,2500); setTimeout(injetarNav,1600);
+
+  window.addEventListener('load',()=>{ setTimeout(()=>{ try{
+    if(!window._db) return; const {_collection,_onSnapshot}=window;
+    if(_collection&&_onSnapshot){ _onSnapshot(_collection(window._db,'despesasRecorrentes'), snap=>{
+      window.DB.despesasRecorrentes=snap.docs.map(d=>({...d.data(),id:d.id}));
+      if(document.getElementById('fcr-ov')) fcrRender(); if(document.getElementById('fc-ov')) fcRender(); }); }
+    const {getDoc,doc:fsDoc}=window._firestoreOps||{};
+    if(getDoc&&fsDoc&&window._db){ getDoc(fsDoc(window._db,'meta','fluxoCaixa')).then(sn=>{ if(sn.exists()){const v=sn.data(); if(v.saldoInicial!=null)window._fcSaldo=v.saldoInicial; if(v.meses)window._fcMeses=v.meses;} }).catch(()=>{}); }
+  }catch(e){} },2700); });
+  setInterval(()=>{ if(document.getElementById('fc-ov')) fcRender(); },6000);
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
      HidroGest — MÓDULO CARTÕES DOS TÉCNICOS (etapa 3)
      Cruza o extrato do cartão de cada técnico com as despesas dele (com recibo).
      Avaliação individual: quanto gastou, quanto justificou, quanto sem recibo.

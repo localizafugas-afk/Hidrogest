@@ -1220,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.45<br>
+      HidroGest v15.46<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.45 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.46 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.45<br>
+      HidroGest v15.46<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -16330,6 +16330,7 @@ async function osReconciliarAvisosFatura(){
       const met=(o.pagamento?.metodo||o.metodoPagamento||'').toLowerCase();
       if(!imed.includes(met)) return;                    // só pagamento direto ao técnico
       if(o.faturaEmitida===true) return;                 // já foi faturado
+      if(o.avisoFaturaCriado===true) return;             // aviso já criado uma vez — nunca ressuscitar
       if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return; // orçamento/garantia não precisam
       const base=o.concluidoEm||o.pagamento?.data||o.data;
       if(base && new Date(String(base).slice(0,10))<limite) return;
@@ -21716,7 +21717,7 @@ function agRecEditarSimples(id){
     <div class="mb" id="rp-modal-body">
       <!-- Preenchido dinamicamente -->
     </div>
-    <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);z-index:10;gap:8px;">
+    <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);z-index:10;gap:8px;flex-wrap:wrap;padding-bottom:calc(10px + env(safe-area-inset-bottom));">
       <button class="btn btn-ghost" onclick="rpFecharComGuardaRascunho().then(()=>{const _oid=window._rpEditOsId;closeMo('mo-relat-pesquisa');if(_oid)setTimeout(()=>osAbrirConcluir(_oid),300);});">← Voltar à OS</button>
       <button class="btn btn-ghost btn-sm" onclick="rpSalvarRascunho()">💾 Guardar rascunho</button>
       <button class="btn btn-ghost btn-sm" onclick="rpPreviewFormulario()" style="color:var(--accent);border-color:var(--accent);">👁 Pré-visualizar</button>
@@ -22476,7 +22477,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.45 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.46 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -22871,10 +22872,7 @@ function rpAbrirFormulario(osId, preserveTemp){
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${sel?'#eff6ff':'#f8fafc'};border:1.5px solid ${sel?'#2563eb':'#e2e8f0'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:${sel?'700':'400'};user-select:none;" onclick="this.classList.toggle('rp-sel');const i=this.querySelector('input');i.checked=!i.checked;this.style.background=i.checked?'#eff6ff':'#f8fafc';this.style.borderColor=i.checked?'#2563eb':'#e2e8f0';this.style.fontWeight=i.checked?'700':'400';"><input type="checkbox" name="rp-eq" value="${val}" ${sel?'checked':''} style="display:none;"> <span>${val}</span>${sel?'<span style="color:#2563eb;margin-left:auto;">✓</span>':''}</label>`;
   }
 
-  const mic = (id)=>`<button type="button" onclick="rpEditar('${id}')"
-    style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #e2e8f0;
-    border-radius:8px;background:#fff;color:#475569;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-    id="mic-btn-${id}">🎙️ Ditar resposta</button>`;
+  const mic = (id)=>'';   // botão de ditar removido a pedido
 
   const secTit = (n,t,sub='')=>`<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;">
     <div style="width:30px;height:30px;border-radius:50%;background:#1e3a5f;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex-shrink:0;">${n}</div>
@@ -25944,6 +25942,7 @@ async function osCriarAvisoFatura(os, metLabel){
         criadoEm:new Date().toISOString(),
       });
     }
+    try{ if(os.avisoFaturaCriado!==true){ await window.fsSetMerge('ordens', os.id, {avisoFaturaCriado:true}); os.avisoFaturaCriado=true; const _o=(window.DB.ordens||[]).find(x=>x.id===os.id); if(_o)_o.avisoFaturaCriado=true; } }catch(_e){}
   }catch(e){ console.warn('osCriarAvisoFatura falhou:', e.message); }
 }
 
@@ -34793,6 +34792,35 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
   }catch(e){} },2700); });
   setInterval(()=>{ if(document.getElementById('fc-ov')) fcRender(); },6000);
 
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HidroGest — MÓDULO ARRASTAR FLUTUANTES (banner laranja + cronómetro verde)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  function arrastavel(el){
+    if(!el || el._dragOn) return; el._dragOn=true;
+    el.style.touchAction='none';
+    let sx,sy,ox,oy,drag=false,moved=false;
+    const start=e=>{ const p=e.touches?e.touches[0]:e; drag=true; moved=false; sx=p.clientX; sy=p.clientY;
+      const r=el.getBoundingClientRect(); ox=r.left; oy=r.top; el.style.transition='none'; };
+    const move=e=>{ if(!drag)return; const p=e.touches?e.touches[0]:e; const dx=p.clientX-sx, dy=p.clientY-sy;
+      if(Math.abs(dx)>4||Math.abs(dy)>4) moved=true;
+      let nx=ox+dx, ny=oy+dy;
+      nx=Math.max(4,Math.min(window.innerWidth -el.offsetWidth -4,nx));
+      ny=Math.max(4,Math.min(window.innerHeight-el.offsetHeight-4,ny));
+      el.style.left=nx+'px'; el.style.top=ny+'px'; el.style.right='auto'; el.style.bottom='auto';
+      if(e.cancelable) e.preventDefault(); };
+    const end=()=>{ if(drag&&moved) el._moved=true; drag=false; };
+    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
+    window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
+    window.addEventListener('mouseup',end);   window.addEventListener('touchend',end);
+    // se houve arrasto, não disparar o onclick de abrir a OS
+    el.addEventListener('click', e=>{ if(el._moved){ e.stopImmediatePropagation(); e.preventDefault(); el._moved=false; } }, true);
+  }
+  setInterval(()=>{ arrastavel(document.getElementById('crono-flutuante')); arrastavel(document.getElementById('crono-pendente')); }, 1500);
 })();
 </script>
 

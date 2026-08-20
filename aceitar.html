@@ -104,23 +104,7 @@ const CLAUSULAS = `INFORMAÇÕES IMPORTANTES
 O horário indicado é uma estimativa. Devido à natureza do nosso trabalho — que pode envolver situações imprevistas nos serviços anteriores — admitimos uma margem de tolerância de até 60 minutos relativamente à hora marcada. Caso prevejamos um atraso superior, entraremos em contacto.
 
 🚗 Taxa de deslocação
-Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, será devida a taxa de deslocação prevista no orçamento.
-
-A) TERMO DE RESPONSABILIDADE E LIMITAÇÃO DE GARANTIA
-1. Documentação Técnica: A ausência da planta de tubagens isenta a empresa de qualquer responsabilidade por imprecisões na localização de fugas. Caso a planta seja fornecida, servirá apenas como referência, não sendo a empresa responsável por alterações estruturais ou desvios de traçado não averbados.
-2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas — raio de 1 metro a partir do ponto indicado; Áreas Externas (solos porosos/areia/terra) — raio de 5 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia por não ter sido localizada a fuga, e ao chegarmos ao local se constate que a mesma se encontra dentro das margens de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.
-3. Manuseamento de Equipamentos: Para a execução do diagnóstico é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários, podendo ainda ser preciso descer a caves, aceder a telhados e manusear telhas. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos ou estruturas decorrentes do seu estado de conservação ou fragilidade.
-4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, podendo existir focos secundários apenas detetáveis após a reparação do primeiro. Em menos de 5% das intervenções, e apesar de todo o rigor técnico, pode não ser possível localizar com precisão a origem da fuga; nesses casos o valor da pesquisa é igualmente devido, uma vez que foram efectuados todos os ensaios e metodologias disponíveis.
-
-B) CONDIÇÕES COMERCIAIS E DE FATURAÇÃO
-1. Prazos de Entrega: Os relatórios técnicos são enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.
-2. Faturação e Pagamento: O pagamento deve ser efetuado no ato da conclusão da intervenção (deteção ou reparação). Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Após a emissão do documento fiscal não é possível alterar o nome ou o NIF do cliente, pelo que esses dados devem ser fornecidos no ato do agendamento. Solicitamos o envio do comprovativo de pagamento para localizafugas@gmail.com, para facilitar a identificação e não atrasar o envio do relatório técnico.
-3. Tabela de Taxas Adicionais: Leitura de Rastreador Químico — €120,00 + IVA por cada retorno técnico necessário. Tempo de Espera — caso o cliente solicite que o técnico aguarde a abertura do local por equipas externas, é cobrado o valor da hora adicional + IVA. Trabalho à Hora — retornos em serviços sob regime horário são cobrados como horas adicionais.
-4. Adjudicação de Reparações: Orçamentos para reparações imediatas devem ser aprovados por e-mail para localizafugas@gmail.com antes do início dos trabalhos. Se a reparação não for executada pela nossa equipa, o técnico não aguardará a abertura do local por terceiros sem a aplicação da taxa de espera indicada no ponto 3.
-5. Logística e Estacionamento: Em serviços faturados à hora, a contagem do tempo é contínua desde a chegada da equipa ao local até à conclusão do serviço. Eventuais tempos de deslocação para recolha de ferramentas ou equipamentos adicionais no veículo, motivados por falta de estacionamento ou condições de acesso no edifício, integram o tempo total de assistência e são cobrados como tal.
-
-💶 IVA
-Aos valores indicados acresce IVA à taxa legal em vigor.`;
+Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, será devida a taxa de deslocação prevista no orçamento.`;
 
 const CLAUSULAS_VERSAO = '2026-08-agendamento-v2';
 
@@ -167,7 +151,27 @@ async function iniciar(){
   }catch(e){}
 
   const horaIni = (os.horaIni||'').slice(0,5), horaFim = (os.horaFim||'').slice(0,5);
+
+  // Prova leve de que o cliente viu a confirmação (não bloqueia)
+  if(!os.confirmacaoVistaEm && !os.canceladoPeloCliente){
+    updateDoc(doc(db,'ordens',osId), { confirmacaoVistaEm: new Date().toISOString() }).catch(()=>{});
+  }
+
+  // Já cancelado pelo cliente?
+  if(os.canceladoPeloCliente){
+    cont.innerHTML = `<div class="estado"><div class="circ" style="background:#dc2626">✕</div><h2>Agendamento cancelado</h2><p>Já registámos o seu pedido de cancelamento. Se foi engano, contacte-nos.</p></div>`;
+    return;
+  }
+
+  const temCodigo = !!(os.aceitacaoCodigo);
+
   cont.innerHTML = `
+    <div class="estado" style="padding-bottom:6px">
+      <div class="circ">✓</div>
+      <h2>Agendamento confirmado</h2>
+      <p>Está tudo tratado — não precisa de fazer nada. A nossa equipa vai ao local na data indicada.</p>
+    </div>
+
     <div class="lin"><span class="k">Cliente</span><span class="v">${esc(cliNome||'—')}</span></div>
     <div class="lin"><span class="k">Data</span><span class="v">${esc(fmtData(os.data))}</span></div>
     ${horaIni?`<div class="lin"><span class="k">Hora prevista</span><span class="v">${esc(horaIni)}${horaFim?' – '+esc(horaFim):''}</span></div>`:''}
@@ -175,14 +179,8 @@ async function iniciar(){
     ${morada?`<div class="lin"><span class="k">Local</span><span class="v">${esc(morada)}</span></div>`:''}
 
     <div class="avisos">
-      <div class="aviso amber">
-        <div class="ic">👥</div>
-        <div><div class="t">Outras frações</div><div class="d">Se a intervenção envolver outras frações, os vizinhos têm de ser avisados previamente.</div></div>
-      </div>
-      <div class="aviso red">
-        <div class="ic">🚗</div>
-        <div><div class="t">Deslocação</div><div class="d">Se nos deslocarmos ao local e não for possível realizar o trabalho, será cobrada a taxa de deslocação prevista.</div></div>
-      </div>
+      <div class="aviso amber"><div class="ic">👥</div><div><div class="t">Outras frações</div><div class="d">Se a intervenção envolver outras frações, os vizinhos têm de ser avisados previamente.</div></div></div>
+      <div class="aviso red"><div class="ic">🚗</div><div><div class="t">Deslocação</div><div class="d">Se nos deslocarmos ao local e não for possível realizar o trabalho, será cobrada a taxa de deslocação prevista.</div></div></div>
     </div>
 
     <details class="clausulas">
@@ -190,60 +188,48 @@ async function iniciar(){
       <div class="conteudo">${esc(CLAUSULAS)}</div>
     </details>
 
-    <div class="campo">
-      <label>O seu nome completo</label>
-      <input id="ac-nome" type="text" placeholder="Nome completo" autocomplete="name">
-    </div>
-    <div class="campo">
-      <label>Código de confirmação (recebido no email)</label>
-      <input id="ac-codigo" type="text" inputmode="numeric" maxlength="4" placeholder="4 dígitos" autocomplete="one-time-code" style="letter-spacing:8px;text-align:center;font-size:20px;font-weight:700;">
-    </div>
-    <label class="chk"><input id="ac-chk" type="checkbox"> Li e aceito as condições do serviço acima indicadas.</label>
-    <button id="ac-btn" class="btn btn-ok" disabled>Aceito as condições</button>
-    <div id="ac-erro" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;min-height:16px;"></div>`;
+    <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;">
+      <div style="font-size:13px;color:#64748b;margin-bottom:10px;">Não pode comparecer ou precisa de alterar?</div>
+      <div class="campo" id="cancel-motivo-wrap" style="display:none;text-align:left;">
+        <label>Motivo (opcional)</label>
+        <input id="ac-motivo" type="text" placeholder="Ex.: mudança de planos, já resolvido…">
+      </div>
+      ${temCodigo?`<div class="campo" id="cancel-cod-wrap" style="display:none;text-align:left;">
+        <label>Código de confirmação (recebido no email)</label>
+        <input id="ac-codigo" type="text" inputmode="numeric" maxlength="4" placeholder="4 dígitos" style="letter-spacing:8px;text-align:center;font-size:20px;font-weight:700;">
+      </div>`:''}
+      <button id="ac-cancel-toggle" class="btn" style="background:#fff;border:1px solid #fecaca;color:#b91c1c;">Preciso de cancelar</button>
+      <button id="ac-cancel" class="btn" style="display:none;background:#dc2626;color:#fff;">Confirmar cancelamento</button>
+      <div id="ac-erro" style="color:#dc2626;font-size:12px;text-align:center;margin-top:8px;min-height:16px;"></div>
+    </div>`;
 
-  const nomeEl = document.getElementById('ac-nome');
-  const codEl  = document.getElementById('ac-codigo');
-  const chkEl  = document.getElementById('ac-chk');
-  const btnEl  = document.getElementById('ac-btn');
+  const toggleEl = document.getElementById('ac-cancel-toggle');
+  const cancelEl = document.getElementById('ac-cancel');
+  const motivoWrap = document.getElementById('cancel-motivo-wrap');
+  const codWrap = document.getElementById('cancel-cod-wrap');
   const erroEl = document.getElementById('ac-erro');
-  const temCodigo = !!(os.aceitacaoCodigo);
-  if(!temCodigo){ // OS antiga / sem código enviado — não exige código
-    codEl.parentElement.style.display = 'none';
-  }
-  function rever(){
-    const okNome = nomeEl.value.trim().length>2;
-    const okCod  = !temCodigo || codEl.value.trim().length===4;
-    btnEl.disabled = !(okNome && chkEl.checked && okCod);
-  }
-  nomeEl.addEventListener('input', rever);
-  codEl.addEventListener('input', ()=>{ codEl.value = codEl.value.replace(/\D/g,'').slice(0,4); rever(); });
-  chkEl.addEventListener('change', rever);
 
-  btnEl.addEventListener('click', async ()=>{
-    const nome = nomeEl.value.trim();
-    if(nome.length<3 || !chkEl.checked) return;
-    // ── Verificar o código (guardado na OS pelo admin) ──
-    if(temCodigo && codEl.value.trim() !== String(os.aceitacaoCodigo)){
-      erroEl.textContent = 'Código errado. Verifique o email.';
-      return;
+  toggleEl.addEventListener('click', ()=>{
+    motivoWrap.style.display='block';
+    if(codWrap) codWrap.style.display='block';
+    toggleEl.style.display='none';
+    cancelEl.style.display='inline-block';
+  });
+
+  cancelEl.addEventListener('click', async ()=>{
+    if(temCodigo){
+      const cod=(document.getElementById('ac-codigo')?.value||'').trim();
+      if(cod !== String(os.aceitacaoCodigo)){ erroEl.textContent='Código errado. Verifique o email.'; return; }
     }
-    btnEl.disabled = true; btnEl.textContent = 'A registar…'; erroEl.textContent='';
-    const quandoISO = new Date().toISOString();
-    const registo = {
-      nome,
-      quando: quandoISO,
-      condicoesVersao: CLAUSULAS_VERSAO,
-      codigoConfirmado: temCodigo,
-      userAgent: navigator.userAgent.slice(0,200),
-      via: 'pagina_publica'
-    };
+    if(!confirm('Tem a certeza de que quer cancelar este agendamento?')) return;
+    cancelEl.disabled=true; cancelEl.textContent='A cancelar…'; erroEl.textContent='';
+    const registo = { quando:new Date().toISOString(), motivo:(document.getElementById('ac-motivo')?.value||'').trim(), userAgent:navigator.userAgent.slice(0,200), via:'pagina_publica' };
     try{
-      await updateDoc(doc(db,'ordens',osId), { aceitacaoCondicoes: registo, aceitaCondicoes: true });
-      mostrarAceite(nome, new Date(quandoISO).toLocaleString('pt-PT'));
+      await updateDoc(doc(db,'ordens',osId), { canceladoPeloCliente:true, cancelamentoCliente:registo });
+      cont.innerHTML = `<div class="estado"><div class="circ" style="background:#dc2626">✕</div><h2>Agendamento cancelado</h2><p>Registámos o seu cancelamento. Obrigado por avisar.</p></div>`;
     }catch(e){
-      btnEl.disabled = false; btnEl.textContent = 'Aceito as condições';
-      erroEl.textContent = 'Não foi possível registar. Tente novamente ou contacte-nos.';
+      cancelEl.disabled=false; cancelEl.textContent='Confirmar cancelamento';
+      erroEl.textContent='Não foi possível registar. Tente novamente ou contacte-nos.';
     }
   });
 }

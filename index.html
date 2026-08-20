@@ -1220,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.52<br>
+      HidroGest v15.54<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.52 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.54 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.52<br>
+      HidroGest v15.54<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -11718,7 +11718,7 @@ function osRenderAgenda(){
 
   tecs.forEach((t,ti)=>{
     const col = CM[t.id];
-    const nOS = (window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(t.id)&&o.estado!=='cancelada').length;
+    const nOS = (window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(t.id)&&o.estado!=='cancelada'&&!o.canceladoPeloCliente).length;
 
     // Calcular altura da linha: suficiente para todos os eventos do dia com mais eventos
     // Cada dia pode ter múltiplos eventos sobrepostos — usamos blocos empilhados
@@ -11727,7 +11727,7 @@ function osRenderAgenda(){
     // Calcular o número máximo de eventos simultâneos em qualquer dia desta semana
     let maxBlocks = 1;
     days.forEach(d=>{
-      const n=(window.DB.ordens||[]).filter(o=>o.data===d.s&&o.estado!=='cancelada'&&(o.tecnicos||[]).includes(t.id)).length;
+      const n=(window.DB.ordens||[]).filter(o=>o.data===d.s&&o.estado!=='cancelada'&&!o.canceladoPeloCliente&&(o.tecnicos||[]).includes(t.id)).length;
       if(n>maxBlocks) maxBlocks=n;
     });
     // Altura adaptativa: em ecrãs pequenos usar menos altura por OS
@@ -11766,7 +11766,7 @@ function osRenderAgenda(){
     days.forEach((d,di)=>{
       const isToday=d.s===today;
       const dayOS=(window.DB.ordens||[])
-        .filter(o=>o.data===d.s&&o.estado!=='cancelada'&&(o.tecnicos||[]).includes(t.id))
+        .filter(o=>o.data===d.s&&o.estado!=='cancelada'&&!o.canceladoPeloCliente&&(o.tecnicos||[]).includes(t.id))
         .sort((a,b)=>(a.horaIni||'').localeCompare(b.horaIni||''));
 
       // ── Verificar se técnico está de férias neste dia ──
@@ -14468,7 +14468,7 @@ function osRenderMinhas(){
 
   // Base: todas as OS do técnico (exceto canceladas)
   let minhas=(window.DB.ordens||[])
-    .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada')
+    .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada' && !o.canceladoPeloCliente)
     .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
 
   if(q){
@@ -14507,7 +14507,7 @@ function osRenderMinhas(){
   } else if(filtro==='realizados'){
     // Trabalhos realizados — todos os relatórios já feitos (prontos ou enviados) por este técnico.
     minhas = (window.DB.ordens||[])
-      .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada')
+      .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada' && !o.canceladoPeloCliente)
       .filter(o=>{
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
         return rel && (rel.estado==='pronto' || rel.estado==='enviado');
@@ -20709,7 +20709,7 @@ INFORMAÇÕES IMPORTANTES
 O horário indicado é uma estimativa. Devido à natureza do nosso trabalho — que pode envolver situações imprevistas nos serviços anteriores — admitimos uma margem de tolerância de até 60 minutos relativamente à hora marcada. Caso prevejamos um atraso superior, entraremos em contacto.
 
 🚗 Taxa de deslocação
-Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, será devida a taxa de deslocação prevista no orçamento.
+Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, é devida uma taxa de deslocação de 50€ + IVA.
 
 ────────────────────────
 
@@ -20741,7 +20741,7 @@ Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (ac
   }
 
   if(!isCancelamento) corpo += `🚗 Seguir técnico em tempo real: ${trackingUrl}\n(Link activo quando o técnico estiver em deslocamento)\n\n`;
-  if(!isCancelamento) corpo += `✅ O seu agendamento está confirmado — não precisa de fazer nada. Para CANCELAR ou alterar: ${aceitacaoUrl}\n(Se não fizer nada, o agendamento fica confirmado)\n\n`;
+  if(!isCancelamento) corpo += `✅ O seu agendamento está confirmado — não precisa de fazer nada. Para CANCELAR ou alterar: ${aceitacaoUrl}\n(O cancelamento só é aceite até 24 horas úteis antes da hora marcada. Se não fizer nada, fica confirmado)\n\n`;
   if(!isCancelamento && codigoAceitacao) corpo += `🔒 Código (só necessário para cancelar): ${codigoAceitacao}\n(Só precisa deste código se quiser cancelar)\n\n`;
   corpo += `Contactos: 📞 ${tel} · ✉️ ${emailR}\n\n${assin}`;
 
@@ -20767,7 +20767,7 @@ Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (ac
 
       <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
         <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🚗 Taxa de deslocação</div>
-        <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, será devida a <strong>taxa de deslocação</strong> prevista no orçamento.</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, é devida uma <strong>taxa de deslocação de 50€ + IVA</strong>.</div>
       </div>
     </div>
       ` : '';
@@ -20795,6 +20795,7 @@ Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (ac
     ${condicoesHtml}
     ${!isCancelamento?`<div style="margin-top:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;text-align:center;">
       <div style="font-size:13px;color:#166534;font-weight:700;margin-bottom:8px;">✅ O seu agendamento está confirmado — não precisa de fazer nada.</div>
+      <div style="font-size:11px;color:#166534;margin-bottom:8px;">O cancelamento só é aceite até <strong>24 horas úteis antes</strong> da hora marcada.</div>
       ${codigoAceitacao?`<div style="margin:6px 0 12px;"><div style="font-size:11px;color:#64748b;">Código (só necessário para cancelar)</div><div style="font-size:24px;font-weight:800;letter-spacing:6px;color:#166534;">${codigoAceitacao}</div></div>`:''}
       <a href="${aceitacaoUrl}" target="_blank" style="display:inline-block;background:#fff;border:1px solid #fecaca;color:#b91c1c;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:700;">Cancelar / alterar agendamento</a>
     </div>`:''}
@@ -22476,7 +22477,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.52 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.54 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

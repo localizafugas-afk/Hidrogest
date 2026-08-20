@@ -1220,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.48<br>
+      HidroGest v15.50<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.48 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.50 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.48<br>
+      HidroGest v15.50<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6320,7 +6320,7 @@ function captureInvoice(e){
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':_apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({
-          model:'claude-sonnet-4-6',
+          model:'claude-sonnet-5',
           max_tokens:1000,
           messages:[{
             role:'user',
@@ -6334,6 +6334,17 @@ Se não conseguires ler algum campo, deixa-o em branco. Se a imagem não for uma
         })
       });
       const data=await resp.json();
+      // Se a API devolveu erro (chave inválida, modelo descontinuado, limite, etc.) — mostrar a razão
+      if(!resp.ok || data.error){
+        document.getElementById('desp-ai-loading')?.remove();
+        const m = (data.error&&(data.error.message||data.error.type)) || ('HTTP '+resp.status);
+        const eDiv=document.createElement('div');
+        eDiv.style.cssText='font-size:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;margin-top:8px;color:#b91c1c;';
+        eDiv.innerHTML='❌ OCR indisponível: <strong>'+String(m).replace(/[<>]/g,'')+'</strong><br><span style="font-weight:400;color:#7f1d1d;">Preenche os campos à mão. Se disser algo sobre a chave ou o modelo, avisa a gestão.</span>';
+        document.getElementById('d-photo-preview').appendChild(eDiv);
+        if(!document.getElementById('d-supplier').value) document.getElementById('d-supplier').value='Fornecedor (verificar)';
+        return;
+      }
       const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
 
       // Remover indicador
@@ -14973,7 +14984,7 @@ ${texto}`;
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5',
         max_tokens: 800,
         messages: [{ role: 'user', content: prompt }]
       })
@@ -15089,7 +15100,7 @@ async function rpGerarComIA(osId){
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{ 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1500, messages:[{ role:'user', content }] })
+      body: JSON.stringify({ model:'claude-sonnet-5', max_tokens:1500, messages:[{ role:'user', content }] })
     });
     if(!response.ok) throw new Error('Erro HTTP: '+response.status);
     const data = await response.json();
@@ -15207,7 +15218,7 @@ Instruções:
         'anthropic-dangerous-direct-browser-access':'true'
       },
       body: JSON.stringify({
-        model:'claude-sonnet-4-6',
+        model:'claude-sonnet-5',
         max_tokens: 900,
         messages:[{ role:'user', content }]
       })
@@ -22499,7 +22510,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.48 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.50 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -33969,7 +33980,7 @@ window.cliHistoricoImprimir = function(cliId){
 <!-- ═══════════════════════════════════════════════════════════════════════
      HidroGest — MÓDULO CONTAS A PAGAR + FISCAL (etapas 1 e 2)
      Faturas de fornecedores e impostos (IVA/IRS/SS), por vencimento.
-     Upload lê o documento (Claude, claude-sonnet-4-6). Coleção: contasPagar
+     Upload lê o documento (Claude, claude-sonnet-5). Coleção: contasPagar
      ═══════════════════════════════════════════════════════════════════════ -->
 <script>
 (function(){
@@ -34068,7 +34079,7 @@ window.cliHistoricoImprimir = function(cliId){
                      :{type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}};
     const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
+      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:1000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
     if(!resp.ok) throw new Error('API '+resp.status);
     const data=await resp.json();
     const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
@@ -34266,6 +34277,20 @@ Deixa vazio o que não conseguires ler.`);
         d.fatura = { url:up.url, path:up.path, nome:_cpFaturaFile.name||('fatura.'+ext), tipo:_cpFaturaFile.type||'' };
       }catch(e){ console.warn('upload fatura falhou:', e); toast('Conta guardada — mas a fatura não foi anexada: '+(e.message||e),'⚠️'); }
     }
+    // ── Criar o fornecedor automaticamente se ainda não existir ──
+    try{
+      const _norm=s=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+      const _fn=_norm(forn);
+      let _f=(window.DB.fornecedores||[]).find(x=>_norm(x.nome)===_fn);
+      if(!_f){
+        _f={ id:'forn_'+Date.now().toString(36), nome:forn, categoria:'Outro', nif:'', autoCriado:true, criadoEm:new Date().toISOString() };
+        await window.fsSet('fornecedores', _f.id, _f);
+        if(typeof auditLog==='function') auditLog('fornecedor_criado', `Fornecedor "${forn}" criado automaticamente a partir de uma conta a pagar.`);
+        toast(`Fornecedor "${forn}" criado.`,'🏢');
+      }
+      d.fornecedorId=_f.id;
+    }catch(_e){ console.warn('auto-fornecedor falhou:', _e); }
+
     try{ await window.fsSet('contasPagar', d.id, d);
       if(typeof auditLog==='function') auditLog(id?'conta_editada':'conta_criada',`Conta ${d.id} — ${d.fornecedor} — ${eur(d.gross)}`);
       _cpFaturaFile=null;
@@ -34932,7 +34957,7 @@ Inclui só movimentos de saída (compras, pagamentos, levantamentos). Ignora car
 Se o ano não estiver na linha, infere-o do período do extrato.`;
     const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
+      body:JSON.stringify({model:'claude-sonnet-5',max_tokens:8000,messages:[{role:'user',content:[block,{type:'text',text:prompt}]}]})});
     if(!resp.ok) throw new Error('API '+resp.status);
     const data=await resp.json();
     const txt=(data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');

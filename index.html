@@ -1220,7 +1220,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.50<br>
+      HidroGest v15.52<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1231,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.50 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.52 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1245,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.50<br>
+      HidroGest v15.52<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -11931,9 +11931,9 @@ function osRenderAgenda(){
             <div style="font-size:11px;color:${tx};opacity:.9;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${nomeCli}${morada?' · '+morada:''}</div>
             ${_cliAvisoTxt?`<div style="font-size:9px;font-weight:800;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:3px;padding:1px 5px;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="${_cliAvisoTxt}">${_cliAvisoTxt}</div>`:''}
             ${srv?.nome?`<div style="font-size:10px;color:${tx};opacity:.7;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🔧 ${srv.nome}</div>`:''}
-            ${o.aceitacaoCondicoes&&o.aceitacaoCondicoes.nome
-              ? `<div style="font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Condições aceites por ${o.aceitacaoCondicoes.nome} em ${o.aceitacaoCondicoes.quando?new Date(o.aceitacaoCondicoes.quando).toLocaleString('pt-PT'):''}">✅ Aceite</div>`
-              : `<div style="font-size:9px;font-weight:800;color:#b45309;background:#fef3c7;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Cliente ainda não confirmou as condições do serviço">⚠ Não confirmou condições</div>`}
+            ${o.canceladoPeloCliente
+              ? `<div style="font-size:9px;font-weight:800;color:#b91c1c;background:#fee2e2;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Cliente pediu cancelamento${o.cancelamentoCliente&&o.cancelamentoCliente.quando?' em '+new Date(o.cancelamentoCliente.quando).toLocaleString('pt-PT'):''}${o.cancelamentoCliente&&o.cancelamentoCliente.motivo?' · '+o.cancelamentoCliente.motivo:''}">🚫 Cancelado pelo cliente</div>`
+              : `<div style="font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}">✅ Confirmado${o.confirmacaoVistaEm?' 👁':''}</div>`}
             ${o.osParente?`<div style="font-size:9px;color:${tx};opacity:.7;margin-top:1px;font-weight:700;">↳ cont. ${o.osParente} · dia ${o.diaOrdem||'?'}${o.diasTotal?' de '+o.diasTotal:''}</div>`:''}
             ${!o.osParente && o.diasTotal && o.diasTotal>1?`<div style="font-size:9px;background:${col.solid};color:#fff;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;font-weight:700;">📅 ${o.diasTotal} dias</div>`:''}
             ${(()=>{
@@ -13059,11 +13059,9 @@ function osAbrirDetalhe(id){
         ${moradaSrv?`&nbsp;<a href="#" onclick="event.preventDefault();_tecAbrirMaps('${id}','${(cli?.nome||'').replace(/'/g,"\\'")}',window.DB.clientes.find(x=>x.id==='${cli?.id}'));return false;" style="color:${_moradaCpOk?'#93c5fd':'#fde68a'};font-size:11px;">🗺️ ${_moradaCpOk?'Ir →':'⚠️ Ir →'}</a>`:''}
       </div>
       <div style="font-size:12px;opacity:.75;margin-top:2px;">📞 ${cli?.tel||'—'} &nbsp;·&nbsp; 🔧 ${srv?.nome||'—'}</div>
-      ${o.aceitacaoCondicoes&&o.aceitacaoCondicoes.nome
-        ? `<div style="font-size:11px;margin-top:6px;background:rgba(16,185,129,.28);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Condições aceites por ${o.aceitacaoCondicoes.nome}${o.aceitacaoCondicoes.quando?' · '+new Date(o.aceitacaoCondicoes.quando).toLocaleString('pt-PT'):''}</div>`
-        : (o.aceitaCondicoes
-          ? `<div style="font-size:11px;margin-top:6px;background:rgba(255,255,255,.15);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Condições de serviço aceites</div>`
-          : `<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.3);padding:4px 10px;border-radius:6px;display:inline-block;">⚠️ Condições de serviço não confirmadas</div>`)}
+      ${o.canceladoPeloCliente
+        ? `<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.3);padding:4px 10px;border-radius:6px;display:inline-block;">🚫 Cancelado pelo cliente${o.cancelamentoCliente&&o.cancelamentoCliente.quando?' · '+new Date(o.cancelamentoCliente.quando).toLocaleString('pt-PT'):''}${o.cancelamentoCliente&&o.cancelamentoCliente.motivo?' · '+o.cancelamentoCliente.motivo:''}</div>`
+        : `<div style="font-size:11px;margin-top:6px;background:rgba(16,185,129,.28);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}</div>`}
     </div>
 
     ${o.encerramentoAutomatico?`
@@ -20713,21 +20711,6 @@ O horário indicado é uma estimativa. Devido à natureza do nosso trabalho — 
 🚗 Taxa de deslocação
 Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, será devida a taxa de deslocação prevista no orçamento.
 
-A) TERMO DE RESPONSABILIDADE E LIMITAÇÃO DE GARANTIA
-1. Documentação Técnica: A ausência da planta de tubagens isenta a empresa de qualquer responsabilidade por imprecisões na localização de fugas. Caso a planta seja fornecida, servirá apenas como referência, não sendo a empresa responsável por alterações estruturais ou desvios de traçado não averbados.
-2. Margens de Segurança (Deteção de fuga): O cliente declara estar ciente de que a localização de fugas não é uma ciência exata, aceitando as seguintes margens de erro: Áreas Internas — raio de 1 metro a partir do ponto indicado; Áreas Externas (solos porosos/areia/terra) — raio de 5 metros a partir do ponto indicado. Nota: Caso sejamos chamados para efeito de garantia por não ter sido localizada a fuga, e ao chegarmos ao local se constate que a mesma se encontra dentro das margens de segurança, o diagnóstico é considerado correto e será cobrado o valor de uma hora adicional.
-3. Manuseamento de Equipamentos: Para a execução do diagnóstico é estritamente necessário manusear passadores, torneiras, sifões e remover sanitários, podendo ainda ser preciso descer a caves, aceder a telhados e manusear telhas. A empresa não se responsabiliza por danos, quebras ou fugas nestes equipamentos ou estruturas decorrentes do seu estado de conservação ou fragilidade.
-4. Limitação de Diagnóstico: O serviço de deteção considera-se concluído com a identificação de uma anomalia (fuga ou falha de impermeabilização). A empresa não garante que este seja o único ponto de perda de água, podendo existir focos secundários apenas detetáveis após a reparação do primeiro. Em menos de 5% das intervenções, e apesar de todo o rigor técnico, pode não ser possível localizar com precisão a origem da fuga; nesses casos o valor da pesquisa é igualmente devido, uma vez que foram efectuados todos os ensaios e metodologias disponíveis.
-
-B) CONDIÇÕES COMERCIAIS E DE FATURAÇÃO
-1. Prazos de Entrega: Os relatórios técnicos são enviados num prazo de 5 dias úteis, contados a partir da confirmação do pagamento integral do serviço.
-2. Faturação e Pagamento: O pagamento deve ser efetuado no ato da conclusão da intervenção (deteção ou reparação). Métodos aceites: Multibanco, Numerário, Cheque ou Transferência Imediata (com envio de comprovativo no local). Após a emissão do documento fiscal não é possível alterar o nome ou o NIF do cliente, pelo que esses dados devem ser fornecidos no ato do agendamento. Solicitamos o envio do comprovativo de pagamento para localizafugas@gmail.com, para facilitar a identificação e não atrasar o envio do relatório técnico.
-3. Tabela de Taxas Adicionais: Leitura de Rastreador Químico — €120,00 + IVA por cada retorno técnico necessário. Tempo de Espera — caso o cliente solicite que o técnico aguarde a abertura do local por equipas externas, é cobrado o valor da hora adicional + IVA. Trabalho à Hora — retornos em serviços sob regime horário são cobrados como horas adicionais.
-4. Adjudicação de Reparações: Orçamentos para reparações imediatas devem ser aprovados por e-mail para localizafugas@gmail.com antes do início dos trabalhos. Se a reparação não for executada pela nossa equipa, o técnico não aguardará a abertura do local por terceiros sem a aplicação da taxa de espera indicada no ponto 3.
-5. Logística e Estacionamento: Em serviços faturados à hora, a contagem do tempo é contínua desde a chegada da equipa ao local até à conclusão do serviço. Eventuais tempos de deslocação para recolha de ferramentas ou equipamentos adicionais no veículo, motivados por falta de estacionamento ou condições de acesso no edifício, integram o tempo total de assistência e são cobrados como tal.
-
-💶 IVA
-Aos valores indicados acresce IVA à taxa legal em vigor.
 ────────────────────────
 
 ` : '';
@@ -20758,8 +20741,8 @@ Aos valores indicados acresce IVA à taxa legal em vigor.
   }
 
   if(!isCancelamento) corpo += `🚗 Seguir técnico em tempo real: ${trackingUrl}\n(Link activo quando o técnico estiver em deslocamento)\n\n`;
-  if(!isCancelamento) corpo += `✅ Aceitar as condições do serviço: ${aceitacaoUrl}\n(Confirme que está de acordo com as condições acima)\n\n`;
-  if(!isCancelamento && codigoAceitacao) corpo += `🔒 O seu código de confirmação: ${codigoAceitacao}\n(Vai precisar deste código na página de aceitação)\n\n`;
+  if(!isCancelamento) corpo += `✅ O seu agendamento está confirmado — não precisa de fazer nada. Para CANCELAR ou alterar: ${aceitacaoUrl}\n(Se não fizer nada, o agendamento fica confirmado)\n\n`;
+  if(!isCancelamento && codigoAceitacao) corpo += `🔒 Código (só necessário para cancelar): ${codigoAceitacao}\n(Só precisa deste código se quiser cancelar)\n\n`;
   corpo += `Contactos: 📞 ${tel} · ✉️ ${emailR}\n\n${assin}`;
 
   // ── Verificar se envio automático está activo ───────────────
@@ -20786,25 +20769,8 @@ Aos valores indicados acresce IVA à taxa legal em vigor.
         <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🚗 Taxa de deslocação</div>
         <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, será devida a <strong>taxa de deslocação</strong> prevista no orçamento.</div>
       </div>
-
-      <div style="font-size:12px;font-weight:800;color:#1e3a5f;margin:14px 0 8px;">A) Termo de Responsabilidade e Limitação de Garantia</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>1. Documentação Técnica:</strong> A ausência da planta de tubagens isenta a empresa de qualquer responsabilidade por imprecisões na localização de fugas. Caso a planta seja fornecida, servirá apenas como referência, não sendo a empresa responsável por alterações estruturais ou desvios de traçado não averbados.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>2. Margens de Segurança:</strong> A localização de fugas não é uma ciência exata. O cliente aceita as seguintes margens de erro: <strong>Áreas Internas</strong> — raio de 1 metro do ponto indicado; <strong>Áreas Externas</strong> (solos porosos/areia/terra) — raio de 5 metros do ponto indicado. Se formos chamados em garantia por não ter sido localizada a fuga e se constatar que esta se encontra dentro das margens, o diagnóstico é considerado correto e será cobrada uma hora adicional.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>3. Manuseamento de Equipamentos:</strong> Para o diagnóstico é necessário manusear passadores, torneiras, sifões e remover sanitários, e pode ser preciso descer a caves, aceder a telhados e manusear telhas. A ${empresaNome} não se responsabiliza por danos, quebras ou fugas nestes equipamentos ou estruturas decorrentes do seu estado de conservação ou fragilidade.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:4px;"><strong>4. Limitação de Diagnóstico:</strong> O serviço considera-se concluído com a identificação de uma anomalia. Podem existir focos secundários apenas detetáveis após a reparação do primeiro. Em menos de 5% das intervenções pode não ser possível localizar a fuga com precisão; nesses casos o valor da pesquisa é igualmente devido, por terem sido efectuados todos os ensaios disponíveis.</div>
-
-      <div style="font-size:12px;font-weight:800;color:#1e3a5f;margin:14px 0 8px;">B) Condições Comerciais e de Faturação</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>1. Prazos de Entrega:</strong> Os relatórios técnicos são enviados em 5 dias úteis após a confirmação do pagamento integral do serviço.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>2. Faturação e Pagamento:</strong> Pagamento no ato da conclusão da intervenção. Métodos: Multibanco, Numerário, Cheque ou Transferência Imediata (com comprovativo no local). Após a emissão da fatura não é possível alterar o nome ou o NIF, pelo que estes dados devem ser fornecidos no agendamento. Envie o comprovativo para <strong>localizafugas@gmail.com</strong> para não atrasar o relatório.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>3. Taxas Adicionais:</strong> Leitura de Rastreador Químico — <strong>€120,00 + IVA</strong> por cada retorno. Tempo de espera por equipas externas — hora adicional + IVA. Retornos em regime horário — cobrados como horas adicionais.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:8px;"><strong>4. Adjudicação de Reparações:</strong> Orçamentos de reparação imediata devem ser aprovados por e-mail para localizafugas@gmail.com antes do início. Se a reparação não for feita pela nossa equipa, o técnico não aguardará a abertura do local por terceiros sem a taxa de espera do ponto 3.</div>
-      <div style="font-size:12px;color:#64748b;line-height:1.6;margin-bottom:4px;"><strong>5. Logística e Estacionamento:</strong> Em serviços à hora, a contagem é contínua desde a chegada até à conclusão. Tempos de deslocação para recolha de equipamentos no veículo, por falta de estacionamento ou acesso, integram o tempo total e são cobrados como tal.</div>
-
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;">
-        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">💶 IVA</div>
-        <div style="font-size:12px;color:#64748b;">Aos valores indicados acresce <strong>IVA à taxa legal em vigor</strong>.</div>
-      </div>
-    </div>` : '';
+    </div>
+      ` : '';
 
   const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:540px;color:#1a202c;">
   <div style="background:${headerBg2};color:#fff;padding:16px 20px;border-radius:8px 8px 0 0;">
@@ -20828,9 +20794,9 @@ Aos valores indicados acresce IVA à taxa legal em vigor.
     </div>`:`${!isCancelamento?`<div style="margin-top:14px;"><a href="${trackingUrl}" target="_blank" style="display:inline-block;background:#0f172a;color:#fff;padding:9px 18px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:700;border:1px solid rgba(59,130,246,.5);">🚗 Seguir técnico em tempo real</a></div>`:''}`}
     ${condicoesHtml}
     ${!isCancelamento?`<div style="margin-top:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;text-align:center;">
-      <div style="font-size:13px;color:#166534;font-weight:700;margin-bottom:8px;">Para avançarmos, confirme que está de acordo com as condições:</div>
-      ${codigoAceitacao?`<div style="margin:6px 0 12px;"><div style="font-size:11px;color:#64748b;">O seu código de confirmação</div><div style="font-size:26px;font-weight:800;letter-spacing:6px;color:#166534;">${codigoAceitacao}</div></div>`:''}
-      <a href="${aceitacaoUrl}" target="_blank" style="display:inline-block;background:#16a34a;color:#fff;padding:11px 22px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:800;">✅ Aceito as condições do serviço</a>
+      <div style="font-size:13px;color:#166534;font-weight:700;margin-bottom:8px;">✅ O seu agendamento está confirmado — não precisa de fazer nada.</div>
+      ${codigoAceitacao?`<div style="margin:6px 0 12px;"><div style="font-size:11px;color:#64748b;">Código (só necessário para cancelar)</div><div style="font-size:24px;font-weight:800;letter-spacing:6px;color:#166534;">${codigoAceitacao}</div></div>`:''}
+      <a href="${aceitacaoUrl}" target="_blank" style="display:inline-block;background:#fff;border:1px solid #fecaca;color:#b91c1c;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:700;">Cancelar / alterar agendamento</a>
     </div>`:''}
     <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
       ${empresaNome} · 📞 ${tel} · ✉️ ${emailR}${emp.website?` · 🌐 ${emp.website}`:''}
@@ -22510,7 +22476,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.50 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.52 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

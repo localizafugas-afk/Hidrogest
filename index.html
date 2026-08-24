@@ -412,12 +412,17 @@ function onDataChange() {
 }
 
 // ─── CRUD helpers ─────────────────────────────────────────────
+function _fsErro(op, col, e){
+  try{ if(typeof window.toast==='function') window.toast('⚠️ Falha ao '+op+' ('+col+'): '+((e&&e.message)||e), '❌'); }catch(_){}
+  console.error('[Firestore]', op, col, e);
+}
 window.fsSet    = async (col, id, data) => {
   if(!id || id==='undefined' || id==='null'){
     console.error('[fsSet] ID inválido:', col, id, data);
     return;
   }
-  await setDoc(doc(db, col, id), data);
+  try{ await setDoc(doc(db, col, id), data); }
+  catch(e){ _fsErro('gravar', col, e); throw e; }
 };
 window.fsGetAll = async (col) => { const snap = await getDocs(collection(db, col)); return snap.docs.map(d=>d.data()); };
 window.fsDel    = async (col, id)       => {
@@ -425,10 +430,26 @@ window.fsDel    = async (col, id)       => {
     console.error('[fsDel] ID inválido:', col, id);
     return;
   }
-  await deleteDoc(doc(db, col, id));
+  try{ await deleteDoc(doc(db, col, id)); }
+  catch(e){ _fsErro('eliminar', col, e); throw e; }
 };
 window.fsMeta   = saveMeta;
-window.fsSetMerge = async (col, id, data) => { await setDoc(doc(db, col, id), data, {merge:true}); };
+window.fsSetMerge = async (col, id, data) => {
+  try{ await setDoc(doc(db, col, id), data, {merge:true}); }
+  catch(e){ _fsErro('gravar', col, e); throw e; }
+};
+
+// Apanhador global — qualquer erro assíncrono não tratado deixa de ser invisível
+window.addEventListener('unhandledrejection', function(ev){
+  try{ if(typeof window.toast==='function' && ev && ev.reason){ window.toast('⚠️ '+((ev.reason&&ev.reason.message)||ev.reason), '❌'); } }catch(_){}
+  console.error('[erro não tratado]', ev && ev.reason);
+});
+
+// Relatório "feito" = pronto, preenchido (legado) ou enviado. Fonte única de verdade.
+window.relatorioFeito = function(r){
+  const e = (typeof r === 'string') ? r : (r && r.estado);
+  return e==='pronto' || e==='preenchido' || e==='enviado';
+};
 
 // ─── Firebase Storage (fotos de relatórios) ───────────────────
 // Envia uma imagem (data URL) para o Storage e devolve {url, path}.
@@ -1220,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.54<br>
+      HidroGest v15.56<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1231,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.54 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.56 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1245,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.54<br>
+      HidroGest v15.56<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6854,7 +6875,7 @@ function _commRelAtrasado(uid, periodo){
     if(String(o.concluidoEm||o.data||'').slice(0,7)!==periodo) return;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
     const rel=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
-    const entregue = rel && (rel.estado==='pronto' || rel.estado==='preenchido' || rel.estado==='enviado');
+    const entregue = relatorioFeito(rel);
     if(entregue) return;
     const base=o.concluidoEm||o.data; if(!base) return;
     if(new Date() > _commAddDiasUteis(base,5)) offenders.push(o.id);
@@ -11942,7 +11963,7 @@ function osRenderAgenda(){
               let _html='';
               // 1) Data de conclusão pelo técnico (prontoEm; recorre à conclusão da OS ou à criação do relatório em relatórios antigos)
               const _concRaw = _relOS.prontoEm || o.concluidoEm || _relOS.criadoEm;
-              if((_relOS.estado==='pronto'||_relOS.estado==='enviado') && _concRaw){
+              if(relatorioFeito(_relOS) && _concRaw){
                 const _dc=new Date(_concRaw).toLocaleDateString('pt-PT',{day:'2-digit',month:'2-digit'});
                 _html += `<div style="margin-top:2px;"><span style="font-size:9px;font-weight:700;color:#7c3aed;background:#f3e8ff;border-radius:3px;padding:1px 5px;display:inline-block;" title="Relatório concluído pelo técnico">✔️ Concl. ${_dc}</span></div>`;
               }
@@ -14492,7 +14513,7 @@ function osRenderMinhas(){
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
       const est=rel?.estado||'';
       // "feito" = relatório pronto a enviar ou já enviado; o resto falta
-      return !(est==='pronto' || est==='enviado');
+      return !relatorioFeito(est);
     });
   } else if(filtro==='concluida'){
     minhas = minhas.filter(o=>o.estado==='concluida');
@@ -14510,7 +14531,7 @@ function osRenderMinhas(){
       .filter(o=>(o.tecnicos||[]).includes(window.currentUser.id) && o.estado!=='cancelada' && !o.canceladoPeloCliente)
       .filter(o=>{
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-        return rel && (rel.estado==='pronto' || rel.estado==='enviado');
+        return relatorioFeito(rel);
       })
       .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
   } else if(filtro==='em_curso'){
@@ -14524,7 +14545,7 @@ function osRenderMinhas(){
       if(o.data!==hoje) return false;
       if(o.estado!=='agendada' && o.estado!=='em_curso') return false;
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-      if(rel && (rel.estado==='enviado' || rel.estado==='pronto')) return false;
+      if(relatorioFeito(rel)) return false;
       return true;
     });
   } else {
@@ -14630,7 +14651,7 @@ function osRenderMinhas(){
       const prazoBadge=o.fechadaSemRelatorio?rpPrazoBadge(o):'';
       // ⚠️ OS concluída/fechada (faturável) sem relatório feito
       const _naoFatCard=(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o));
-      const faltaRel=concluida && !_naoFatCard && !(relEst==='pronto'||relEst==='enviado');
+      const faltaRel=concluida && !_naoFatCard && !relatorioFeito(relEst);
       const faltaRelBadge=faltaRel?'<span style="font-size:10px;font-weight:800;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;padding:2px 7px;border-radius:10px;">⚠️ Falta relatório</span>':'';
 
       // Borda do card conforme estado
@@ -14933,6 +14954,45 @@ async function tecPararRapido(id){
   osRenderMinhas();
 }
 
+
+// ── Ditar por voz (microfone) para os campos do relatório ──
+function rpDitar(fieldId){
+  const el = document.getElementById(fieldId); if(!el) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.querySelector(`button[onclick="rpDitar('${fieldId}')"]`);
+  if(!SR){ toast('Este dispositivo não permite ditar por voz. Experimente o Chrome no Android.','⚠️'); return; }
+  // Já a gravar neste campo? -> parar
+  if(window._hgRec && window._hgRecField===fieldId){ try{ window._hgRec.stop(); }catch(e){} return; }
+  if(window._hgRec){ try{ window._hgRec.stop(); }catch(e){} }
+  const rec = new SR();
+  window._hgRec = rec; window._hgRecField = fieldId;
+  rec.lang='pt-PT'; rec.continuous=true; rec.interimResults=true;
+  const base = el.value ? el.value.replace(/\s+$/,'')+' ' : '';
+  let finalTxt='';
+  const origHTML = btn ? btn.innerHTML : '';
+  if(btn){ btn.innerHTML='🔴 A gravar… (toque p/ parar)'; btn.style.background='#fee2e2'; btn.style.borderColor='#dc2626'; btn.style.color='#b91c1c'; }
+  rec.onresult = (e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalTxt += t+' '; else interim += t;
+    }
+    el.value = base + finalTxt + interim;
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  rec.onerror = (e)=>{
+    const err=e.error||'';
+    if(err==='not-allowed'||err==='service-not-allowed') toast('Permita o acesso ao microfone para ditar.','🎙️');
+    else if(err!=='aborted'&&err!=='no-speech') toast('Erro no microfone: '+err,'⚠️');
+  };
+  rec.onend = ()=>{
+    el.value = (base + finalTxt).replace(/\s+$/,''); el.dispatchEvent(new Event('input',{bubbles:true}));
+    if(btn){ btn.innerHTML=origHTML||'🎙️ Ditar'; btn.style.background='#f0fdfa'; btn.style.borderColor='#0d9488'; btn.style.color='#0d9488'; }
+    window._hgRec=null; window._hgRecField=null;
+  };
+  try{ rec.start(); toast('🎙️ Fale agora. Toque outra vez para parar.','🎙️'); }
+  catch(e){ toast('Não foi possível iniciar o microfone.','⚠️'); if(btn){ btn.innerHTML=origHTML; } window._hgRec=null; window._hgRecField=null; }
+}
 
 // ── Melhorar texto para linguagem técnica com Claude ────────
 async function rpMelhorarTexto(fieldId){
@@ -15699,7 +15759,7 @@ async function relDiarioEnviarGestao(dataStr){
     if(o.estado!=='concluida'&&o.estado!=='os_fechada') return false;
     if(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o)) return false;
     const rel = rels.find(r=>r.id===o.id);
-    if(rel&&(rel.estado==='enviado'||rel.estado==='pronto'||rel.estado==='preenchido')) return false;
+    if(relatorioFeito(rel)) return false;
     const dataFecho = o.concluidoEm||o.data;
     if(!dataFecho) return false;
     const dFecho = new Date(dataFecho.slice(0,10)+'T12:00:00');
@@ -22477,7 +22537,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.54 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.56 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -22752,7 +22812,7 @@ function tecHistoricoCliente(clienteId, excludeOsId){
   const historico=[];
   for(const o of osDoCliente){
     const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    if(!rel || !(rel.estado==='pronto'||rel.estado==='enviado')) continue;
+    if(!relatorioFeito(rel)) continue;
     const c=rel.campos||{};
     if(!c.reclamacao && !c.trabalho && !c.conclusao) continue;
     const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId)||{};
@@ -22872,7 +22932,10 @@ function rpAbrirFormulario(osId, preserveTemp){
     return `<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${sel?'#eff6ff':'#f8fafc'};border:1.5px solid ${sel?'#2563eb':'#e2e8f0'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:${sel?'700':'400'};user-select:none;" onclick="this.classList.toggle('rp-sel');const i=this.querySelector('input');i.checked=!i.checked;this.style.background=i.checked?'#eff6ff':'#f8fafc';this.style.borderColor=i.checked?'#2563eb':'#e2e8f0';this.style.fontWeight=i.checked?'700':'400';"><input type="checkbox" name="rp-eq" value="${val}" ${sel?'checked':''} style="display:none;"> <span>${val}</span>${sel?'<span style="color:#2563eb;margin-left:auto;">✓</span>':''}</label>`;
   }
 
-  const mic = (id)=>'';   // botão de ditar removido a pedido
+  const mic = (id)=>`<button type="button" onclick="rpDitar('${id}')"
+    style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #0d9488;
+    border-radius:8px;background:#f0fdfa;color:#0d9488;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
+    id="mic-btn-${id}" title="Ditar por voz">🎙️ Ditar</button>`;
 
   const secTit = (n,t,sub='')=>`<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;">
     <div style="width:30px;height:30px;border-radius:50%;background:#1e3a5f;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex-shrink:0;">${n}</div>
@@ -23389,7 +23452,7 @@ async function rpAutoSaveInterno(){
   const os = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   // Não sobrescrever relatório já finalizado
   const existing = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
-  if(existing.estado==='pronto' || existing.estado==='enviado') return; // nunca desfazer um relatório já enviado
+  if(relatorioFeito(existing)) return; // nunca desfazer um relatório já enviado
   const badge = document.getElementById('rp-autosave-badge');
   // Enviar fotos novas para o Storage (silencioso) — mantém o rascunho leve
   try{

@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.56<br>
+      HidroGest v15.57<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.56 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.57 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.56<br>
+      HidroGest v15.57<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -22537,7 +22537,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.56 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.57 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -26772,6 +26772,7 @@ async function rpSyncFinanceiro(os){
 let _agMapaInst = null;
 let _agMapaVisible = true;
 let _agMapaMarkers = {};
+let _agMapaOSMarkers = {};
 
 function agToggleMapa(){
   const body = document.getElementById('ag-mapa-body');
@@ -26814,9 +26815,14 @@ function agMapaRender(){
   const semLoc = document.getElementById('ag-mapa-sem-loc');
   const mapaEl = document.getElementById('ag-mapa-leaflet');
 
-  if(!locs.length){
+  const _hojeMapa = new Date().toISOString().slice(0,10);
+  const _osHoje = (typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
+    .filter(o=> o.data===_hojeMapa && o.estado!=='cancelada' && !o.canceladoPeloCliente);
+
+  if(!locs.length && !_osHoje.length){
     if(semLoc){ semLoc.style.display='block'; }
     if(mapaEl){ mapaEl.style.display='none'; }
+    Object.keys(_agMapaOSMarkers).forEach(id=>{ _agMapaInst.removeLayer(_agMapaOSMarkers[id]); delete _agMapaOSMarkers[id]; });
     agMapaBadges([]);
     return;
   }
@@ -26868,13 +26874,60 @@ function agMapaRender(){
     bounds.push([loc.lat, loc.lng]);
   });
 
-  if(bounds.length === 1){
-    _agMapaInst.setView(bounds[0], 14);
-  } else if(bounds.length > 1){
-    _agMapaInst.fitBounds(bounds, {padding:[30,30]});
-  }
+  // Trabalhos agendados de hoje (marcadores de OS) + ajuste conjunto do zoom
+  agMapaRenderOS().then(osBounds=>{
+    const all = bounds.concat(osBounds||[]);
+    if(all.length === 1){ _agMapaInst.setView(all[0], 14); }
+    else if(all.length > 1){ _agMapaInst.fitBounds(all, {padding:[30,30]}); }
+  });
 
   agMapaBadges(locs);
+}
+
+// ── Marcar no mapa os trabalhos agendados para hoje ──
+async function agMapaRenderOS(){
+  const outBounds=[];
+  if(!_agMapaInst) return outBounds;
+  const today = new Date().toISOString().slice(0,10);
+  const ordens = (typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
+    .filter(o=> o.data===today && o.estado!=='cancelada' && !o.canceladoPeloCliente);
+  const vivos = new Set();
+  for(const o of ordens){
+    const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+    const cp  = (cli&&cli.cp) || o.cliCP || '';
+    let geo=null;
+    try{ if(cp) geo = await cpParaCoordenadas(cp); }catch(e){}
+    if(!geo || !isFinite(geo.lat)) continue;
+    const lng = (geo.lng!=null?geo.lng:geo.lon);
+    if(!isFinite(lng)) continue;
+    vivos.add(o.id);
+    const nome  = o.clienteNomeSnapshot || o.clienteNome || (cli&&cli.nome) || 'Cliente';
+    const hora  = (o.horaIni||'').slice(0,5);
+    const srv   = o.servicoNome || ((window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{}).nome || '';
+    const tecs  = (o.tecnicos||[]).map(id=>((window.DB.users||[]).find(u=>u.id===id)||{}).name).filter(Boolean).join(', ');
+    const emCurso = o.estado==='em_curso';
+    const cor   = emCurso ? '#f59e0b' : '#ea580c';
+    const iconHtml = `<div style="background:${cor};color:#fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);"><span style="transform:rotate(45deg);font-size:12px;">🔧</span></div>`;
+    const icon = L.divIcon({html:iconHtml, className:'', iconSize:[26,26], iconAnchor:[13,26]});
+    const popup = `<div style="font-family:sans-serif;min-width:190px;">
+      <div style="font-weight:800;font-size:13px;margin-bottom:2px;">${hora?hora+' · ':''}${nome}</div>
+      <div style="font-size:11px;color:#475569;margin-bottom:4px;">OS ${o.id}${srv?' · '+srv:''}${emCurso?' · <span style="color:#b45309;font-weight:700;">em curso</span>':''}</div>
+      ${tecs?`<div style="font-size:11px;color:#334155;margin-bottom:4px;">👷 ${tecs}</div>`:''}
+      <div style="font-size:11px;color:#64748b;">📍 ${o.cliMorada||(cli&&cli.morada)||cp}</div>
+      <a href="https://www.google.com/maps/dir/?api=1&destination=${geo.lat},${lng}" target="_blank" style="display:inline-block;margin-top:8px;font-size:11px;color:#2563eb;font-weight:700;text-decoration:none;">🚗 Traçar rota →</a>
+    </div>`;
+    if(_agMapaOSMarkers[o.id]){
+      _agMapaOSMarkers[o.id].setLatLng([geo.lat,lng]).setIcon(icon).setPopupContent(popup);
+    } else {
+      _agMapaOSMarkers[o.id] = L.marker([geo.lat,lng],{icon}).addTo(_agMapaInst).bindPopup(popup);
+    }
+    outBounds.push([geo.lat,lng]);
+  }
+  // Remover marcadores de OS que já não são de hoje
+  Object.keys(_agMapaOSMarkers).forEach(id=>{
+    if(!vivos.has(id)){ _agMapaInst.removeLayer(_agMapaOSMarkers[id]); delete _agMapaOSMarkers[id]; }
+  });
+  return outBounds;
 }
 
 function agMapaBadges(locs){

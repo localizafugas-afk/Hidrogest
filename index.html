@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.59<br>
+      HidroGest v15.60<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.59 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.60 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.59<br>
+      HidroGest v15.60<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -3400,12 +3400,16 @@ Localiza Fugas
       <!-- Morada principal -->
       <div class="fsec">📍 Morada principal</div>
       <div class="fgrid">
-        <div class="fg" style="grid-column:span 2"><label>Rua / Avenida</label><input class="fi" id="cli-rua" placeholder="Rua, nº, andar"></div>
+        <div class="fg" style="grid-column:span 2"><label>Rua / Avenida</label><input class="fi" id="cli-rua" placeholder="Rua e número (sem andar/fração)" oninput="window._cliMoradaGeo=null"></div>
         <div class="fg"><label>Nº da Fração / Porta</label><input class="fi" id="cli-fracao" placeholder="Ex: 3º Esq, Fração K"></div>
         <div class="fg"><label>Código postal</label><input class="fi" id="cli-cp" placeholder="0000-000"></div>
         <div class="fg"><label>Localidade</label><input class="fi" id="cli-localidade" placeholder="Cidade / Localidade"></div>
         <div class="fg"><label>Concelho</label><input class="fi" id="cli-concelho" placeholder="Concelho"></div>
         <div class="fg"><label>Distrito</label><input class="fi" id="cli-distrito" placeholder="Distrito"></div>
+      </div>
+      <div style="margin:2px 0 8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="cliVerificarMorada()">📍 Verificar morada no mapa</button>
+        <span id="cli-morada-status" style="font-size:12px;"></span>
       </div>
 
       <!-- Morada do serviço (se diferente) -->
@@ -3417,7 +3421,7 @@ Localiza Fugas
       </div>
       <div id="cli-outra-morada-bloco" style="display:none;">
         <div class="fgrid">
-          <div class="fg" style="grid-column:span 2"><label>Rua / Avenida (local do serviço)</label><input class="fi" id="cli-srv-rua" placeholder="Rua, nº, andar"></div>
+          <div class="fg" style="grid-column:span 2"><label>Rua / Avenida (local do serviço)</label><input class="fi" id="cli-srv-rua" placeholder="Rua e número (sem andar/fração)"></div>
           <div class="fg"><label>Código postal</label><input class="fi" id="cli-srv-cp" placeholder="0000-000"></div>
           <div class="fg"><label>Localidade</label><input class="fi" id="cli-srv-localidade" placeholder="Cidade"></div>
           <div class="fg"><label>Concelho</label><input class="fi" id="cli-srv-concelho" placeholder="Concelho"></div>
@@ -14189,6 +14193,27 @@ function osToggleOutraMorada(){
   const checked=document.getElementById('cli-outra-morada')?.checked;
   document.getElementById('cli-outra-morada-bloco').style.display=checked?'block':'none';
 }
+async function cliVerificarMorada(){
+  const g=i=>(document.getElementById(i)?.value||'').trim();
+  const morada=[g('cli-rua'),g('cli-cp'),g('cli-localidade')].filter(Boolean).join(', ');
+  const st=document.getElementById('cli-morada-status');
+  if(!morada){ if(st){ st.innerHTML='<span style="color:#b45309;">Preencha a rua, o código postal e a localidade primeiro.</span>'; } return; }
+  if(st){ st.innerHTML='⏳ A verificar no mapa…'; st.style.color='#64748b'; }
+  let geo=null;
+  try{ geo=await rotGeocode(morada); }catch(e){}
+  if(!geo||!isFinite(geo.lat)){
+    try{ const cp=g('cli-cp'); if(cp){ const gc=await cpParaCoordenadas(cp); if(gc&&isFinite(gc.lat)) geo={lat:gc.lat,lng:(gc.lng!=null?gc.lng:gc.lon)}; } }catch(e){}
+  }
+  const gmaps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(morada);
+  if(geo&&isFinite(geo.lat)){
+    window._cliMoradaGeo={morada, ok:true, lat:geo.lat, lng:geo.lng};
+    if(st){ st.innerHTML='✅ Morada localizada. <a href="'+gmaps+'" target="_blank" style="color:#2563eb;font-weight:600;">Abrir no Google Maps</a>'; st.style.color='#15803d'; }
+  } else {
+    window._cliMoradaGeo={morada, ok:false};
+    if(st){ st.innerHTML='⚠️ Morada NÃO localizada — é preciso confirmar. <a href="'+gmaps+'" target="_blank" style="color:#2563eb;font-weight:600;">Ver no Google Maps</a>'; st.style.color='#b45309'; }
+  }
+}
+
 async function osSalvarCliente(){
   const nome=document.getElementById('cli-nome').value.trim();
   const email=document.getElementById('cli-email').value.trim();
@@ -14256,6 +14281,24 @@ async function osSalvarCliente(){
     quemPaga, fatNome, fatNif, fatEmail, fatTel, fatMorada,
     obs:g('cli-obs'),
   };
+  // ── Confirmar a morada no mapa — sinalizar se não for localizada ──
+  try{
+    const _mor=[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', ');
+    if(_mor){
+      let _ok=null,_lat=null,_lng=null;
+      if(window._cliMoradaGeo && window._cliMoradaGeo.morada===_mor){
+        _ok=window._cliMoradaGeo.ok; _lat=window._cliMoradaGeo.lat; _lng=window._cliMoradaGeo.lng;
+      } else {
+        let g2=null;
+        try{ g2=await rotGeocode(_mor); }catch(e){}
+        if((!g2||!isFinite(g2.lat)) && cli.cp){ try{ const gc=await cpParaCoordenadas(cli.cp); if(gc&&isFinite(gc.lat)) g2={lat:gc.lat,lng:(gc.lng!=null?gc.lng:gc.lon)}; }catch(e){} }
+        if(g2&&isFinite(g2.lat)){ _ok=true; _lat=g2.lat; _lng=g2.lng; } else _ok=false;
+      }
+      cli.moradaPorConfirmar = (_ok===false);
+      if(_ok===true){ cli.moradaLat=_lat; cli.moradaLng=_lng; }
+      if(cli.moradaPorConfirmar) toast('⚠️ Morada não localizada no mapa — cliente marcado como "morada por confirmar".','📍');
+    }
+  }catch(e){ console.warn('validação de morada falhou:', e); }
   if(editingCliId){
     // Edição: merge para preservar campos como bloqueadoFinanceiro, bloqueioLiberadoPor, etc.
     await window.fsSetMerge('clientes', id, cli);
@@ -22542,7 +22585,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.59 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.60 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.57<br>
+      HidroGest v15.58<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.57 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.58 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.57<br>
+      HidroGest v15.58<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -22537,7 +22537,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.57 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.58 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -26884,6 +26884,20 @@ function agMapaRender(){
   agMapaBadges(locs);
 }
 
+// ── Geocodificar morada (recurso quando falta o código postal) ──
+const _moradaGeoCache = {};
+async function _geoMorada(q){
+  q=(q||'').replace(/\s+/g,' ').trim();
+  if(q.length<6) return null;
+  if(_moradaGeoCache[q]!==undefined) return _moradaGeoCache[q];
+  try{
+    const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q+', Portugal')}&format=json&limit=1&accept-language=pt`);
+    const d=await r.json().catch(()=>null);
+    if(d&&d[0]&&isFinite(parseFloat(d[0].lat))){ const g={lat:parseFloat(d[0].lat), lng:parseFloat(d[0].lon)}; _moradaGeoCache[q]=g; return g; }
+  }catch(e){}
+  _moradaGeoCache[q]=null; return null;
+}
+
 // ── Marcar no mapa os trabalhos agendados para hoje ──
 async function agMapaRenderOS(){
   const outBounds=[];
@@ -26892,14 +26906,19 @@ async function agMapaRenderOS(){
   const ordens = (typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
     .filter(o=> o.data===today && o.estado!=='cancelada' && !o.canceladoPeloCliente);
   const vivos = new Set();
+  let semLoc = 0;
   for(const o of ordens){
     const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId);
     const cp  = (cli&&cli.cp) || o.cliCP || '';
+    const morada = o.cliMorada || (cli&&cli.morada) || '';
     let geo=null;
     try{ if(cp) geo = await cpParaCoordenadas(cp); }catch(e){}
-    if(!geo || !isFinite(geo.lat)) continue;
+    if((!geo || !isFinite(geo.lat)) && (morada || (cli&&cli.cidade))){
+      try{ geo = await _geoMorada(morada + (cli&&cli.cidade?(' '+cli.cidade):'')); }catch(e){}
+    }
+    if(!geo || !isFinite(geo.lat)){ semLoc++; continue; }
     const lng = (geo.lng!=null?geo.lng:geo.lon);
-    if(!isFinite(lng)) continue;
+    if(!isFinite(lng)){ semLoc++; continue; }
     vivos.add(o.id);
     const nome  = o.clienteNomeSnapshot || o.clienteNome || (cli&&cli.nome) || 'Cliente';
     const hora  = (o.horaIni||'').slice(0,5);
@@ -26913,7 +26932,7 @@ async function agMapaRenderOS(){
       <div style="font-weight:800;font-size:13px;margin-bottom:2px;">${hora?hora+' · ':''}${nome}</div>
       <div style="font-size:11px;color:#475569;margin-bottom:4px;">OS ${o.id}${srv?' · '+srv:''}${emCurso?' · <span style="color:#b45309;font-weight:700;">em curso</span>':''}</div>
       ${tecs?`<div style="font-size:11px;color:#334155;margin-bottom:4px;">👷 ${tecs}</div>`:''}
-      <div style="font-size:11px;color:#64748b;">📍 ${o.cliMorada||(cli&&cli.morada)||cp}</div>
+      <div style="font-size:11px;color:#64748b;">📍 ${morada||cp}</div>
       <a href="https://www.google.com/maps/dir/?api=1&destination=${geo.lat},${lng}" target="_blank" style="display:inline-block;margin-top:8px;font-size:11px;color:#2563eb;font-weight:700;text-decoration:none;">🚗 Traçar rota →</a>
     </div>`;
     if(_agMapaOSMarkers[o.id]){
@@ -26923,10 +26942,19 @@ async function agMapaRenderOS(){
     }
     outBounds.push([geo.lat,lng]);
   }
-  // Remover marcadores de OS que já não são de hoje
   Object.keys(_agMapaOSMarkers).forEach(id=>{
     if(!vivos.has(id)){ _agMapaInst.removeLayer(_agMapaOSMarkers[id]); delete _agMapaOSMarkers[id]; }
   });
+  // Legenda: quantos trabalhos no mapa / quantos sem localização
+  try{
+    const body = document.getElementById('mapa-body');
+    if(body){
+      let cap = document.getElementById('ag-mapa-osinfo');
+      if(!cap){ cap=document.createElement('div'); cap.id='ag-mapa-osinfo'; cap.style.cssText='font-size:11px;padding:6px 4px 0;color:#475569;'; body.appendChild(cap); }
+      const n = vivos.size;
+      cap.innerHTML = `🔧 <strong>${n}</strong> trabalho(s) de hoje no mapa` + (semLoc>0?` · <span style="color:#b45309;">${semLoc} sem localização (falta código postal na ficha do cliente)</span>`:'') + (n===0&&semLoc===0?` — sem trabalhos agendados para hoje`:'');
+    }
+  }catch(e){}
   return outBounds;
 }
 

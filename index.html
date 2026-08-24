@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.58<br>
+      HidroGest v15.59<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.58 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.59 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.58<br>
+      HidroGest v15.59<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -18643,15 +18643,18 @@ async function rotRender(){
   const gridEl=document.getElementById('rot-tecnicos-grid');
   if(!gridEl) return;
 
-  // Geocodificar todas as OS do dia
+  // Geocodificar todas as OS do dia (rua/morada e, em recurso, código postal)
   const geoCodes={};
   for(const os of todasOS){
+    if(geoCodes[os.id]) continue;
     const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId);
-    const morada=cli?.rua?[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', '):null;
-    if(morada&&!geoCodes[os.id]){
-      const g=await rotGeocode(morada);
-      if(g) geoCodes[os.id]=g;
+    const morada = (cli&&(cli.rua||cli.morada)) ? [cli.rua||cli.morada, cli.cp, cli.localidade].filter(Boolean).join(', ') : (os.cliMorada||'');
+    let g=null;
+    if(morada) g=await rotGeocode(morada);
+    if((!g||!isFinite(g.lat)) && cli && cli.cp){
+      try{ const gc=await cpParaCoordenadas(cli.cp); if(gc&&isFinite(gc.lat)) g={lat:gc.lat,lng:(gc.lng!=null?gc.lng:gc.lon)}; }catch(e){}
     }
+    if(g&&isFinite(g.lat)) geoCodes[os.id]=g;
   }
 
   const cards=await Promise.all(tecs.map(async u=>{
@@ -18661,15 +18664,16 @@ async function rotRender(){
     // Calcular rota optimizada para este técnico
     let pontos=[];
     if(online) pontos.push({os:null,lat:loc.lat,lng:loc.lng,label:'📍 Posição actual',hora:'—',dist:0});
-    minhasOS.sort((a,b)=>a.horaIni.localeCompare(b.horaIni)).forEach(os=>{
+    minhasOS.sort((a,b)=>(a.horaIni||'').localeCompare(b.horaIni||'')).forEach(os=>{
       const g=geoCodes[os.id];
-      if(g) pontos.push({os,lat:g.lat,lng:g.lng});
+      pontos.push(g ? {os,lat:g.lat,lng:g.lng} : {os,lat:null,lng:null});
     });
     // Calcular distâncias entre pontos consecutivos
     let distTotal=0;
     const pontosComDist=pontos.map((p,i)=>{
       if(i===0) return {...p,dist:0,distAnt:0};
       const ant=pontos[i-1];
+      if(p.lat==null || ant.lat==null) return {...p,dist:0,distAnt:0};
       const d=rotDistKm(ant.lat,ant.lng,p.lat,p.lng);
       distTotal+=d;
       return {...p,dist:Math.round(d*10)/10,distAnt:d};
@@ -18715,6 +18719,7 @@ async function rotRender(){
               </div>
               <div class="rot-os-cli">${cli?.nome||'—'}</div>
               <div class="rot-os-end">${[cli?.rua,cli?.localidade].filter(Boolean).join(', ')||'sem morada'}</div>
+              ${!p.lat?`<div style="font-size:10px;color:#b45309;margin-top:2px;font-weight:600;">📍 sem localização — falta código postal/morada na ficha do cliente (fora da rota)</div>`:''}
               <div style="display:flex;gap:6px;margin-top:4px;">
                 ${mapsUrl?`<a href="${mapsUrl}" target="_blank" class="loc-btn" style="font-size:10px;padding:2px 7px;">🗺️ Maps</a>`:''}
                 <button class="loc-btn" style="font-size:10px;padding:2px 7px;border:none;" onclick="osAbrirDetalhe('${p.os.id}')">Ver OS</button>
@@ -22537,7 +22542,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.58 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.59 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

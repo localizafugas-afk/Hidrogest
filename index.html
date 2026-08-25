@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.61<br>
+      HidroGest v15.63<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.61 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.63 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.61<br>
+      HidroGest v15.63<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -2990,7 +2990,7 @@ Localiza Fugas
           <div class="fg"><label>Telefone *</label><input class="fi" id="nc-tel" placeholder="+351 900 000 000" inputmode="tel"></div>
           <div class="fg"><label>Email</label><input class="fi" type="email" id="nc-email" placeholder="cliente@email.pt"></div>
           <div class="fg"><label>Cód. Postal</label><input class="fi" id="nc-cp" placeholder="0000-000"></div>
-          <div class="fg" style="grid-column:span 2"><label>Rua / Morada</label><input class="fi" id="nc-rua" placeholder="Rua, nº, andar"></div>
+          <div class="fg" style="grid-column:span 2"><label>Rua / Morada</label><input class="fi" id="nc-rua" placeholder="Rua e número (sem andar/fração)"></div>
           <div class="fg"><label>Localidade</label><input class="fi" id="nc-localidade" placeholder="Cidade"></div>
           <div class="fg"><label>Concelho</label><input class="fi" id="nc-concelho" placeholder="Concelho"></div>
         </div>
@@ -17554,6 +17554,27 @@ async function ncGuardar(){
     obs: '',
   };
 
+  // ── Confirmar a morada no Google Maps antes de agendar ──
+  const _morada=[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', ');
+  if(_morada){
+    let _geo=null;
+    try{ _geo=await rotGeocode(_morada); }catch(e){}
+    if((!_geo||!isFinite(_geo.lat)) && cli.cp){ try{ const gc=await cpParaCoordenadas(cli.cp); if(gc&&isFinite(gc.lat)) _geo={lat:gc.lat,lng:(gc.lng!=null?gc.lng:gc.lon)}; }catch(e){} }
+    const _gmaps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(_morada);
+    const _w=window.open(_gmaps,'_blank');
+    const _abriu=_w?'(abri o Google Maps numa nova aba para confirmares)':'(não consegui abrir o Google Maps — permite popups para confirmar visualmente)';
+    if(!_geo||!isFinite(_geo.lat)){
+      alert('⚠️ A morada não foi localizada no mapa:\n\n'+_morada+'\n\n'+_abriu+'\n\nCorrige a rua e o código postal antes de continuar o agendamento.');
+      document.getElementById('nc-rua')?.focus();
+      return;
+    }
+    if(!confirm('📍 Confirma a morada do cliente:\n\n'+_morada+'\n\n'+_abriu+'\n\nO local está correto?\n\nOK = continuar o agendamento\nCancelar = corrigir a morada')){
+      document.getElementById('nc-rua')?.focus();
+      return;
+    }
+    cli.moradaLat=_geo.lat; cli.moradaLng=_geo.lng;
+  }
+
   try {
     await window.fsSet('clientes', id, cli);
     window.DB.nextCli = _pcRap.num + 1;
@@ -18914,35 +18935,41 @@ function rotVerRotaMaps(tecId, data){
   auditLog('rota_maps',`Rota Maps aberta para técnico ${window.DB.users.find(u=>u.id===tecId)?.name||tecId} — ${os.length} pontos`);
 }
 
-// ── Ver TODOS no Maps: posição de cada técnico (ou, se ninguém online, os trabalhos do dia) ──
+// ── Ver TODOS no Maps: todos os trabalhos do dia (e, se não houver, as posições dos técnicos online) ──
 function rotVerTodosMaps(data){
   data = data || document.getElementById('rot-data')?.value || new Date().toISOString().slice(0,10);
   const enc = s => encodeURIComponent(s);
-  // 1) posições ao vivo dos técnicos com GPS ativo
-  const locs = (window.DB.localizacoes||[]).filter(l=>l.lat && l.online);
-  let pontos = locs.map(l=>({ label:(window.DB.users.find(u=>u.id===l.userId)?.name)||'Técnico', ll:`${l.lat},${l.lng}` }));
-  // 2) se nenhum técnico online, mostrar os trabalhos do dia
-  if(!pontos.length){
-    const ordens=(typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
-      .filter(o=> o.data===data && o.estado!=='cancelada' && !o.canceladoPeloCliente);
-    pontos = ordens.map(o=>{
-      const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
-      const m=[cli?.rua,cli?.cp,cli?.localidade].filter(Boolean).join(', ');
-      return m?{label:o.id, ll:m}:null;
-    }).filter(Boolean);
+  const pontos = [];
+  // 1) Posições ao vivo dos técnicos que estão online (aparecem primeiro)
+  let nTec = 0;
+  (window.DB.localizacoes||[]).filter(l=>l.lat && l.online).forEach(l=>{ pontos.push(`${l.lat},${l.lng}`); nTec++; });
+  // 2) Trabalhos do dia (todos os técnicos), por ordem de hora
+  const ordens=(typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
+    .filter(o=> o.data===data && o.estado!=='cancelada' && !o.canceladoPeloCliente)
+    .sort((a,b)=>(a.horaIni||'').localeCompare(b.horaIni||''));
+  for(const o of ordens){
+    const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+    const m=[cli?.rua,cli?.cp,cli?.localidade].filter(Boolean).join(', ') || o.cliMorada || '';
+    if(m) pontos.push(m);
   }
-  if(!pontos.length){ toast('Sem técnicos online nem trabalhos localizáveis para mostrar.','ℹ️'); return; }
-  if(pontos.length===1){ window.open(`https://www.google.com/maps/search/?api=1&query=${enc(pontos[0].ll)}`,'_blank'); return; }
-  // Google Maps só desenha uma rota — mostramos todos os pontos (limite ~10)
-  const capped = pontos.slice(0,10);
-  const origin = capped[0].ll, dest = capped[capped.length-1].ll;
-  const mids = capped.slice(1,-1).map(p=>enc(p.ll)).join('|');
-  let url=`https://www.google.com/maps/dir/?api=1&origin=${enc(origin)}&destination=${enc(dest)}`;
-  if(mids) url+=`&waypoints=${mids}`;
-  url+='&travelmode=driving';
-  window.open(url,'_blank');
-  if(pontos.length>10) toast('Mostrados os primeiros 10 pontos (limite do Google Maps).','ℹ️');
-  try{ auditLog('rota_maps_todos',`Mapa de todos aberto — ${pontos.length} pontos`); }catch(e){}
+  if(!pontos.length){
+    toast('Nenhum técnico online e nenhum trabalho de hoje com morada. Preencha a rua/código postal nas fichas dos clientes.','ℹ️');
+    return;
+  }
+  let url;
+  if(pontos.length===1){
+    url=`https://www.google.com/maps/search/?api=1&query=${enc(pontos[0])}`;
+  } else {
+    const capped = pontos.slice(0,10);
+    url=`https://www.google.com/maps/dir/?api=1&origin=${enc(capped[0])}&destination=${enc(capped[capped.length-1])}`
+      + (capped.length>2?`&waypoints=${capped.slice(1,-1).map(enc).join('|')}`:'')
+      + `&travelmode=driving`;
+    if(pontos.length>10) toast('Mostrados os primeiros 10 locais (limite do Google Maps).','ℹ️');
+  }
+  const win = window.open(url,'_blank');
+  if(!win){ toast('O navegador bloqueou a nova janela. Permita popups para este site.','⚠️'); }
+  else if(nTec===0){ toast('Nota: nenhum técnico está online agora — só aparecem no mapa quando têm a app aberta com GPS. Mostrei os trabalhos do dia.','ℹ️'); }
+  try{ auditLog('rota_maps_todos',`Mapa de todos aberto — ${pontos.length} pontos (${nTec} técnicos)`); }catch(e){}
 }
 
 // ── Optimizar ordem das OS do técnico ────────────────────────
@@ -22617,7 +22644,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.61 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.63 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

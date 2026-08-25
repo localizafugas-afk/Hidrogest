@@ -17590,25 +17590,20 @@ async function ncGuardar(){
     obs: '',
   };
 
-  // ── Confirmar a morada no Google Maps antes de agendar ──
+  // ── Validar a morada em segundo plano (nunca bloqueia a gravação) ──
+  // Se não for localizada, o cliente é guardado na mesma e fica marcado
+  // como "morada por confirmar". Não abre o Google Maps nem cancela nada.
   const _morada=[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', ');
   if(_morada){
     let _geo=null;
     try{ _geo=await rotGeocode(_morada); }catch(e){}
     if((!_geo||!isFinite(_geo.lat)) && cli.cp){ try{ const gc=await cpParaCoordenadas(cli.cp); if(gc&&isFinite(gc.lat)) _geo={lat:gc.lat,lng:(gc.lng!=null?gc.lng:gc.lon)}; }catch(e){} }
-    const _gmaps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(_morada);
-    const _w=window.open(_gmaps,'_blank');
-    const _abriu=_w?'(abri o Google Maps numa nova aba para confirmares)':'(não consegui abrir o Google Maps — permite popups para confirmar visualmente)';
-    if(!_geo||!isFinite(_geo.lat)){
-      alert('⚠️ A morada não foi localizada no mapa:\n\n'+_morada+'\n\n'+_abriu+'\n\nCorrige a rua e o código postal antes de continuar o agendamento.');
-      document.getElementById('nc-rua')?.focus();
-      return;
+    if(_geo&&isFinite(_geo.lat)){
+      cli.moradaLat=_geo.lat; cli.moradaLng=_geo.lng; cli.moradaPorConfirmar=false;
+    } else {
+      cli.moradaPorConfirmar=true;
+      toast('⚠️ Morada não localizada no mapa — cliente guardado como "morada por confirmar".','📍');
     }
-    if(!confirm('📍 Confirma a morada do cliente:\n\n'+_morada+'\n\n'+_abriu+'\n\nO local está correto?\n\nOK = continuar o agendamento\nCancelar = corrigir a morada')){
-      document.getElementById('nc-rua')?.focus();
-      return;
-    }
-    cli.moradaLat=_geo.lat; cli.moradaLng=_geo.lng;
   }
 
   try {

@@ -447,8 +447,20 @@ window.addEventListener('unhandledrejection', function(ev){
 
 // Relatório "feito" = pronto, preenchido (legado) ou enviado. Fonte única de verdade.
 window.relatorioFeito = function(r){
-  const e = (typeof r === 'string') ? r : (r && r.estado);
-  return e==='pronto' || e==='preenchido' || e==='enviado';
+  if(!r) return false;
+  if(typeof r === 'string') return r==='pronto' || r==='preenchido' || r==='enviado';
+  const e = r.estado;
+  if(e==='pronto' || e==='preenchido' || e==='enviado') return true;
+  // Se tem data de envio ou de receção pelo cliente, está concluído (mesmo que o estado tenha dessincronizado)
+  return !!r.enviadoEm || !!r.recebidoEm;
+};
+
+// Intervenção concluída = relatório feito OU o cliente assinou no local (assinatura = trabalho concluído e aceite).
+window.osRelConcluido = function(o){
+  if(!o) return false;
+  if(o.assinaturaCliente) return true;
+  const rel=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
+  return window.relatorioFeito(rel);
 };
 
 // ─── Firebase Storage (fotos de relatórios) ───────────────────
@@ -1241,7 +1253,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.64<br>
+      HidroGest v15.69<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1264,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.64 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.69 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1278,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.64<br>
+      HidroGest v15.69<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6879,8 +6891,7 @@ function _commRelAtrasado(uid, periodo){
     if(o.estado!=='concluida' && o.estado!=='os_fechada') return;
     if(String(o.concluidoEm||o.data||'').slice(0,7)!==periodo) return;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
-    const rel=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===o.id);
-    const entregue = relatorioFeito(rel);
+    const entregue = window.osRelConcluido(o);
     if(entregue) return;
     const base=o.concluidoEm||o.data; if(!base) return;
     if(new Date() > _commAddDiasUteis(base,5)) offenders.push(o.id);
@@ -13318,6 +13329,7 @@ function osAbrirDetalhe(id){
           ${o.assinaturaTecnico?`<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-bottom:4px;text-transform:uppercase;">Técnico</div><img src="${o.assinaturaTecnico}" style="max-width:100%;max-height:60px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;"></div>`:''}
           ${o.assinaturaCliente?`<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-bottom:4px;text-transform:uppercase;">Cliente</div><img src="${o.assinaturaCliente}" style="max-width:100%;max-height:60px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;"></div>`:''}
         </div>`:''}
+        ${o.assinadoPorOutro && o.assinanteNome ? `<div style="padding:0 14px 12px;font-size:11px;color:#b45309;">✍️ Assinado no local por <strong>${o.assinanteNome}</strong>${o.assinanteNif?' · NIF '+o.assinanteNif:''} — cliente não presente</div>` : ''}
       </div>`}
     </div><!-- fim passos -->
 
@@ -14581,10 +14593,8 @@ function osRenderMinhas(){
     minhas = minhas.filter(o=>{
       if(o.estado!=='concluida' && o.estado!=='os_fechada') return false;
       if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return false; // orçamento/garantia não precisam
-      const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-      const est=rel?.estado||'';
-      // "feito" = relatório pronto a enviar ou já enviado; o resto falta
-      return !relatorioFeito(est);
+      // "feito" = relatório pronto/enviado OU cliente assinou no local; o resto falta
+      return !window.osRelConcluido(o);
     });
   } else if(filtro==='concluida'){
     minhas = minhas.filter(o=>o.estado==='concluida');
@@ -15829,8 +15839,7 @@ async function relDiarioEnviarGestao(dataStr){
   const relEmFalta = ordens.filter(o=>{
     if(o.estado!=='concluida'&&o.estado!=='os_fechada') return false;
     if(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o)) return false;
-    const rel = rels.find(r=>r.id===o.id);
-    if(relatorioFeito(rel)) return false;
+    if(window.osRelConcluido(o)) return false;
     const dataFecho = o.concluidoEm||o.data;
     if(!dataFecho) return false;
     const dFecho = new Date(dataFecho.slice(0,10)+'T12:00:00');
@@ -21881,6 +21890,15 @@ function agRecEditarSimples(id){
           <div style="position:absolute;top:8px;left:12px;font-size:10px;color:#94a3b8;pointer-events:none;">Assine aqui com o dedo ou rato</div>
         </div>
         <div id="os-cli-nome-label" style="font-size:11px;color:var(--text3);margin-top:4px;text-align:center;"></div>
+        <div style="margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;color:var(--text2);">
+            <input type="checkbox" id="os-ass-outro" onchange="osToggleAssinante()"> Cliente não presente — assina outra pessoa no local
+          </label>
+          <div id="os-ass-outro-bloco" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+            <div><label style="font-size:11px;color:var(--text3);">Nome de quem assina *</label><input class="fi" id="os-ass-nome" placeholder="Nome completo"></div>
+            <div><label style="font-size:11px;color:var(--text3);">NIF / Contribuinte</label><input class="fi" id="os-ass-nif" placeholder="000 000 000"></div>
+          </div>
+        </div>
       </div>
 
       <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;">
@@ -22677,7 +22695,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.64 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.69 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -24841,8 +24859,8 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
               ${sigCli
                 ?`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px;margin-bottom:8px;background:#f8fafc;"><img src="${sigCli}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;"></div>`
                 :`<div style="height:70px;border-bottom:1.5px solid #94a3b8;margin-bottom:8px;"></div>`}
-              <div style="font-size:11px;font-weight:700;color:#1e293b;">${c.cliNome||cli.nome||'Cliente'}</div>
-              <div style="font-size:9px;color:#94a3b8;">Tomador do serviço · Data: ___/___/______</div>
+              <div style="font-size:11px;font-weight:700;color:#1e293b;">${(os&&os.assinadoPorOutro&&os.assinanteNome) ? os.assinanteNome : (c.cliNome||cli.nome||'Cliente')}</div>
+              <div style="font-size:9px;color:#94a3b8;">${(os&&os.assinadoPorOutro) ? ('Assinou no local'+(os.assinanteNif?' · NIF '+os.assinanteNif:'')+' — cliente não presente') : 'Tomador do serviço'} · Data: ___/___/______</div>
             </div>`})()}
           </div>
         </div>
@@ -26525,6 +26543,13 @@ function osCanvasToDataURL(canvasId){
   return canvas.toDataURL('image/png');
 }
 
+// ── Mostrar/esconder os campos de quem assina (cliente não presente) ──
+function osToggleAssinante(){
+  const chk=document.getElementById('os-ass-outro')?.checked;
+  const b=document.getElementById('os-ass-outro-bloco');
+  if(b) b.style.display=chk?'grid':'none';
+}
+
 // ── Concluir OS com assinaturas ──────────────────────────────
 async function osConcluirComAssinaturas(){
   const osId=window._osConcluirId; if(!osId) return;
@@ -26553,6 +26578,15 @@ async function osConcluirComAssinaturas(){
     return;
   }
 
+  // Quem assina (cliente ou, se não presente, a pessoa no local)
+  const _assOutro = document.getElementById('os-ass-outro')?.checked;
+  const _assNome = (document.getElementById('os-ass-nome')?.value||'').trim();
+  const _assNif  = (document.getElementById('os-ass-nif')?.value||'').trim();
+  if(_assOutro && !_assNome){
+    toast('Indique o nome de quem assina (cliente não presente).','⚠️');
+    document.getElementById('os-ass-nome')?.focus();
+    return;
+  }
   // ── Modalidade de pagamento OBRIGATÓRIA para fechar a OS ──────
   // (dispensada apenas em serviços não faturáveis: garantia, orçamento, etc.)
   {
@@ -26636,6 +26670,9 @@ async function osConcluirComAssinaturas(){
     haddN:hAddCalc, net:netCalc, ivaVal:ivaCalcV, total:totalCalc,
     assinaturaTecnico:assTec,
     assinaturaCliente:assCli||'',
+    assinadoPorOutro: !!_assOutro,
+    assinanteNome: _assOutro ? _assNome : '',
+    assinanteNif:  _assOutro ? _assNif  : '',
     pagamento,
     pausas:(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:new Date().toISOString()}:p),
     pausaAtiva:false,
@@ -34909,6 +34946,8 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
   }
 
   window.fcAbrir=function(){
+    // Ler o saldo guardado (meta/fluxoCaixa) — para não ficar preso no valor por defeito
+    try{ const v=window.DB&&window.DB.fluxoCaixa; if(v&&typeof v==='object'){ if(v.saldoInicial!=null)window._fcSaldo=num(v.saldoInicial); if(v.meses)window._fcMeses=parseInt(v.meses)||window._fcMeses; } }catch(e){}
     let ov=document.getElementById('fc-ov');
     if(!ov){ ov=document.createElement('div'); ov.id='fc-ov';
       ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.35);z-index:9000;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
@@ -34920,7 +34959,8 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
   window.fcMudar=function(){
     const s=document.getElementById('fc-saldo'), m=document.getElementById('fc-meses');
     if(s) window._fcSaldo=num(s.value); if(m) window._fcMeses=parseInt(m.value)||1;
-    try{ if(window.fsSetMerge) window.fsSetMerge('meta','fluxoCaixa',{saldoInicial:window._fcSaldo,meses:window._fcMeses}); }catch(e){}
+    window.DB.fluxoCaixa={saldoInicial:window._fcSaldo, meses:window._fcMeses};
+    try{ if(window.fsSetMerge) window.fsSetMerge('meta','fluxoCaixa',{value:{saldoInicial:window._fcSaldo,meses:window._fcMeses}}); }catch(e){}
     fcRender();
   };
   window.fcModo=function(md){ window._fcModo=md; fcRender(); };
@@ -35085,8 +35125,7 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
     if(_collection&&_onSnapshot){ _onSnapshot(_collection(window._db,'despesasRecorrentes'), snap=>{
       window.DB.despesasRecorrentes=snap.docs.map(d=>({...d.data(),id:d.id}));
       if(document.getElementById('fcr-ov')) fcrRender(); if(document.getElementById('fc-ov')) fcRender(); }); }
-    const {getDoc,doc:fsDoc}=window._firestoreOps||{};
-    if(getDoc&&fsDoc&&window._db){ getDoc(fsDoc(window._db,'meta','fluxoCaixa')).then(sn=>{ if(sn.exists()){const v=sn.data(); if(v.saldoInicial!=null)window._fcSaldo=v.saldoInicial; if(v.meses)window._fcMeses=v.meses;} }).catch(()=>{}); }
+    try{ const v=window.DB&&window.DB.fluxoCaixa; if(v&&typeof v==='object'){ if(v.saldoInicial!=null)window._fcSaldo=num(v.saldoInicial); if(v.meses)window._fcMeses=parseInt(v.meses)||window._fcMeses; if(document.getElementById('fc-ov')) fcRender(); } }catch(e){}
   }catch(e){} },2700); });
   setInterval(()=>{ if(document.getElementById('fc-ov')) fcRender(); },6000);
 

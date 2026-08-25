@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.60<br>
+      HidroGest v15.61<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.60 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.61 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.60<br>
+      HidroGest v15.61<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -1731,6 +1731,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <input type="date" id="rot-data" class="fi" style="width:160px;" onchange="rotRender()">
       <button class="btn btn-primary btn-sm" onclick="rotRender()">🔄 Actualizar</button>
+      <button class="btn btn-ghost btn-sm" onclick="rotVerTodosMaps()">🗺️ Ver todos no Maps</button>
     </div>
   </div>
 
@@ -18913,6 +18914,37 @@ function rotVerRotaMaps(tecId, data){
   auditLog('rota_maps',`Rota Maps aberta para técnico ${window.DB.users.find(u=>u.id===tecId)?.name||tecId} — ${os.length} pontos`);
 }
 
+// ── Ver TODOS no Maps: posição de cada técnico (ou, se ninguém online, os trabalhos do dia) ──
+function rotVerTodosMaps(data){
+  data = data || document.getElementById('rot-data')?.value || new Date().toISOString().slice(0,10);
+  const enc = s => encodeURIComponent(s);
+  // 1) posições ao vivo dos técnicos com GPS ativo
+  const locs = (window.DB.localizacoes||[]).filter(l=>l.lat && l.online);
+  let pontos = locs.map(l=>({ label:(window.DB.users.find(u=>u.id===l.userId)?.name)||'Técnico', ll:`${l.lat},${l.lng}` }));
+  // 2) se nenhum técnico online, mostrar os trabalhos do dia
+  if(!pontos.length){
+    const ordens=(typeof getVisibleOrdens==='function'?getVisibleOrdens():(window.DB.ordens||[]))
+      .filter(o=> o.data===data && o.estado!=='cancelada' && !o.canceladoPeloCliente);
+    pontos = ordens.map(o=>{
+      const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+      const m=[cli?.rua,cli?.cp,cli?.localidade].filter(Boolean).join(', ');
+      return m?{label:o.id, ll:m}:null;
+    }).filter(Boolean);
+  }
+  if(!pontos.length){ toast('Sem técnicos online nem trabalhos localizáveis para mostrar.','ℹ️'); return; }
+  if(pontos.length===1){ window.open(`https://www.google.com/maps/search/?api=1&query=${enc(pontos[0].ll)}`,'_blank'); return; }
+  // Google Maps só desenha uma rota — mostramos todos os pontos (limite ~10)
+  const capped = pontos.slice(0,10);
+  const origin = capped[0].ll, dest = capped[capped.length-1].ll;
+  const mids = capped.slice(1,-1).map(p=>enc(p.ll)).join('|');
+  let url=`https://www.google.com/maps/dir/?api=1&origin=${enc(origin)}&destination=${enc(dest)}`;
+  if(mids) url+=`&waypoints=${mids}`;
+  url+='&travelmode=driving';
+  window.open(url,'_blank');
+  if(pontos.length>10) toast('Mostrados os primeiros 10 pontos (limite do Google Maps).','ℹ️');
+  try{ auditLog('rota_maps_todos',`Mapa de todos aberto — ${pontos.length} pontos`); }catch(e){}
+}
+
 // ── Optimizar ordem das OS do técnico ────────────────────────
 async function rotOptimizarTecnico(tecId, data){
   const {os}=rotCargaTecnico(tecId,data);
@@ -22585,7 +22617,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.60 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.61 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

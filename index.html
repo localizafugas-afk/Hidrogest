@@ -1241,7 +1241,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.63<br>
+      HidroGest v15.64<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1252,7 +1252,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.63 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.64 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.63<br>
+      HidroGest v15.64<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -11134,6 +11134,12 @@ async function osSalvar(){
   }
   if(!isEdit){ window.DB.nextOS=_novoNumOS+1; await window.fsMeta('nextOS',_novoNumOS+1); }
 
+  // ── Auditoria: criação ou edição da OS ──
+  try{
+    if(isEdit) auditOSDiff(existing, os, 'edição');
+    else auditLog('os_criada', `OS ${os.id} criada — ${(os.clienteNomeSnapshot||os.clienteNome||'')} · ${os.data||''} ${os.horaIni||''}`.trim(), {osId:os.id});
+  }catch(e){}
+
   // ── Criar OS filhas para trabalhos multi-dia ──────────────
   const _tempoTotal  = parseInt(srv?.tempo)||0;
   const _diasSrv     = parseInt(srv?.diasTrabalho)||1;
@@ -13700,6 +13706,26 @@ function oseCriarClienteNovo(){
   osOpenCliente();                    // abre o formulário de cliente em branco
 }
 
+function auditOSDiff(antes, depois, ctx){
+  try{
+    if(!antes||!depois) return;
+    const nomeTec=id=>((window.DB.users||[]).find(u=>u.id===id)||{}).name||id;
+    const nomeSrv=o=>o.servicoNome||((window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{}).nome||o.servicoId||'—';
+    const h=o=>`${(o.horaIni||'—')}${o.horaFim?'-'+o.horaFim:''}`;
+    const mud=[];
+    if((antes.data||'')!==(depois.data||'')) mud.push(`data ${antes.data||'—'} → ${depois.data||'—'}`);
+    if(h(antes)!==h(depois)) mud.push(`hora ${h(antes)} → ${h(depois)}`);
+    const ta=(antes.tecnicos||[]).map(nomeTec).join(', ')||'—', td=(depois.tecnicos||[]).map(nomeTec).join(', ')||'—';
+    if(ta!==td) mud.push(`técnico ${ta} → ${td}`);
+    if(nomeSrv(antes)!==nomeSrv(depois)) mud.push(`serviço ${nomeSrv(antes)} → ${nomeSrv(depois)}`);
+    if(Number(antes.total||0)!==Number(depois.total||0)) mud.push(`valor ${Number(antes.total||0).toFixed(2)}€ → ${Number(depois.total||0).toFixed(2)}€`);
+    if((antes.estado||'')!==(depois.estado||'')) mud.push(`estado ${antes.estado||'—'} → ${depois.estado||'—'}`);
+    if((antes.clienteId||'')!==(depois.clienteId||'')) mud.push('cliente alterado');
+    if(!mud.length) return;
+    auditLog('os_alterada', `OS ${depois.id}${ctx?' ('+ctx+')':''}: `+mud.join(' · '), {osId:depois.id});
+  }catch(e){ console.warn('auditOSDiff falhou', e); }
+}
+
 async function osGuardarEdicao(){
   const o=(window.DB.ordens||[]).find(x=>x.id===editingOsId); if(!o) return;
   const tecs=[...document.querySelectorAll('#ose-tec-checkboxes input:checked')].map(x=>x.value);
@@ -13745,6 +13771,7 @@ async function osGuardarEdicao(){
     updated.clienteNomeSnapshot = ((window.DB.clientes||[]).find(c=>c.id===_novoCliId)?.nome)||'';
   }
   await window.fsSet('ordens',editingOsId,updated);
+  auditOSDiff(o, updated, 'edição');
 
   // Se o cliente mudou, actualizar também o "carimbo" do cliente no relatório desta OS
   if(_clienteAlterado){
@@ -22016,6 +22043,12 @@ function agendarRetornoRastreador(osId){
 
 async function rpSaveDoc(id, data){
   await window.fsSet('relatorios_pesquisa', id, data);
+  try{
+    if(data && (data.estado==='pronto' || data.estado==='enviado')){
+      auditLog('relatorio_'+(data.estado==='enviado'?'enviado':'guardado'),
+        `Relatório da OS ${id} ${data.estado==='enviado'?'enviado ao cliente':'guardado (pronto)'}`, {osId:id});
+    }
+  }catch(e){}
 }
 
 // ── Migração das fotos para o Firebase Storage ────────────────────────────
@@ -22644,7 +22677,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.63 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.64 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;

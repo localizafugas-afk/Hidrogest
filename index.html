@@ -739,6 +739,13 @@ body.cfg-open .main{overflow:hidden !important;}
   #page-clientes-os.active,
   #page-servicos-cfg.active,
   #page-minhas-os.active,
+  #page-administradoras.active,
+  #page-tec-despesas.active,
+  #page-arquivo-morto.active,
+  #page-produtos.active,
+  #page-fornecedores.active,
+  #page-ordens-compra.active,
+  #page-alteracoes-valor.active,
   #page-relat-pesquisa.active,
   #page-prop-calendario.active,
   #page-configuracoes.active,
@@ -1259,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.75<br>
+      HidroGest v15.78<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1270,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.75 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.78 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1284,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.75<br>
+      HidroGest v15.78<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -8904,8 +8911,8 @@ function osFracaoCardHtml(o){
 
 // ── Cálculo de valores ─────────────────────────────────────────
 function osCalcValor(){
-  // Se é garantia, valor sempre zero
-  if(document.getElementById('os-garantia')?.checked){
+  // Garantia SEM cobrança → valor zero. Garantia COM cobrança mantém o valor. (v15.78)
+  if(document.getElementById('os-garantia')?.checked && !document.getElementById('os-garantia-cobranca')?.checked){
     ['os-net','os-iva-val','os-total'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='0';
     });
@@ -26690,7 +26697,10 @@ async function osConcluirComAssinaturas(){
   // pelo menos 4 fotos do problema, e (mais abaixo) assinaturas de cliente e técnico.
   // No fecho PRELIMINAR dispensa-se apenas o diagnóstico/conclusão escrito.
   const _estadoFecho = (window._rpEstadoFecho==='preliminar') ? 'preliminar' : 'definitivo';
-  {
+  // v15.77 — "relatório depois": o fecho NÃO exige o conteúdo do relatório (fração,
+  // anomalia, local, fotos, conclusão) — só assinaturas + forma de pagamento (validados acima).
+  // Os requisitos do relatório passam a ser exigidos quando o relatório for PREENCHIDO mais tarde.
+  if(os.fluxoRelatorio!=='depois'){
     const _rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId) || {};
     const _cps = _rel.campos || {};
     const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;

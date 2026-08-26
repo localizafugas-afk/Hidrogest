@@ -108,6 +108,14 @@ Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (ac
 
 const CLAUSULAS_VERSAO = '2026-08-agendamento-v2';
 
+// ── Regra de cancelamento (editável) ──────────────────────────
+const HORAS_UTEIS_MIN   = 24;   // mínimo de horas úteis (sem fim de semana) antes do agendamento
+const TAXA_CANCEL_TARDIO = 50;  // € — taxa de cancelamento fora do prazo
+// Monta a data/hora do agendamento a partir de os.data (AAAA-MM-DD) + os.horaIni (HH:MM)
+function montarDataHora(data, hora){ if(!data) return null; const h=(hora||'09:00').slice(0,5); const dt=new Date(data+'T'+h+':00'); return isNaN(dt.getTime())?null:dt; }
+// Conta horas de calendário entre a e b, SEM contar sábados e domingos
+function horasUteisEntre(a, b){ if(!a||!b||b<=a) return 0; if(b-a > 60*86400000) return 9999; let h=0; for(let t=a.getTime(); t<b.getTime(); t+=3600000){ const d=new Date(t).getDay(); if(d!==0 && d!==6) h++; } return h; }
+
 function erro(txt){ cont.innerHTML = `<div class="msg">⚠️ ${esc(txt)}</div>`; }
 
 function mostrarAceite(nome, quando){
@@ -221,9 +229,29 @@ async function iniciar(){
       const cod=(document.getElementById('ac-codigo')?.value||'').trim();
       if(cod !== String(os.aceitacaoCodigo)){ erroEl.textContent='Código errado. Verifique o email.'; return; }
     }
+    const motivo = (document.getElementById('ac-motivo')?.value||'').trim();
+
+    // ── Faltam menos de 24 horas úteis? → fora do prazo (taxa + confirmação por contacto) ──
+    const quandoAg = montarDataHora(os.data, os.horaIni);
+    const hUteis   = horasUteisEntre(new Date(), quandoAg);
+    if(quandoAg && hUteis < HORAS_UTEIS_MIN){
+      if(!confirm(`Faltam menos de ${HORAS_UTEIS_MIN} horas úteis para o agendamento.\n\nO cancelamento fora deste prazo tem uma taxa de ${TAXA_CANCEL_TARDIO}€ e só é confirmado após contacto com a empresa.\n\nQuer registar o pedido de cancelamento?`)) return;
+      cancelEl.disabled=true; cancelEl.textContent='A registar…'; erroEl.textContent='';
+      const pedido = { quando:new Date().toISOString(), motivo, foraPrazo:true, taxa:TAXA_CANCEL_TARDIO, userAgent:navigator.userAgent.slice(0,200), via:'pagina_publica' };
+      try{
+        await updateDoc(doc(db,'ordens',osId), { cancelamentoPedido:pedido });
+        cont.innerHTML = `<div class="estado"><div class="circ" style="background:#d97706">⏳</div><h2>Pedido registado</h2><p>Como falta menos de ${HORAS_UTEIS_MIN} horas úteis, o cancelamento tem uma taxa de <strong>${TAXA_CANCEL_TARDIO}€</strong> e <strong>só é confirmado após contacto com a empresa</strong>. Vamos entrar em contacto consigo.</p></div>`;
+      }catch(e){
+        cancelEl.disabled=false; cancelEl.textContent='Confirmar cancelamento';
+        erroEl.textContent='Não foi possível registar. Tente novamente ou contacte-nos.';
+      }
+      return;
+    }
+
+    // ── Dentro do prazo → cancela normalmente ──
     if(!confirm('Tem a certeza de que quer cancelar este agendamento?')) return;
     cancelEl.disabled=true; cancelEl.textContent='A cancelar…'; erroEl.textContent='';
-    const registo = { quando:new Date().toISOString(), motivo:(document.getElementById('ac-motivo')?.value||'').trim(), userAgent:navigator.userAgent.slice(0,200), via:'pagina_publica' };
+    const registo = { quando:new Date().toISOString(), motivo, userAgent:navigator.userAgent.slice(0,200), via:'pagina_publica' };
     try{
       await updateDoc(doc(db,'ordens',osId), { canceladoPeloCliente:true, cancelamentoCliente:registo });
       cont.innerHTML = `<div class="estado"><div class="circ" style="background:#dc2626">✕</div><h2>Agendamento cancelado</h2><p>Registámos o seu cancelamento. Obrigado por avisar.</p></div>`;

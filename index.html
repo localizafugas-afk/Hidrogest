@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.78<br>
+      HidroGest v15.80<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.78 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.80 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.78<br>
+      HidroGest v15.80<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -21001,6 +21001,24 @@ O horário indicado é uma estimativa. Devido à natureza do nosso trabalho — 
 🚗 Taxa de deslocação
 Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, é devida uma taxa de deslocação de 50€ + IVA.
 
+⚠️ Condições de realização do serviço
+Para a realização do serviço de peritagem poderá ser necessário abrir e fechar passadores, retirar sanitas, autoclismos e outros acessórios, bem como subir a telhados e coberturas. A ${empresaNome} não assume responsabilidade por danos que possam ocorrer durante o manuseamento destes equipamentos e estruturas, nomeadamente quebras de peças ou estruturas em estado de desgaste pré-existente.
+
+🔑 Acesso e presença
+Durante toda a intervenção deve estar presente no local uma pessoa maior de idade responsável pelo imóvel. O acesso a todas as áreas relevantes deve estar assegurado, incluindo, quando aplicável, a frações ou espaços vizinhos.
+
+🔧 Reparação
+O serviço de pesquisa/deteção NÃO inclui a reparação da fuga nem a reposição de acabamentos (azulejo, reboco, pintura, etc.). Eventuais reparações são orçamentadas e adjudicadas à parte.
+
+💳 Pagamento e entrega do relatório
+O serviço é pago no final da pesquisa. O relatório é entregue até 5 dias úteis após a conclusão do trabalho e a confirmação do recebimento do pagamento.
+
+✍️ Autorização de intervenção
+Ao confirmar o agendamento, o cliente autoriza a realização dos trabalhos de peritagem descritos, incluindo o manuseamento de equipamentos e estruturas acima indicado.
+
+🔒 Proteção de dados (RGPD)
+Os dados pessoais do cliente são tratados apenas para efeitos da prestação e faturação deste serviço, nos termos da legislação aplicável.
+
 ────────────────────────
 
 ` : '';
@@ -21058,6 +21076,36 @@ Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (ac
       <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
         <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🚗 Taxa de deslocação</div>
         <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, é devida uma <strong>taxa de deslocação de 50€ + IVA</strong>.</div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">⚠️ Condições de realização do serviço</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Para a realização do serviço de peritagem poderá ser necessário abrir e fechar passadores, retirar sanitas, autoclismos e outros acessórios, bem como subir a telhados e coberturas. A ${empresaNome} não assume responsabilidade por danos que possam ocorrer durante o manuseamento destes equipamentos e estruturas, nomeadamente quebras de peças ou estruturas em estado de desgaste pré-existente.</div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🔑 Acesso e presença</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Durante toda a intervenção deve estar presente no local uma pessoa maior de idade responsável pelo imóvel. O acesso a todas as áreas relevantes deve estar assegurado, incluindo, quando aplicável, a frações ou espaços vizinhos.</div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🔧 Reparação</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">O serviço de pesquisa/deteção <strong>não inclui</strong> a reparação da fuga nem a reposição de acabamentos (azulejo, reboco, pintura, etc.). Eventuais reparações são orçamentadas e adjudicadas à parte.</div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">💳 Pagamento e entrega do relatório</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">O serviço é <strong>pago no final da pesquisa</strong>. O relatório é entregue até <strong>5 dias úteis</strong> após a conclusão do trabalho e a confirmação do recebimento do pagamento.</div>
+      </div>
+
+      <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">✍️ Autorização de intervenção</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Ao confirmar o agendamento, o cliente autoriza a realização dos trabalhos de peritagem descritos, incluindo o manuseamento de equipamentos e estruturas acima indicado.</div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🔒 Proteção de dados (RGPD)</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Os dados pessoais do cliente são tratados apenas para efeitos da prestação e faturação deste serviço, nos termos da legislação aplicável.</div>
       </div>
     </div>
       ` : '';

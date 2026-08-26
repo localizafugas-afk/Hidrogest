@@ -695,8 +695,14 @@ body.cfg-open .main{overflow:hidden !important;}
 #page-administradoras.active,
 #page-servicos-cfg.active,
 #page-minhas-os.active,
+#page-tec-despesas.active,
+#page-arquivo-morto.active,
 #page-relat-pesquisa.active,
 #page-prop-calendario.active,
+#page-produtos.active,
+#page-fornecedores.active,
+#page-ordens-compra.active,
+#page-alteracoes-valor.active,
 #page-configuracoes.active {
   display: block !important;
   position: fixed !important;
@@ -1253,7 +1259,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.69<br>
+      HidroGest v15.75<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1264,7 +1270,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.69 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.75 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1278,7 +1284,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.69<br>
+      HidroGest v15.75<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -3244,6 +3250,16 @@ Localiza Fugas
             <div style="font-size:11px;color:#64748b;">Visita de garantia — valor automático €0,00</div>
           </div>
         </label>
+        <div id="os-garantia-extra" style="display:none;margin-top:8px;padding:10px 14px;border:1.5px solid #bfdbfe;border-radius:8px;background:#eff6ff;">
+          <label style="display:block;font-size:11px;font-weight:700;color:#1e3a5f;margin-bottom:4px;">Nº da OS original *</label>
+          <input id="os-garantia-orig" list="os-garantia-orig-list" placeholder="Nº da OS a que esta garantia se refere" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;">
+          <datalist id="os-garantia-orig-list"></datalist>
+          <div style="font-size:11px;color:#64748b;margin-top:4px;">Obrigatório — é este elo que estorna a comissão da OS original.</div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:#334155;cursor:pointer;">
+            <input type="checkbox" id="os-garantia-cobranca" style="width:15px;height:15px;accent-color:#1e3a5f;" onchange="osGarantiaToggle(document.getElementById('os-garantia'))">
+            Esta garantia tem cobrança (mantém o valor, não força €0)
+          </label>
+        </div>
       </div>
 
       <!-- ── TIPO DE ANOMALIA + TIPOLOGIA ── -->
@@ -4671,7 +4687,7 @@ function rpPendentesCount(){
     const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
     return concluidas.filter(os=>{
       const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
-      if(rel?.estado==='enviado') return false;
+      if(typeof relatorioFeito==='function' ? relatorioFeito(rel) : rel?.estado==='enviado') return false; // v15.72 fonte única de verdade
       const pay=rel?.pagamento?.metodo||'';
       const imediato=['mb','mbway','dinheiro','cheque'].includes(pay);
       let dataBase=null;
@@ -4855,6 +4871,7 @@ function navigate(page,el){
     'auditoria':'Auditoria do Sistema','localizacao':'Localização dos Técnicos','otimizacao':'Optimização de Rotas','configuracoes':'⚙️ Configurações',
     'relat-pesquisa':'📄 Relatórios de Pesquisa',
     'propostas':'📋 Propostas Comerciais',
+    'produtos':'📦 Produtos','fornecedores':'🏪 Fornecedores','ordens-compra':'🛒 Ordens de Compra','alteracoes-valor':'💱 Alterações de Valor','arquivo-morto':'🗄️ Arquivo Morto',
   };
   document.getElementById('tb-title').textContent=titles[page]||page;
   document.getElementById('btn-new-rec').style.display=(page==='recebimentos')?'inline-flex':'none';
@@ -6533,6 +6550,8 @@ async function saveDespesa(){
     criadoEm: editingDespId ? (((window.DB.despesas||[]).find(x=>x.id===editingDespId))?.criadoEm || new Date().toISOString()) : new Date().toISOString(),
   };
   if(!d.tecnicoId){delete d.tecnicoId; delete d.tecnicoNome;}
+  // v15.72 — ligar a despesa ao fornecedor pelo NIF (cria se for novo)
+  try{ const _f=await window.fornecedorMatchOuCriar(d.nif, supplier); if(_f){ d.fornecedorId=_f.id; d.fornecedorNome=_f.nome; } }catch(_e){ console.warn('despesa→fornecedor falhou:',_e); }
   try{
     await window.fsSet('despesas', d.id, d);
     if(!editingDespId){window.DB.nextDesp=nextDesp+1; await window.fsMeta('nextDesp', nextDesp+1);}
@@ -7533,7 +7552,7 @@ function repRenderAtrasos(){
     o.fechadaSemRelatorio && o.estado==='os_fechada'
   ).filter(o=>{
     const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    return !rel||rel.estado!=='enviado';
+    return typeof relatorioFeito==='function' ? !relatorioFeito(rel) : (!rel||rel.estado!=='enviado'); // v15.72
   });
 
   const totalPendente = recibos.reduce((s,r)=>s+parseFloat(r.total||r.valor||0),0);
@@ -9342,7 +9361,20 @@ function osGrelhaSeleccionarSlot(horaIni, horaFim){
 }
 
 
-// ── Toggle Garantia — zera preços automaticamente ────────────
+// v15.73 — OSs de garantia que apontam para esta OS original (só garantia real, não retornos pagos)
+window.osGarantiasDe = function(osId){
+  return (window.DB.ordens||[]).filter(o=>o.osOriginalId===osId && o.garantia===true);
+};
+// v15.73 — comissão-base de 5% sobre o valor líquido (sem IVA).
+// Não-faturável (orçamento) = 0. Garantia SEM cobrança = 0. Garantia COM cobrança gera comissão.
+window.osComissaoBase = function(o){
+  if(!o) return 0;
+  if(o.naoFaturavel) return 0;
+  if(o.garantia && !o.garantiaComCobranca) return 0;
+  return (parseFloat(o.net)||0)*0.05;
+};
+
+// ── Toggle Garantia — mostra a OS original e zera preços (salvo com cobrança) ──
 function osGarantiaToggle(el){
   const isGarantia = el?.checked;
   const lbl = document.getElementById('lbl-os-garantia');
@@ -9350,15 +9382,24 @@ function osGarantiaToggle(el){
     lbl.style.borderColor = isGarantia ? '#1e3a5f' : '#e2e8f0';
     lbl.style.background  = isGarantia ? '#eff6ff' : '#f8fafc';
   }
-  if(isGarantia){
-    // Zerar todos os valores
-    ['os-h1','os-hadd-v','os-hadd-n','os-net','os-iva-val','os-total'].forEach(id=>{
-      const el = document.getElementById(id);
-      if(el){ el.value='0'; el.disabled=true; el.style.background='#f1f5f9'; el.style.color='#94a3b8'; }
+  const extra = document.getElementById('os-garantia-extra');
+  if(extra) extra.style.display = isGarantia ? 'block' : 'none';
+  if(isGarantia){ // v15.73 — sugerir as OS deste cliente (evita erro a digitar)
+    const dl=document.getElementById('os-garantia-orig-list');
+    if(dl){
+      const cid=document.getElementById('os-cli-sel')?.value;
+      const oss=(window.DB.ordens||[]).filter(o=>(!cid||o.clienteId===cid)&&!o.garantia).slice(-60).reverse();
+      dl.innerHTML=oss.map(o=>`<option value="${o.id}">${o.data||''} · ${((window.DB.servicos||[]).find(s=>s.id===o.servicoId)?.nome)||''}</option>`).join('');
+    }
+  }
+  const comCobranca = document.getElementById('os-garantia-cobranca')?.checked || false;
+  const campos = ['os-h1','os-hadd-v','os-hadd-n','os-net','os-iva-val','os-total'];
+  if(isGarantia && !comCobranca){
+    // Garantia sem cobrança → zera e bloqueia os valores
+    campos.forEach(id=>{
+      const e = document.getElementById(id);
+      if(e){ e.value='0'; e.disabled=true; e.style.background='#f1f5f9'; e.style.color='#94a3b8'; }
     });
-    // Marcar IVA como 0
-    const ivaEl = document.getElementById('os-iva');
-    // Adicionar badge
     let badge = document.getElementById('os-garantia-badge');
     if(!badge){
       badge = document.createElement('div');
@@ -9369,15 +9410,14 @@ function osGarantiaToggle(el){
       if(precoSection) precoSection.insertBefore(badge, precoSection.firstChild);
     }
   } else {
-    // Restaurar edição
-    ['os-h1','os-hadd-v','os-hadd-n','os-net','os-iva-val','os-total'].forEach(id=>{
-      const el = document.getElementById(id);
-      if(el){ el.disabled=false; el.style.background=''; el.style.color=''; }
+    // Não-garantia OU garantia com cobrança → valores editáveis
+    campos.forEach(id=>{
+      const e = document.getElementById(id);
+      if(e){ e.disabled=false; e.style.background=''; e.style.color=''; }
     });
     const badge = document.getElementById('os-garantia-badge');
     if(badge) badge.remove();
-    // Re-calcular com os preços do serviço
-    propostaCalcTotal();
+    if(!isGarantia) propostaCalcTotal(); // só recalcula do serviço quando deixa de ser garantia
   }
 }
 
@@ -9936,6 +9976,8 @@ function osOpenModal(preData={}){
   document.getElementById('os-hadd-v').value = preData.haddV||'';
   if(document.getElementById('os-iva')) document.getElementById('os-iva').value = String(preData.iva||23);
   document.getElementById('os-obs').value = preData.obs||'';
+  if(document.getElementById('os-garantia-orig')) document.getElementById('os-garantia-orig').value = preData.osOriginalId||'';
+  if(document.getElementById('os-garantia-cobranca')) document.getElementById('os-garantia-cobranca').checked = !!preData.garantiaComCobranca;
   if(document.getElementById('os-garantia')){ document.getElementById('os-garantia').checked=!!preData.garantia; osGarantiaToggle(document.getElementById('os-garantia')); }
   if(document.getElementById('os-tipo-anomalia')) document.getElementById('os-tipo-anomalia').value = preData.tipoAnomalia||'';
   if(document.getElementById('os-tipologia')) document.getElementById('os-tipologia').value = preData.tipologia||'';
@@ -10913,6 +10955,12 @@ async function osSalvar(){
     return;
   }
   if(!srvId){ toast('Seleccione o serviço!','⚠️'); return; }
+  // v15.72 — OS de garantia obriga a indicar a OS original (elo do estorno da comissão)
+  if(document.getElementById('os-garantia')?.checked){
+    const _orig=(document.getElementById('os-garantia-orig')?.value||'').trim();
+    if(!_orig){ toast('OS de garantia: indique a OS original.','⚠️'); document.getElementById('os-garantia-orig')?.focus(); return; }
+    if(!(window.DB.ordens||[]).some(o=>o.id===_orig)){ toast('OS original "'+_orig+'" não encontrada. Verifique o número.','⚠️'); document.getElementById('os-garantia-orig')?.focus(); return; }
+  }
   // Verificar que o cliente existe no cache (incluindo cliente recém criado)
   const _cliCheck = (window.DB.clientes||[]).find(c=>c.id===cliId) || window._osCliObjPendente;
   if(!_cliCheck){ toast('Cliente não encontrado — tente selecionar novamente','⚠️'); return; }
@@ -11100,6 +11148,8 @@ async function osSalvar(){
     total:parseFloat(document.getElementById('os-total').value)||0,
     obs:document.getElementById('os-obs').value,
     garantia: document.getElementById('os-garantia')?.checked||false,
+    osOriginalId: (document.getElementById('os-garantia')?.checked ? ((document.getElementById('os-garantia-orig')?.value||'').trim()||null) : null),
+    garantiaComCobranca: (document.getElementById('os-garantia')?.checked ? (document.getElementById('os-garantia-cobranca')?.checked||false) : false),
     tipoAnomalia: document.getElementById('os-tipo-anomalia')?.value||'',
     tipologia: document.getElementById('os-tipologia')?.value||'',
     aceitaCondicoes:document.getElementById('os-aceita-condicoes')?.checked||false,
@@ -11809,7 +11859,12 @@ function osRenderAgenda(){
     days.forEach((d,di)=>{
       const isToday=d.s===today;
       const dayOS=(window.DB.ordens||[])
-        .filter(o=>o.data===d.s&&o.estado!=='cancelada'&&!o.canceladoPeloCliente&&(o.tecnicos||[]).includes(t.id))
+        .filter(o=>{
+          if(o.data!==d.s || o.estado==='cancelada' || !(o.tecnicos||[]).includes(t.id)) return false;
+          // v15.74 — cancelada pelo cliente: aparece ao admin (com riscas), sai para o técnico
+          if(o.canceladoPeloCliente) return ['admin','gerente','supervisor','comercial'].includes(window.currentUser?.role||'');
+          return true;
+        })
         .sort((a,b)=>(a.horaIni||'').localeCompare(b.horaIni||''));
 
       // ── Verificar se técnico está de férias neste dia ──
@@ -11955,8 +12010,13 @@ function osRenderAgenda(){
           // OS efetivamente recebida (dinheiro entrou): recibo pago OU OS marcada paga
           const _recebido = (o.pago===true) || (window.DB.recibos||[]).some(r=>r.osId===o.id && r.status==='paid');
 
+          // v15.74 — riscas horizontais: cliente cancelou (vermelho) / pedido fora do prazo (âmbar)
+          let _stripeBg='', _stripeOut='';
+          if(o.canceladoPeloCliente){ _stripeBg='repeating-linear-gradient(0deg,#fecaca 0,#fecaca 5px,#fee2e2 5px,#fee2e2 10px)'; _stripeOut='outline:2px solid #dc2626;outline-offset:-2px;'; }
+          else if(o.cancelamentoPedido && o.cancelamentoPedido.foraPrazo){ _stripeBg='repeating-linear-gradient(0deg,#fde68a 0,#fde68a 5px,#fef3c7 5px,#fef3c7 10px)'; _stripeOut='outline:2px solid #d97706;outline-offset:-2px;'; }
+
           h+=`<div data-ev="1" draggable="true" class="${o.estado==='concluida'&&!_naoFatAg&&!_faturaEmitida?'ag-pulse-blue':''}"
-            style="position:relative;background:${bg};border-radius:4px;padding:6px 8px;cursor:grab;
+            style="position:relative;background:${_stripeBg||bg};${_stripeOut}border-radius:4px;padding:6px 8px;cursor:grab;
             border-left:4px solid ${_recebido?'#15803d':borderLeft};box-shadow:${_recebido?'0 0 0 2px #16a34a inset, ':''}0 1px 3px rgba(0,0,0,.10);
             transition:box-shadow .15s,opacity .15s;opacity:${o.estado==='cancelada'?'.55':'1'};"
             onclick="event.stopPropagation();osAgendaPopover(event,'${o.id}')"
@@ -11976,7 +12036,9 @@ function osRenderAgenda(){
             ${srv?.nome?`<div style="font-size:10px;color:${tx};opacity:.7;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">🔧 ${srv.nome}</div>`:''}
             ${o.canceladoPeloCliente
               ? `<div style="font-size:9px;font-weight:800;color:#b91c1c;background:#fee2e2;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Cliente pediu cancelamento${o.cancelamentoCliente&&o.cancelamentoCliente.quando?' em '+new Date(o.cancelamentoCliente.quando).toLocaleString('pt-PT'):''}${o.cancelamentoCliente&&o.cancelamentoCliente.motivo?' · '+o.cancelamentoCliente.motivo:''}">🚫 Cancelado pelo cliente</div>`
-              : `<div style="font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}">✅ Confirmado${o.confirmacaoVistaEm?' 👁':''}</div>`}
+              : (o.cancelamentoPedido && o.cancelamentoPedido.foraPrazo
+                ? `<div style="font-size:9px;font-weight:800;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Pedido de cancelamento fora do prazo — taxa 50€, só confirma após contacto${o.cancelamentoPedido.quando?' · '+new Date(o.cancelamentoPedido.quando).toLocaleString('pt-PT'):''}${o.cancelamentoPedido.motivo?' · '+o.cancelamentoPedido.motivo:''}">⚠️ Cancelam. fora do prazo (50€)</div>`
+                : `<div style="font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;" title="Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}">✅ Confirmado${o.confirmacaoVistaEm?' 👁':''}</div>`)}
             ${o.osParente?`<div style="font-size:9px;color:${tx};opacity:.7;margin-top:1px;font-weight:700;">↳ cont. ${o.osParente} · dia ${o.diaOrdem||'?'}${o.diasTotal?' de '+o.diasTotal:''}</div>`:''}
             ${!o.osParente && o.diasTotal && o.diasTotal>1?`<div style="font-size:9px;background:${col.solid};color:#fff;border-radius:3px;padding:1px 5px;margin-top:2px;display:inline-block;font-weight:700;">📅 ${o.diasTotal} dias</div>`:''}
             ${(()=>{
@@ -12953,7 +13015,15 @@ function osLimparFiltros(){
 // ── Técnico principal / auxiliar ──────────────────────────────
 // O principal é quem faz a OS e o relatório. O auxiliar só ocupa a agenda
 // e vê o trabalho em modo leitura (cliente/morada), sem registar nada.
-function osTecnicoPrincipal(o){ return (o && (o.tecnicoPrincipal || (o.tecnicos||[])[0])) || null; }
+function osTecnicoPrincipal(o){
+  // v15.75 — se o principal guardado já não está entre os técnicos atribuídos
+  // (troca/remoção de técnico), cai para o primeiro atribuído. Assim o novo
+  // técnico deixa de ficar preso como "auxiliar" e pode corrigir o relatório.
+  if(!o) return null;
+  const tecs = o.tecnicos||[];
+  if(o.tecnicoPrincipal && tecs.includes(o.tecnicoPrincipal)) return o.tecnicoPrincipal;
+  return tecs[0] || null;
+}
 function osEhTecnicoAuxiliar(o){
   const u = window.currentUser;
   if(!u || u.role!=='tecnico') return false;
@@ -12982,6 +13052,19 @@ function osAbrirDetalhe(id){
   const criadoEm=o.criadoEm?new Date(o.criadoEm).toLocaleString('pt-PT'):'—';
   const criadoPor=window.DB.users.find(u=>u.id===o.criadoPor)?.name||'—';
   const body=document.getElementById('mo-os-tec-body'); if(!body) return;
+
+  // v15.72 — Aviso de estorno de comissão por garantia
+  const _fmtE = v=>('€'+(Math.round((v||0)*100)/100).toFixed(2).replace('.',','));
+  const _gOrig = o.osOriginalId ? (window.DB.ordens||[]).find(x=>x.id===o.osOriginalId) : null;
+  const _gDesta = (typeof window.osGarantiasDe==='function') ? window.osGarantiasDe(id) : [];
+  let _garantiaBanner='';
+  if(o.osOriginalId && o.garantia){
+    const _est = _gOrig ? (parseFloat(_gOrig.net)||0)*0.05 : 0;
+    _garantiaBanner += `<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#9a3412;">🛡️ <strong>Garantia da OS ${o.osOriginalId}</strong>${_gOrig?` <a href="#" onclick="event.preventDefault();closeMo('mo-os-tec');osAbrirDetalhe('${o.osOriginalId}');return false;" style="color:#c2410c;font-weight:700;">abrir →</a>`:' <span style="color:#b45309;">(OS original não encontrada)</span>'}<div style="margin-top:4px;">Estorna a comissão da OS original: <strong>−${_fmtE(_est)}</strong> (5% de ${_fmtE(_gOrig?(parseFloat(_gOrig.net)||0):0)} s/IVA).${(o.garantiaComCobranca&&(parseFloat(o.net)||0)>0)?` Esta garantia tem cobrança — gera comissão própria de ${_fmtE((parseFloat(o.net)||0)*0.05)}.`:''}</div></div>`;
+  }
+  if(_gDesta.length){
+    _garantiaBanner += `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#991b1b;">🛡️ <strong>Tem retorno de garantia</strong> (${_gDesta.map(g=>g.id).join(', ')}). Comissão desta OS estornada: <strong>−${_fmtE((parseFloat(o.net)||0)*0.05)}</strong> (5% de ${_fmtE(parseFloat(o.net)||0)} s/IVA).</div>`;
+  }
 
   // ── Marcar OS como vista pelo técnico ────────────────────
   if((o.tecnicos||[]).includes(window.currentUser?.id) && o.estado==='agendada'){
@@ -13120,6 +13203,7 @@ function osAbrirDetalhe(id){
       </div>
     </div>`:''}
 
+    ${_garantiaBanner}
     ${osFracaoCardHtml(o)}
 
     ${_missaoBloco}
@@ -13769,6 +13853,7 @@ async function osGuardarEdicao(){
     estado:document.getElementById('ose-estado').value,
     obs:document.getElementById('ose-obs').value,
     tecnicos:tecs.length?tecs:o.tecnicos,
+    tecnicoPrincipal:(()=>{ const _t=tecs.length?tecs:(o.tecnicos||[]); return (o.tecnicoPrincipal && _t.includes(o.tecnicoPrincipal)) ? o.tecnicoPrincipal : (_t[0]||null); })(), // v15.75
     servicoId:srvId, h1, haddN, haddV, iva,
     net:parseFloat(net.toFixed(2)), ivaVal:parseFloat(ivaVal.toFixed(2)),
     total:parseFloat((net+ivaVal).toFixed(2)),
@@ -16315,10 +16400,10 @@ function tecNotificarRelatoriosPendentes(){
     o.estado==='os_fechada' &&
     !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o))
   );
-  // Filtrar só as que ainda não têm relatório enviado
+  // Filtrar só as que ainda não têm relatório feito (pronto/enviado/com data)
   const pendentes = ordens.filter(o=>{
     const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    return !rel || rel.estado!=='enviado';
+    return typeof relatorioFeito==='function' ? !relatorioFeito(rel) : (!rel || rel.estado!=='enviado'); // v15.72
   });
   if(!pendentes.length) return;
 
@@ -20404,7 +20489,7 @@ function rpEnviarEmailDiarioPendentes(){
   const pendentes  = concluidas.filter(o=>{
     if(isTec && !(o.tecnicos||[]).includes(window.currentUser.id)) return false;
     const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    return rel?.estado!=='enviado';
+    return typeof relatorioFeito==='function' ? !relatorioFeito(rel) : rel?.estado!=='enviado'; // v15.72
   });
 
   if(!pendentes.length) return;
@@ -22141,7 +22226,7 @@ function rpDiasParaEnvio(os){
   const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
   // Relatório já enviado ao cliente pelo admin → não tem prazo nem pode contar
   // como atraso em lado nenhum da app (admin ou técnico). Regra central.
-  if(rel?.estado==='enviado') return null;
+  if(typeof relatorioFeito==='function' ? relatorioFeito(rel) : rel?.estado==='enviado') return null; // v15.72
   // 1. Usar prazoRelatorio da OS (novo campo do osFecharSemRelatorio)
   if(os?.prazoRelatorio){
     const prazo = new Date(os.prazoRelatorio+'T12:00:00');
@@ -22690,7 +22775,7 @@ async function rpEnviarRelacaoTecnicos(auto){
   }
 
   // ── Cópia consolidada para a empresa (todos os técnicos num só email) ──
-  // v15.69 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
+  // v15.72 — DESATIVADA a pedido: a empresa deixa de receber esta relação.
   //          Os técnicos continuam a receber, cada um, a sua relação individual.
   //          Para reactivar, troca `if(false && ...)` por `if(consolidado.trim())`.
   let copiaOk=false;
@@ -22828,7 +22913,7 @@ function rpNotificarTecnicoAtrasados(){
   const ordens = (window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(u.id)&&o.estado==='concluida');
   const atrasadas = ordens.filter(o=>{
     const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    if(rel?.estado==='enviado') return false;
+    if(typeof relatorioFeito==='function' ? relatorioFeito(rel) : rel?.estado==='enviado') return false; // v15.72
     const dias = typeof rpDiasParaEnvio==='function' ? rpDiasParaEnvio(o) : null;
     return dias !== null && dias < 0;
   });
@@ -28180,11 +28265,15 @@ function fornRender(){
 
   lista.forEach(f=>{
     const nProd=(window.DB.produtos||[]).filter(p=>(p.fornecedorIds||[p.fornecedorId].filter(Boolean)).includes(f.id)).length;
+    // v15.72 — total gasto com este fornecedor (despesas dos técnicos + contas a pagar)
+    const _gasto=(window.DB.despesas||[]).filter(x=>x.fornecedorId===f.id).reduce((s,x)=>s+(parseFloat(x.gross)||0),0)
+               +(window.DB.contasPagar||[]).filter(x=>x.fornecedorId===f.id).reduce((s,x)=>s+(parseFloat(x.gross)||0),0);
+    const _gastoTxt=_gasto>0?' <span style="font-weight:400;color:var(--text3);font-size:11px;">· €'+_gasto.toFixed(2).replace('.',',')+' gasto</span>':'';
     const tr=document.createElement('tr');
     tr.onmouseover=()=>tr.style.background='var(--s2)';
     tr.onmouseout =()=>tr.style.background='';
     tr.innerHTML=
-      '<td style="padding:9px 12px;font-size:13px;font-weight:700;">🏪 '+f.nome+'</td>'+
+      '<td style="padding:9px 12px;font-size:13px;font-weight:700;">🏪 '+f.nome+_gastoTxt+'</td>'+
       '<td style="padding:9px 12px;font-size:12px;font-family:monospace;">'+(f.nif||'—')+'</td>'+
       '<td style="padding:9px 12px;font-size:12px;"><span style="background:var(--s2);padding:2px 8px;border-radius:10px;">'+(f.categoria||'—')+'</span></td>'+
       '<td style="padding:9px 12px;font-size:12px;">'+(f.email?'<a href="mailto:'+f.email+'" style="color:var(--accent);">'+f.email+'</a>':'—')+'</td>'+
@@ -28309,6 +28398,35 @@ async function fornGuardar(id){
   document.getElementById('forn-form-modal')?.remove();
   toast((id?'Fornecedor actualizado':'Fornecedor criado')+(nProd?' ('+nProd+' produto(s) associado(s))':''),'✅');
 }
+
+// v15.72 — Casa uma despesa/conta a um fornecedor pelo NIF (cria se não existir).
+// O NIF manda; se não houver NIF, cai para o nome. Nunca cria fornecedor vazio.
+// Devolve {id, nome, nif} ou null. Faz backfill do NIF quando o fornecedor não o tinha.
+window.fornecedorMatchOuCriar = async function(nif, nome){
+  const digits = s => String(s||'').replace(/\D+/g,'');
+  const norm   = s => String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
+  const nifD  = digits(nif);
+  const nomeN = norm(nome);
+  const lista = window.DB.fornecedores||[];
+  let f = null;
+  if(nifD)          f = lista.find(x=>digits(x.nif)===nifD);   // 1) por NIF (fiável)
+  if(!f && nomeN)   f = lista.find(x=>norm(x.nome)===nomeN);    // 2) senão por nome
+  if(f){
+    if(nifD && !digits(f.nif)){ // backfill do NIF em fornecedor antigo sem NIF
+      try{ await window.fsSetMerge('fornecedores', f.id, {nif:String(nif).trim()}); f.nif=String(nif).trim(); }catch(_e){}
+    }
+    return {id:f.id, nome:f.nome, nif:f.nif||''};
+  }
+  if(!nomeN && !nifD) return null; // sem nome e sem NIF → não cria nada
+  const novo = { id:'forn_'+Date.now().toString(36), nome:(String(nome||'').trim()||('NIF '+nifD)),
+                 nif:String(nif||'').trim(), categoria:'Outro', autoCriado:true, criadoEm:new Date().toISOString() };
+  try{
+    await window.fsSet('fornecedores', novo.id, novo);
+    if(typeof auditLog==='function') auditLog('fornecedor_criado', `Fornecedor "${novo.nome}"${nifD?' (NIF '+nifD+')':''} criado automaticamente.`);
+    if(typeof toast==='function') toast(`Fornecedor "${novo.nome}" criado.`,'🏢');
+  }catch(e){ console.warn('fornecedorMatchOuCriar — falha a criar:', e); }
+  return {id:novo.id, nome:novo.nome, nif:novo.nif};
+};
 
 async function fornEliminar(id){
   const f=(window.DB.fornecedores||[]).find(x=>x.id===id);
@@ -34388,6 +34506,8 @@ window.cliHistoricoImprimir = function(cliId){
       <div style="${fg}"><label style="${lb}">Fornecedor</label>
         <input id="cp-forn" list="cp-forn-list" style="${inp}" value="${esc(c?.fornecedor||'')}" placeholder="Nome do fornecedor">
         <datalist id="cp-forn-list">${forns.map(f=>`<option value="${esc(f)}">`).join('')}</datalist></div>
+      <div style="${fg}"><label style="${lb}">NIF do fornecedor <span style="font-weight:400;color:#94a3b8;font-size:11px;">— liga a despesa ao fornecedor</span></label>
+        <input id="cp-nif" style="${inp}" value="${esc(c?.nif||'')}" placeholder="Ex.: 500123456"></div>
       <div style="display:flex;gap:12px;">
         <div style="${fg}flex:1;"><label style="${lb}">Nº da fatura</label><input id="cp-num" style="${inp}" value="${esc(c?.numero||'')}"></div>
         <div style="${fg}flex:1;"><label style="${lb}">Valor total (€)</label><input id="cp-gross" type="number" step="0.01" style="${inp}" value="${c?.gross??''}" oninput="window._cpCalc()"></div>
@@ -34428,7 +34548,7 @@ window.cliHistoricoImprimir = function(cliId){
 {"fornecedor":"","nif":"","numero":"número da fatura","total":"valor total com IVA, só números e ponto decimal","iva":"taxa de IVA: 23, 13, 6 ou 0","data":"data da fatura AAAA-MM-DD","vencimento":"data de vencimento AAAA-MM-DD se existir","descricao":"breve descrição"}
 Deixa vazio o que não conseguires ler.`);
       const set=(id,v)=>{const el=document.getElementById(id); if(el&&v) el.value=v;};
-      set('cp-forn',p.fornecedor); set('cp-num',p.numero);
+      set('cp-forn',p.fornecedor); set('cp-nif',p.nif); set('cp-num',p.numero);
       if(p.total){const n=parseFloat(String(p.total).replace(',','.')); if(!isNaN(n)&&n>0) document.getElementById('cp-gross').value=n.toFixed(2);}
       if(p.iva&&['23','13','6','0'].includes(String(parseInt(p.iva)))) document.getElementById('cp-rate').value=String(parseInt(p.iva));
       set('cp-dtf',p.data); set('cp-venc',p.vencimento); set('cp-notas',p.descricao);
@@ -34560,18 +34680,11 @@ Deixa vazio o que não conseguires ler.`);
         d.fatura = { url:up.url, path:up.path, nome:_cpFaturaFile.name||('fatura.'+ext), tipo:_cpFaturaFile.type||'' };
       }catch(e){ console.warn('upload fatura falhou:', e); toast('Conta guardada — mas a fatura não foi anexada: '+(e.message||e),'⚠️'); }
     }
-    // ── Criar o fornecedor automaticamente se ainda não existir ──
+    // ── v15.72: casar/criar fornecedor pelo NIF (cai para o nome se sem NIF) ──
+    d.nif = (document.getElementById('cp-nif')?.value||'').trim();
     try{
-      const _norm=s=>String(s||'').replace(/\s+/g,' ').trim().toLowerCase();
-      const _fn=_norm(forn);
-      let _f=(window.DB.fornecedores||[]).find(x=>_norm(x.nome)===_fn);
-      if(!_f){
-        _f={ id:'forn_'+Date.now().toString(36), nome:forn, categoria:'Outro', nif:'', autoCriado:true, criadoEm:new Date().toISOString() };
-        await window.fsSet('fornecedores', _f.id, _f);
-        if(typeof auditLog==='function') auditLog('fornecedor_criado', `Fornecedor "${forn}" criado automaticamente a partir de uma conta a pagar.`);
-        toast(`Fornecedor "${forn}" criado.`,'🏢');
-      }
-      d.fornecedorId=_f.id;
+      const _f = await window.fornecedorMatchOuCriar(d.nif, forn);
+      if(_f){ d.fornecedorId=_f.id; if(!d.nif && _f.nif) d.nif=_f.nif; }
     }catch(_e){ console.warn('auto-fornecedor falhou:', _e); }
 
     try{ await window.fsSet('contasPagar', d.id, d);

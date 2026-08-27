@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.80<br>
+      HidroGest v15.81<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.80 · Ago 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.81 · Ago 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.80<br>
+      HidroGest v15.81<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -8019,6 +8019,41 @@ function _repBucketLabel(key, gran){
   return key;
 }
 
+// ── v15.81 — modal reutilizável para listar OS/itens a partir de um valor clicado ──
+window._fcMostrarLista = function(titulo, linhasHtml){
+  const old=document.getElementById('fc-lista-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='fc-lista-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,36,48,.5);z-index:9300;display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow:auto;';
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  ov.innerHTML=`<div style="width:100%;max-width:560px;background:#fff;border-radius:16px;padding:18px 20px;box-shadow:0 10px 40px rgba(15,36,48,.3);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;">${titulo}</h3>
+      <button onclick="document.getElementById('fc-lista-ov').remove()" style="margin-left:auto;border:1px solid #cbd5e1;background:#fff;border-radius:9px;padding:6px 11px;cursor:pointer;">Fechar</button>
+    </div>
+    <div style="max-height:65vh;overflow:auto;">${linhasHtml||'<div style="color:#94a3b8;padding:20px;text-align:center;">Sem itens.</div>'}</div>
+  </div>`;
+  document.body.appendChild(ov);
+};
+window._fcAbrirOS = function(osId){ const ov=document.getElementById('fc-lista-ov'); if(ov) ov.remove(); if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(osId); };
+window._fcOsLinha = function(o){
+  const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId);
+  const dataBR=String(o.data||'').split('-').reverse().join('/');
+  const money=(typeof osFmt==='function')?('€'+osFmt(+o.total||0)):('€'+(+o.total||0));
+  return `<div onclick="window._fcAbrirOS('${o.id}')" style="display:flex;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;margin-bottom:6px;cursor:pointer;background:#fff;">
+    <div><div style="font-weight:600;font-size:13px;">${o.id} · ${esc(cli?.nome||o.contactNome||'—')}</div><div style="font-size:11px;color:#94a3b8;">${dataBR}${o.horaIni?' · '+o.horaIni:''}</div></div>
+    <div style="font-weight:700;color:#15803d;white-space:nowrap;">${money}</div>
+  </div>`;
+};
+// Previsão de Receita — clicar num período mostra as OS que o compõem
+window.repPrevDetalhe = function(k){
+  const f=document.getElementById('rep-from')?.value||''; const t=document.getElementById('rep-to')?.value||'';
+  let ords=(window.DB.ordens||[]).filter(o=>o.estado!=='cancelada' && o.data);
+  if(f) ords=ords.filter(o=>o.data>=f); if(t) ords=ords.filter(o=>o.data<=t);
+  ords=ords.filter(o=>_repBucketKey(o.data,_repPrevGran)===k)
+           .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
+  window._fcMostrarLista(`${_repBucketLabel(k,_repPrevGran)} — ${ords.length} OS`, ords.map(window._fcOsLinha).join(''));
+};
+
 function repRenderPrevisaoReceita(){
   const f=document.getElementById('rep-from')?.value||'';
   const t=document.getElementById('rep-to')?.value||'';
@@ -8033,12 +8068,12 @@ function repRenderPrevisaoReceita(){
   const granBtns=[['diario','Diário'],['semanal','Semanal'],['quinzenal','Quinzenal'],['mensal','Mensal']]
     .map(([id,lbl])=>`<button onclick="repPrevSetGran('${id}')" style="padding:6px 12px;border-radius:8px;border:1.5px solid ${_repPrevGran===id?'var(--accent)':'#e2e8f0'};background:${_repPrevGran===id?'var(--accent)':'#fff'};color:${_repPrevGran===id?'#fff':'#475569'};font-size:12px;font-weight:700;cursor:pointer;">${lbl}</button>`).join('');
   const barras=keys.map(k=>`
-    <div class="bar-row">
+    <div class="bar-row" onclick="window.repPrevDetalhe('${k}')" style="cursor:pointer;" title="Ver OS deste período">
       <div class="bar-label" title="${_repBucketLabel(k,_repPrevGran)}">${_repBucketLabel(k,_repPrevGran)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(buckets[k].total/max*100).toFixed(1)}%;background:var(--green)"></div></div>
       <div class="bar-val">€${fmt(buckets[k].total)}</div>
     </div>`).join('')||'<div style="color:var(--text3);font-size:12px;">Sem agendamentos no período.</div>';
-  const tabela=keys.map(k=>`<tr style="border-bottom:1px solid var(--border);">
+  const tabela=keys.map(k=>`<tr onclick="window.repPrevDetalhe('${k}')" style="border-bottom:1px solid var(--border);cursor:pointer;" title="Ver OS deste período">
      <td style="padding:8px 10px;">${_repBucketLabel(k,_repPrevGran)}</td>
      <td style="padding:8px 10px;text-align:center;">${buckets[k].count}</td>
      <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--green);">€${fmt(buckets[k].total)}</td>
@@ -35149,8 +35184,8 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
     const rows=P.linhas.map(l=>{const dx=selDesp(l),sx=selSaldo(l);
       return `<tr style="border-top:1px solid #e2e8f0;">
         <td style="padding:8px 10px;font-weight:600;white-space:nowrap;">${fmtData(l.d)}${l.d<=P.hoje&&modo==='proj'?' <span style="font-size:10px;color:#0e7c86;">real</span>':''}</td>
-        <td style="padding:8px 10px;text-align:right;color:#15803d;white-space:nowrap;">${l.r?('+'+eur(l.r)):'—'}</td>
-        <td style="padding:8px 10px;text-align:right;color:#b91c1c;white-space:nowrap;">${dx?('−'+eur(dx)):'—'}</td>
+        <td onclick="${l.r?`window.fcDetalheDia('${l.d}','receita')`:''}" style="padding:8px 10px;text-align:right;color:#15803d;white-space:nowrap;${l.r?'cursor:pointer;text-decoration:underline dotted;':''}" ${l.r?'title="Ver OS desta receita"':''}>${l.r?('+'+eur(l.r)):'—'}</td>
+        <td onclick="${dx?`window.fcDetalheDia('${l.d}','despesa')`:''}" style="padding:8px 10px;text-align:right;color:#b91c1c;white-space:nowrap;${dx?'cursor:pointer;text-decoration:underline dotted;':''}" ${dx?'title="Ver despesas deste dia"':''}>${dx?('−'+eur(dx)):'—'}</td>
         <td style="padding:8px 10px;text-align:right;font-weight:700;white-space:nowrap;color:${sx<0?'#b91c1c':'#0f2430'};">${eur(sx)}</td></tr>`;}).join('');
 
     const desvio=P.desvio.map(x=>{const d=x.real-x.orc;
@@ -35203,6 +35238,26 @@ const RECORRENTES_SEED=[{"desc":"Imposto IRN","grupo":"Impostos","tipo":"Fixo","
       </div>
     </div>`;
   }
+
+  // ── v15.81 — clicar na receita/despesa mostra as OS/itens desse dia ──
+  window.fcDetalheDia=function(d, tipo){
+    if(tipo==='receita'){
+      const oss=(window.DB.ordens||[]).filter(o=>ESTADOS_PREVISAO.includes(o.estado) && dataReceb(o)===d);
+      window._fcMostrarLista(`💶 Receita de ${fmtData(d)} — ${oss.length} OS`, oss.map(window._fcOsLinha).join(''));
+    } else {
+      const cps=(window.DB.contasPagar||[]).filter(c=>c.estado!=='pago' && String(c.vencimento||'').slice(0,10)===d);
+      const dts=(window.DB.despesas||[]).filter(x=>String(x.date||'').slice(0,10)===d);
+      let html='';
+      cps.forEach(c=>{ html+=`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;margin-bottom:6px;background:#fff;">
+        <div><div style="font-weight:600;font-size:13px;">${esc(c.fornecedor||'Conta a pagar')}</div><div style="font-size:11px;color:#94a3b8;">${esc(c.descricao||c.tipo_despesa||c.categoria||'')} · vence ${fmtData(d)}</div></div>
+        <div style="font-weight:700;color:#b91c1c;white-space:nowrap;">${eur(num(c.gross))}</div></div>`; });
+      dts.forEach(x=>{ const tec=(window.DB.users||[]).find(u=>u.id===x.tecnicoId);
+        html+=`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;margin-bottom:6px;background:#fff;">
+        <div><div style="font-weight:600;font-size:13px;">${esc(x.supplier||x.type||'Despesa')}</div><div style="font-size:11px;color:#94a3b8;">${esc(tec?.name||'')}${x.type?' · '+esc(x.type):''}</div></div>
+        <div style="font-weight:700;color:#b91c1c;white-space:nowrap;">${eur(num(x.gross))}</div></div>`; });
+      window._fcMostrarLista(`💸 Despesa de ${fmtData(d)} — ${cps.length+dts.length} item(ns)`, html);
+    }
+  };
 
   // ── gestão das recorrentes (template do orçamento) ──
   window.fcRecorrentes=function(){

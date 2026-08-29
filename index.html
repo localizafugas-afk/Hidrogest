@@ -1224,6 +1224,32 @@ tr:hover td{background:rgba(37,99,235,.03);}
 </head>
 <body>
 
+<!-- ██ CORREÇÃO: notificações seguras (Android proíbe new Notification) ██ -->
+<script>
+window.notificarSeguro = function(titulo, opcoes){
+  // Referência ao construtor real (o Notification original do browser).
+  var NotifOriginal = (typeof Notification !== 'undefined') ? Notification : null;
+  var mostrarDireto = function(){
+    // Só funciona no desktop; no Android lança "Illegal constructor" — apanhado pelo try.
+    try{ new NotifOriginal(titulo, opcoes||{}); }catch(e){}
+  };
+  try{
+    if(!NotifOriginal || NotifOriginal.permission !== 'granted') return;
+    // No Android/PWA o construtor new Notification() é ilegal — usar o service worker.
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistration){
+      navigator.serviceWorker.getRegistration()
+        .then(function(reg){
+          if(reg && reg.showNotification){ reg.showNotification(titulo, opcoes||{}); }
+          else { mostrarDireto(); }
+        })
+        .catch(mostrarDireto);
+    } else {
+      mostrarDireto();
+    }
+  }catch(e){ /* nunca deixar a notificação rebentar o resto do código */ }
+};
+</script>
+
 <!-- LOADING SCREEN -->
 <div id="loading-screen">
   <div class="loading-logo">💧</div>
@@ -11506,7 +11532,7 @@ window.osNotificarTecnicos = async function osNotificarTecnicos(os, tipo){
   const currentIsAdmin = ['admin','gerente','comercial','supervisor'].includes(window.currentUser?.role);
   const currentIsTecAfectado = tecnicosFinais.includes(window.currentUser?.id);
   if('Notification' in window && Notification.permission==='granted' && (currentIsAdmin || currentIsTecAfectado || isCancelamento)){
-    new Notification(`🔧 ${tipoLabel}`, {
+    window.notificarSeguro(`🔧 ${tipoLabel}`, {
       body:`OS ${os.id} — ${cli.nome||'—'} — ${dataFmt} ${horaIni}${moradaCli!=='—'?' — '+moradaCli:''}`,
     });
   }
@@ -13742,7 +13768,7 @@ async function osAvisarAtraso(o){
   auditLog('atraso_detectado',`OS ${o.id} ultrapassou tempo estimado. Técnico: ${tec}. Próxima OS: ${proximaOS?.id||'—'}`);
   // Notificar via push se disponível
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('⚠ Trabalho em atraso',{body:`OS ${o.id} ultrapassou o tempo estimado. Próxima OS pode atrasar.`});
+    window.notificarSeguro('⚠ Trabalho em atraso',{body:`OS ${o.id} ultrapassou o tempo estimado. Próxima OS pode atrasar.`});
   }
 }
 function osTimerStop(id){
@@ -16552,7 +16578,7 @@ async function tecReabrirParaRelatorio(osId){
       }
     }catch(_){}
     if('Notification' in window && Notification.permission==='granted'){
-      try{ new Notification('🔓 OS reaberta para relatório',{body:`OS ${osId} — por ${window.currentUser?.name||''}`}); }catch(_){}
+      try{ window.notificarSeguro('🔓 OS reaberta para relatório',{body:`OS ${osId} — por ${window.currentUser?.name||''}`}); }catch(_){}
     }
 
     toast('🔓 OS reaberta. Faça o relatório — as horas não foram alteradas.','✅',5000);
@@ -16807,7 +16833,7 @@ async function osAgendaMudarEstado(osId,estado){
 
   // Push notification para o utilizador logado (e para os técnicos via osNotificarTecnicos)
   if(isCancelar && 'Notification' in window && Notification.permission==='granted'){
-    new Notification(`❌ OS ${osId} Cancelada`, {
+    window.notificarSeguro(`❌ OS ${osId} Cancelada`, {
       body: `${cli?.nome||'—'} · ${o.data||'—'} ${(o.horaIni||'').slice(0,5)} — Técnicos notificados por email`
     });
   }
@@ -16954,7 +16980,7 @@ async function osCtxAlterarGuardar(osId){
   // Notificação push (browser)
   if('Notification' in window && Notification.permission === 'granted'){
     const resumo = mudancas.length ? mudancas.join(' | ') : 'Agendamento actualizado';
-    new Notification(`📅 Alteração — OS ${osId}`, { body: resumo });
+    window.notificarSeguro(`📅 Alteração — OS ${osId}`, { body: resumo });
   }
 
   const cli = (window.DB.clientes||[]).find(x=>x.id===updated.clienteId)||{};
@@ -17207,7 +17233,7 @@ async function osCtxMudarEstado(osId, estado){
   const srv = (window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
 
   if(isCancelar && 'Notification' in window && Notification.permission==='granted'){
-    new Notification(`❌ OS ${osId} Cancelada`, {
+    window.notificarSeguro(`❌ OS ${osId} Cancelada`, {
       body: `${cli?.nome||'—'} · ${o.data||'—'} ${(o.horaIni||'').slice(0,5)} — Técnicos notificados`
     });
   }
@@ -20447,7 +20473,7 @@ async function rpNotificarSupervisoresRelatorio(os, rel){
   // Notificar supervisores/admin/comercial via push
   const sups = (window.DB.users||[]).filter(u=>['admin','gerente','supervisor','comercial'].includes(u.role)&&u.active);
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('📄 Relatório em elaboração',{
+    window.notificarSeguro('📄 Relatório em elaboração',{
       body:`OS ${os.id} — ${cli.nome||'—'} — Técnico: ${tecs} — Prazo: ${prazo}`,
       icon:'/favicon.ico'
     });
@@ -20475,7 +20501,7 @@ async function rpNotificarAlteracaoTecnico(os, rel){
 
     // Notificação no browser (gestão que tenha a app aberta)
     if('Notification' in window && Notification.permission==='granted'){
-      try{ new Notification('✏️ Relatório alterado pelo técnico', {
+      try{ window.notificarSeguro('✏️ Relatório alterado pelo técnico', {
         body:`OS ${os.id} — ${cli.nome||'—'} — por ${tec}. Requer revisão da gestão.`, icon:'/favicon.ico'
       }); }catch(_){}
     }
@@ -24109,7 +24135,7 @@ async function rpCriarRecibimentoAutomatico(os, rel){
   const docLabel = {mb:'Fatura-Recibo (MB)',mbway:'Fatura-Recibo (MBWay)',dinheiro:'Fatura-Recibo (Numerário)'}[pagMet]||'Documento';
   toast(`💰 Recibo ${recibo.id} criado! Emitir ${docLabel}.`,'🧾');
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('🧾 Recibo criado',{body:`Recibo ${recibo.id} — ${recibo.client} — €${recibo.total} — Emitir ${docLabel}`});
+    window.notificarSeguro('🧾 Recibo criado',{body:`Recibo ${recibo.id} — ${recibo.client} — €${recibo.total} — Emitir ${docLabel}`});
   }
 }
 
@@ -24127,15 +24153,15 @@ function rpNotificarEquipa(os, rel){
   // Push para técnicos da OS
   if('Notification' in window && Notification.permission==='granted'){
     (os.tecnicos||[]).forEach(()=>{
-      new Notification('📄 Relatório preenchido',{body:msgTec,icon:'/favicon.ico'});
+      window.notificarSeguro('📄 Relatório preenchido',{body:msgTec,icon:'/favicon.ico'});
     });
-    new Notification('📄 Relatório OS '+os.id,{body:msgSup,icon:'/favicon.ico'});
+    window.notificarSeguro('📄 Relatório OS '+os.id,{body:msgSup,icon:'/favicon.ico'});
   }
 
   // Solicitar permissão push se ainda não foi concedida
   if('Notification' in window && Notification.permission==='default'){
     Notification.requestPermission().then(p=>{
-      if(p==='granted') new Notification('🔔 HidroGest',{body:'Notificações activadas! Receberá alertas de relatórios.'});
+      if(p==='granted') window.notificarSeguro('🔔 HidroGest',{body:'Notificações activadas! Receberá alertas de relatórios.'});
     });
   }
 
@@ -25979,7 +26005,7 @@ async function rpEnviarEmailDireto(osId){
     auditLog('relatorio_enviado',`OS ${osId} → ${cli.email} — ${pagLabel} — €${total} — por ${window.currentUser?.name}`);
 
     if('Notification' in window && Notification.permission==='granted'){
-      new Notification('✅ Relatório enviado',{body:`OS ${osId} — ${cli.nome||'—'} — €${total}`});
+      window.notificarSeguro('✅ Relatório enviado',{body:`OS ${osId} — ${cli.nome||'—'} — €${total}`});
     }
 
     rpRender();
@@ -26299,7 +26325,7 @@ function osNotifPagamento(osId, cor, metLabel, total){
   setTimeout(()=>notif.remove(), 8000);
   // Push
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification(`${c.icon} OS ${osId} — ${c.titulo}`,{body:`${metLabel} · €${osFmt(total||0)}. ${c.sub}`});
+    window.notificarSeguro(`${c.icon} OS ${osId} — ${c.titulo}`,{body:`${metLabel} · €${osFmt(total||0)}. ${c.sub}`});
   }
 }
 
@@ -26384,7 +26410,7 @@ function osVerificar72hSemPagamento(){
       const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
       console.log(`📧 EMAIL → localizafugas@gmail.com\nAssunto: 🔴 Sem pagamento 72h — OS ${o.id}\nOS ${o.id} — ${cli?.nome||'—'} — concluída há ${Math.floor(h)}h sem pagamento registado!`);
       if('Notification' in window && Notification.permission==='granted'){
-        new Notification('🔴 Sem pagamento',{body:`OS ${o.id} — ${cli?.nome||'—'} — sem pagamento há ${Math.floor(h)}h`});
+        window.notificarSeguro('🔴 Sem pagamento',{body:`OS ${o.id} — ${cli?.nome||'—'} — sem pagamento há ${Math.floor(h)}h`});
       }
       // Marcar para não repetir nesta sessão
       o._pag72hNotificado=true;

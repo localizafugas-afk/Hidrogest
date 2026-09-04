@@ -22438,10 +22438,18 @@ function rpOSPaga(os){
   return false;
 }
 function rpSubAtraso(os){
-  if(rpEstadoCard(os)!=='atrasado') return null;
+  if(!rpEntraPipeline(os)) return null;                                          // só OS concluídas/fechadas
+  if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return null; // garantia/orçamento não conta
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  if(rel && (rel.estado==='enviado' || rel.enviadoEm || rel.recebidoEm)) return null; // já enviado ao cliente → resolvido
   const d = rpDataRefAtraso(os);
-  if(d && d < '2026-08-01') return 'atras_antigos';
-  return rpOSPaga(os) ? 'atras_tecnico' : 'atras_pagamento';
+  const antigo = !!(d && d < '2026-08-01');
+  // 1) Dinheiro ainda não entrou → atraso de PAGAMENTO.
+  //    Transferência/entidade contam como atraso até o admin confirmar o recebimento.
+  if(!rpOSPaga(os)) return antigo ? 'atras_antigos' : 'atras_pagamento';
+  // 2) Já recebido: só é atraso se o RELATÓRIO está fora do prazo (falta do técnico).
+  if(rpEstadoCard(os)!=='atrasado') return null;
+  return antigo ? 'atras_antigos' : 'atras_tecnico';
 }
 
 function rpBadgeEstado(est, dias){
@@ -22640,16 +22648,17 @@ function rpRenderHomeCards(){
   let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0, atras_antigos:0, atras_pagamento:0, atras_tecnico:0};
   ordens.forEach(os=>{
     if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return;
+    const sub = rpSubAtraso(os);
+    if(sub){ counts[sub] = (counts[sub]||0)+1; return; }   // atraso: antigos / pagamento / técnico
     const card = rpEstadoCard(os);
     if(!card) return;
     counts[card] = (counts[card]||0)+1;
-    if(card==='atrasado'){ const sub=rpSubAtraso(os); if(sub) counts[sub]=(counts[sub]||0)+1; }
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
   const defs = [
     {key:'atras_antigos',   icon:'📦', label:'Antigos a analisar',      desc:'Anteriores a 01/08/2026'},
-    {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · dinheiro por entrar', urgente:true},
+    {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · transf./valor por confirmar', urgente:true},
     {key:'atras_tecnico',   icon:'🔧', label:'Atraso · falta relatório', desc:'Desde 01/08 · pago, falta preencher', urgente:true},
     {key:'a_realizar',icon:'📝', label:'Relatório a Realizar', desc:'Dentro do prazo'},
     {key:'pronto',    icon:'✅', label:'Prontos',              desc:'Prontos para enviar'},
@@ -22668,7 +22677,7 @@ function rpRenderHomeCards(){
   // Atualizar alerta pendentes
   const alertaDiv = document.getElementById('rp-alerta-pendentes');
   if(alertaDiv){
-    const urgentes = counts.atrasado;
+    const urgentes = (counts.atras_pagamento||0)+(counts.atras_tecnico||0);
     if(urgentes>0){
       alertaDiv.style.display='';
       alertaDiv.textContent=`⚠️ ${urgentes} relatório${urgentes>1?'s':''} requer${urgentes>1?'em':''} atenção`;

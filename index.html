@@ -22428,11 +22428,13 @@ function rpDataRefAtraso(os){
   return String(os.concluidoEm||os.data||'').slice(0,10);
 }
 function rpOSPaga(os){
-  // "Recebido" = dinheiro já entrou. Alinhado com a regra da app:
-  if(os.pago===true) return true;                                              // marcado como pago
-  if((window.DB.recibos||[]).some(r=>r.osId===os.id && r.status==='paid')) return true; // recibo pago
+  // "Recebido" = dinheiro já entrou. Alinhado com a app e com a aba Recebimentos:
+  const recs=(window.DB.recibos||[]).filter(r=>r.osId===os.id);
+  if(recs.some(r=>r.status==='pending')) return false;                          // recibo emitido e por pagar (Recebimentos › Pendentes) → NÃO recebido
+  if(os.pago===true) return true;                                               // marcado como pago
+  if(recs.some(r=>r.status==='paid')) return true;                             // recibo pago
   const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
-  if(os.pagamento?.confirmadoEm || rel?.pagamento?.confirmadoEm) return true;  // pagamento confirmado pelo admin
+  if(os.pagamento?.confirmadoEm || rel?.pagamento?.confirmadoEm) return true;   // pagamento confirmado pelo admin
   const met=(os.pagamento?.metodo||rel?.pagamento?.metodo||'').toLowerCase();
   if(['mb','mbway','dinheiro','numerario','cheque'].includes(met)) return true; // pagamento imediato (no ato)
   return false;
@@ -22440,14 +22442,16 @@ function rpOSPaga(os){
 function rpSubAtraso(os){
   if(!rpEntraPipeline(os)) return null;                                          // só OS concluídas/fechadas
   if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return null; // garantia/orçamento não conta
-  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
-  if(rel && (rel.estado==='enviado' || rel.enviadoEm || rel.recebidoEm)) return null; // já enviado ao cliente → resolvido
   const d = rpDataRefAtraso(os);
   const antigo = !!(d && d < '2026-08-01');
-  // 1) Dinheiro ainda não entrou → atraso de PAGAMENTO.
-  //    Transferência/entidade contam como atraso até o admin confirmar o recebimento.
+  // 1) Dinheiro ainda não entrou → atraso de PAGAMENTO — mesmo que o relatório já
+  //    tenha sido enviado. Inclui recibos "pendentes" da aba Recebimentos e
+  //    transferências por confirmar.
   if(!rpOSPaga(os)) return antigo ? 'atras_antigos' : 'atras_pagamento';
-  // 2) Já recebido: só é atraso se o RELATÓRIO está fora do prazo (falta do técnico).
+  // 2) Já recebido: relatório enviado ao cliente → resolvido; caso contrário, é
+  //    atraso do TÉCNICO se o relatório estiver fora do prazo.
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  if(rel && (rel.estado==='enviado' || rel.enviadoEm || rel.recebidoEm)) return null;
   if(rpEstadoCard(os)!=='atrasado') return null;
   return antigo ? 'atras_antigos' : 'atras_tecnico';
 }

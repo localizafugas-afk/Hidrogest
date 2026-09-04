@@ -7564,11 +7564,16 @@ function repRenderAtrasos(){
 
   const totalPendente = recibos.reduce((s,r)=>s+parseFloat(r.total||r.valor||0),0);
 
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+  return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#475569;line-height:1.6;">
+    <strong style="color:#0f172a;">Dois tipos de atraso — independentes um do outro:</strong><br>
+    💰 <strong>Atraso de pagamento</strong> — o recibo já foi emitido mas o cliente ainda não pagou (passou dos 30 dias). É um problema de cobrança.<br>
+    📋 <strong>Atraso do técnico</strong> — a intervenção foi concluída mas o <strong>relatório</strong> não foi entregue dentro de 5 dias úteis. Não tem nada a ver com o pagamento: uma OS pode estar <span style="color:#16a34a;font-weight:700;">✓ paga</span> (ex.: MBWay) e mesmo assim contar como atraso do técnico enquanto o relatório não sair.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
     
     <!-- Recibos pendentes -->
     <div class="rep-card">
-      <div class="rep-card-title">💰 Recibos por Receber — €${fmt(totalPendente)}</div>
+      <div class="rep-card-title">💰 Atraso de PAGAMENTO · Recibos por Receber — €${fmt(totalPendente)}</div>
       ${!recibos.length
         ? '<div style="color:#16a34a;font-size:13px;padding:16px 0;text-align:center;">✅ Sem recibos pendentes</div>'
         : `<div style="overflow:auto;max-height:320px;">
@@ -7600,7 +7605,7 @@ function repRenderAtrasos(){
 
     <!-- OS sem relatório -->
     <div class="rep-card">
-      <div class="rep-card-title">📋 OS sem Relatório — ${osSemRel.length} pendentes</div>
+      <div class="rep-card-title">📋 Atraso do TÉCNICO · OS sem relatório entregue — ${osSemRel.length}</div>
       ${!osSemRel.length
         ? '<div style="color:#16a34a;font-size:13px;padding:16px 0;text-align:center;">✅ Todos os relatórios em dia</div>'
         : `<div style="overflow:auto;max-height:320px;">
@@ -7618,8 +7623,9 @@ function repRenderAtrasos(){
                 const dias = rpDiasParaEnvio(o);
                 const cor = dias===null?'#64748b':dias<=0?'#dc2626':dias===1?'#d97706':'#16a34a';
                 const label = dias===null?'—':dias<=0?`ATRASADO ${Math.abs(dias)}d`:dias===1?'Amanhã!':dias+'d';
+                const _pago = (o.pago===true) || (window.DB.recibos||[]).some(r=>r.osId===o.id && r.status==='paid');
                 return `<tr style="border-bottom:1px solid #fde68a;background:${dias<=0?'#fff5f5':'#fff'};">
-                  <td style="padding:8px;font-weight:700;">${o.id}</td>
+                  <td style="padding:8px;font-weight:700;">${o.id}${_pago?'<div style="font-size:9px;color:#16a34a;font-weight:700;">✓ pago — falta só o relatório</div>':''}</td>
                   <td style="padding:8px;">${cli.nome||'—'}</td>
                   <td style="padding:8px;color:#64748b;">${tec}</td>
                   <td style="padding:8px;text-align:center;">
@@ -8903,6 +8909,19 @@ window.osPrecoCalculator = {
   }
 };
 
+// ── Serviços faturados a VALOR FIXO (não por hora de trabalho) ──
+// Recuperação de tubagem e reabilitação (CIPP, Spray Epóxi) cobram o valor
+// fixo acordado do serviço. As horas trabalhadas NÃO alteram o valor.
+function srvEhValorFixo(srv){
+  const nome=((srv&&srv.nome)||'').toLowerCase();
+  return ['cipp','epóxi','epoxi','reabilit','recuper'].some(k=>nome.includes(k));
+}
+function osServicoValorFixo(o){
+  const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
+  const nome=(srv.nome||o.servicoNome||'').toLowerCase();
+  return ['cipp','epóxi','epoxi','reabilit','recuper'].some(k=>nome.includes(k));
+}
+
 // ── Fração e valor cobrado a partir do tempo AGENDADO ──
 function osFracaoInfo(o){
   const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
@@ -8917,21 +8936,34 @@ function osFracaoInfo(o){
   let durMin = (iniUse && fimUse) ? (_m(fimUse)-_m(iniUse)) : 0;
   if(durMin < 0) durMin += 1440;     // fim no dia seguinte
   durMin = Math.max(0, durMin);
+  const _valorFixo = typeof osServicoValorFixo==='function' && osServicoValorFixo(o);
   let addUnits=(o.haddN!=null&&o.haddN!=='')?parseFloat(o.haddN):((typeof calcHorasAddQuartos==='function')?calcHorasAddQuartos(Math.max(1,durMin/60||1)):0);
   if(isNaN(addUnits)) addUnits=0;
+  if(_valorFixo) addUnits=0;                       // valor fixo: horas trabalhadas não contam
   const horasCobradas=1+addUnits;
-  const net=(o.net!=null&&o.net!=='')?parseFloat(o.net):(h1+addUnits*haddV);
+  const net=_valorFixo
+    ? ((o.net!=null&&o.net!=='')?parseFloat(o.net):h1)                 // valor fixo do serviço
+    : ((o.net!=null&&o.net!=='')?parseFloat(o.net):(h1+addUnits*haddV));
   const total=(o.total!=null&&o.total!=='')?parseFloat(o.total):net*(1+ivaPct/100);
   const _hC=Math.floor(horasCobradas), _mC=Math.round((horasCobradas-_hC)*60);
   const fracLabel=`${_hC}h${_mC?(' '+_mC+'min'):''}`;
   const addMinLabel=addUnits>0?`+ ${Math.round(addUnits*60)} min adicionais`:'sem tempo adicional';
   const _dH=Math.floor(durMin/60), _dM=durMin%60;
   const durLabel=durMin>0?`${_dH}h${_dM?(' '+_dM+'min'):''}`:'—';
-  return {durMin,durLabel,addUnits,horasCobradas,h1,haddV,net,total,ivaPct,fracLabel,addMinLabel,temReal};
+  return {durMin,durLabel,addUnits,horasCobradas,h1,haddV,net,total,ivaPct,fracLabel,addMinLabel,temReal,valorFixo:_valorFixo};
 }
 function osFracaoCardHtml(o){
   if(o.naoFaturavel || o.servicoTipo==='garantia' || o.tipoServico==='garantia') return '';
   const f=osFracaoInfo(o);
+  if(f.valorFixo){
+    if(!(f.net>0)) return '';
+    return `<div style="border:2px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💶 Faturação a valor fixo do serviço</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span style="color:#475569;">Modalidade</span><strong>Valor fixo — horas de trabalho não contam</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0 0;margin-top:4px;border-top:1px solid #c7d2fe;"><strong>Valor s/ IVA</strong><strong style="color:#4338ca;">€${osFmt(f.net)}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#475569;">Total c/ IVA (${f.ivaPct}%)</span><strong>€${osFmt(f.total)}</strong></div>
+    </div>`;
+  }
   if(!f.h1) return '';
   return `<div style="border:2px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
     <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💶 ${f.temReal?'Faturação pelo tempo trabalhado':'Faturação pelo tempo agendado (estimativa)'}</div>
@@ -8959,9 +8991,11 @@ function osCalcValor(){
     return;
   }
   const h1=parseFloat(document.getElementById('os-h1')?.value)||0;
-  const nAdd=parseFloat(document.getElementById('os-hadd-n')?.value)||0;
+  let nAdd=parseFloat(document.getElementById('os-hadd-n')?.value)||0;
   const vAdd=parseFloat(document.getElementById('os-hadd-v')?.value)||0;
   const ivaPct=parseInt(document.getElementById('os-iva')?.value)||23;
+  const _srvSel=(window.DB.servicos||[]).find(s=>s.id===document.getElementById('os-srv-sel')?.value);
+  if(typeof srvEhValorFixo==='function' && srvEhValorFixo(_srvSel)) nAdd=0;  // valor fixo: horas não contam
   const net=h1+(nAdd*vAdd);
   const ivaVal=net*(ivaPct/100);
   const total=net+ivaVal;
@@ -9689,6 +9723,19 @@ function osAutoFillServico(){
       if(_dcalc2) _dcalc2.style.display = 'none';
       if(haddGrp) haddGrp.style.display = '';
     }
+  }
+
+  // ── Valor fixo (recuperação de tubagem / reabilitação): esconder horas adicionais ──
+  const _vfSrv   = srvEhValorFixo(srv);
+  const _h1lbl   = document.getElementById('os-h1-label');
+  const _haddGrp = document.getElementById('os-hadd-group');
+  if(_vfSrv && !ehMedida){
+    if(_h1lbl)   _h1lbl.innerHTML = 'Valor fixo (€) <span style="font-size:10px;color:var(--text3);">do serviço</span>';
+    if(_haddGrp) _haddGrp.style.display = 'none';
+    const _hn=document.getElementById('os-hadd-n'); if(_hn) _hn.value=0;
+    const _hv=document.getElementById('os-hadd-v'); if(_hv) _hv.value=0;
+  } else if(!ehMedida){
+    if(_h1lbl)   _h1lbl.innerHTML = '1ª hora (€) <span style="font-size:10px;color:var(--text3);">do serviço</span>';
   }
 
   // Calcular hora de fim baseado no tempo do serviço
@@ -22371,6 +22418,25 @@ function rpEstadoCard(os){
   return 'a_realizar'; // rascunho ou pendente, dentro do prazo → "Relatório a Realizar"
 }
 
+// ── Subclassificação dos relatórios ATRASADOS (v15.82) ──
+// Corte: relatórios com data anterior a 01/08/2026 são "antigos a analisar".
+// A partir de 01/08/2026 mantêm-se atrasados, mas separados por causa:
+//  • atras_pagamento → o dinheiro ainda não entrou (falta pagamento);
+//  • atras_tecnico   → já está pago, só falta o técnico preencher/enviar o
+//    relatório (ex.: OS paga por MBWay que ficou em rascunho).
+function rpDataRefAtraso(os){
+  return String(os.concluidoEm||os.data||'').slice(0,10);
+}
+function rpOSPaga(os){
+  return (os.pago===true) || (window.DB.recibos||[]).some(r=>r.osId===os.id && r.status==='paid');
+}
+function rpSubAtraso(os){
+  if(rpEstadoCard(os)!=='atrasado') return null;
+  const d = rpDataRefAtraso(os);
+  if(d && d < '2026-08-01') return 'atras_antigos';
+  return rpOSPaga(os) ? 'atras_tecnico' : 'atras_pagamento';
+}
+
 function rpBadgeEstado(est, dias){
   const MAP = {
     a_realizar:{bg:'#f0f9ff',c:'#0369a1',txt:'📅 A realizar'},
@@ -22536,7 +22602,10 @@ function rpAbrirLista(estado, titulo){
   const titulos = {
     '':'Todos os Relatórios', 'a_realizar':'📝 Relatório a Realizar',
     'pronto':'✅ Prontos',
-    'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados'
+    'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados',
+    'atras_antigos':'📦 Relatórios antigos a analisar · anteriores a 01/08/2026',
+    'atras_pagamento':'💰 Atrasados por falta de pagamento · desde 01/08/2026',
+    'atras_tecnico':'🔧 Atrasados por falta de preenchimento técnico · desde 01/08/2026'
   };
   const el = document.getElementById('rp-lista-titulo');
   if(el) el.textContent = titulo || titulos[estado] || 'Relatórios';
@@ -22561,17 +22630,20 @@ function rpRenderHomeCards(){
   const isTec = window.currentUser?.role==='tecnico';
 
   // Contar por card (rpEstadoCard já filtra agendas não realizadas)
-  let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0};
+  let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0, atras_antigos:0, atras_pagamento:0, atras_tecnico:0};
   ordens.forEach(os=>{
     if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return;
     const card = rpEstadoCard(os);
     if(!card) return;
     counts[card] = (counts[card]||0)+1;
+    if(card==='atrasado'){ const sub=rpSubAtraso(os); if(sub) counts[sub]=(counts[sub]||0)+1; }
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
   const defs = [
-    {key:'atrasado',  icon:'🔴', label:'Atrasados',            desc:'Fora do prazo de entrega', urgente:true},
+    {key:'atras_antigos',   icon:'📦', label:'Antigos a analisar',      desc:'Anteriores a 01/08/2026'},
+    {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · dinheiro por entrar', urgente:true},
+    {key:'atras_tecnico',   icon:'🔧', label:'Atraso · falta relatório', desc:'Desde 01/08 · pago, falta preencher', urgente:true},
     {key:'a_realizar',icon:'📝', label:'Relatório a Realizar', desc:'Dentro do prazo'},
     {key:'pronto',    icon:'✅', label:'Prontos',              desc:'Prontos para enviar'},
     {key:'enviado',   icon:'📨', label:'Enviados',             desc:'Já enviados ao cliente'},
@@ -22646,6 +22718,9 @@ function rpRender(){
       if(filterEst==='aguarda_pagamento'){
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
         return !rel?.pagamento?.metodo;
+      }
+      if(filterEst==='atras_antigos'||filterEst==='atras_pagamento'||filterEst==='atras_tecnico'){
+        return rpSubAtraso(os)===filterEst;
       }
       return rpEstadoCard(os)===filterEst;
     });

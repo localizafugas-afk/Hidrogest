@@ -22428,7 +22428,14 @@ function rpDataRefAtraso(os){
   return String(os.concluidoEm||os.data||'').slice(0,10);
 }
 function rpOSPaga(os){
-  return (os.pago===true) || (window.DB.recibos||[]).some(r=>r.osId===os.id && r.status==='paid');
+  // "Recebido" = dinheiro já entrou. Alinhado com a regra da app:
+  if(os.pago===true) return true;                                              // marcado como pago
+  if((window.DB.recibos||[]).some(r=>r.osId===os.id && r.status==='paid')) return true; // recibo pago
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  if(os.pagamento?.confirmadoEm || rel?.pagamento?.confirmadoEm) return true;  // pagamento confirmado pelo admin
+  const met=(os.pagamento?.metodo||rel?.pagamento?.metodo||'').toLowerCase();
+  if(['mb','mbway','dinheiro','numerario','cheque'].includes(met)) return true; // pagamento imediato (no ato)
+  return false;
 }
 function rpSubAtraso(os){
   if(rpEstadoCard(os)!=='atrasado') return null;

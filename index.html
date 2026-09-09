@@ -2213,6 +2213,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#ede9fe;color:#7c3aed;border:1.5px solid #c4b5fd;">📤 Enviada</span>
     </div>
     <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;flex-shrink:0;" onclick="propostaAbrir(null)">📋 Nova Proposta</button>
+    <button class="btn btn-sm" style="background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;flex-shrink:0;" onclick="abrirApresentacaoGrupo()">📎 Apresentação do grupo</button>
   </div>
 
   <!-- ALERTAS follow-up do dia -->
@@ -35988,6 +35989,46 @@ window.osLimparClausulas = osLimparClausulas;
     });
   };
 })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     HidroGest — Botão "Apresentação do grupo"
+     contacto@localizafugas.com NÃO é conta Google, por isso NÃO se usa
+     o Gmail. Este botão abre a app de email predefinida do dispositivo
+     (mailto). No ecrã de composição: escolher "De: contacto@localizafugas.com"
+     (essa conta tem de estar configurada no telemóvel) e anexar o PDF.
+     ALTERNATIVA (envio garantido pela conta): abrir o webmail do domínio.
+     Se tiver o endereço do webmail (ex.: https://webmail.localizafugas.com),
+     defina-o em WEBMAIL_URL abaixo — passa a abrir aí a composição.
+     ══════════════════════════════════════════════════════════════ -->
+<script>
+window.abrirApresentacaoGrupo = function(){
+  var conta      = 'contacto@localizafugas.com';
+  var WEBMAIL_URL = ''; // ex.: 'https://webmail.localizafugas.com' (deixar vazio = usar a app de email)
+  var tel        = (window._empCfg && window._empCfg.tel) || '931 747 199';
+  var assunto    = 'Grupo Localiza Fugas — Apresentação';
+  var corpo      =
+    'Exmos. Senhores,\n\n' +
+    'Segue em anexo a apresentação do grupo Localiza Fugas — especializado em deteção de fugas e reabilitação de tubagem de água e esgoto sem obra (CIPP e spray epóxi), com cobertura nacional e frota própria.\n\n' +
+    'Ficamos ao dispor para colaborar.\n\n' +
+    'Com os melhores cumprimentos,\nGrupo Localiza Fugas\n' + tel + ' · ' + conta;
+
+  if(WEBMAIL_URL){
+    // Abre o webmail do domínio (composição). O anexo faz-se no webmail.
+    window.open(WEBMAIL_URL, '_blank');
+    if(typeof toast === 'function'){
+      toast('Webmail aberto — componha a mensagem e anexe o PDF da apresentação.', '📎');
+    }
+    return;
+  }
+
+  // Abre a app de email predefinida do dispositivo.
+  var url = 'mailto:?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+  window.location.href = url;
+  if(typeof toast === 'function'){
+    toast('Escolha "De: ' + conta + '" e anexe o PDF da apresentação.', '📎');
+  }
+};
 </script>
 
 </body>

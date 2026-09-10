@@ -22625,7 +22625,8 @@ function rpAbrirLista(estado, titulo){
     'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados',
     'atras_antigos':'📦 Relatórios antigos a analisar · anteriores a 01/08/2026',
     'atras_pagamento':'💰 Atrasados por falta de pagamento · desde 01/08/2026',
-    'atras_tecnico':'🔧 Atrasados por falta de preenchimento técnico · desde 01/08/2026'
+    'atras_tecnico':'🔧 Atrasados por falta de preenchimento técnico · desde 01/08/2026',
+    'sem_rel_todos':'🔴 Trabalho feito · sem relatório — todas'
   };
   const el = document.getElementById('rp-lista-titulo');
   if(el) el.textContent = titulo || titulos[estado] || 'Relatórios';
@@ -22661,7 +22662,16 @@ function rpRenderHomeCards(){
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
+  // Vista única: trabalho feito (concluída/fechada) mas relatório ainda por elaborar — todas, sem prazo
+  counts.sem_rel_todos = ordens.filter(os=>{
+    if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return false;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return false;
+    const _r = rels.find(x=>x.id===os.id);
+    return typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado');
+  }).length;
+
   const defs = [
+    {key:'sem_rel_todos',   icon:'🔴', label:'Trabalho feito · sem relatório', desc:'Todas · relatório por elaborar', urgente:true},
     {key:'atras_antigos',   icon:'📦', label:'Antigos a analisar',      desc:'Anteriores a 01/08/2026'},
     {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · transf./valor por confirmar', urgente:true},
     {key:'atras_tecnico',   icon:'🔧', label:'Atraso · falta relatório', desc:'Desde 01/08 · pago, falta preencher', urgente:true},
@@ -22736,6 +22746,10 @@ function rpRender(){
   // Filtrar
   if(filterEst && filterEst!=='nao_faturavel'){
     ordens = ordens.filter(os=>{
+      if(filterEst==='sem_rel_todos'){
+        const _relSRT=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+        return typeof relatorioFeito==='function' ? !relatorioFeito(_relSRT) : (_relSRT?.estado!=='enviado');
+      }
       if(filterEst==='aguarda_pagamento'){
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
         return !rel?.pagamento?.metodo;

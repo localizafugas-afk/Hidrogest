@@ -31532,6 +31532,72 @@ async function _gerarPdfBase64(html, numProposta){
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+//  ENVIO MANUAL DE PROPOSTA
+//  Abre a conta de email do utilizador (contacto@localizafugas.com),
+//  descarrega o PDF para anexar e copia o corpo formatado para a
+//  área de transferência. Substitui o envio automático (Brevo)
+//  que estava a devolver erro 400.
+// ══════════════════════════════════════════════════════════════
+const PROP_EMAIL_CONTA = 'contacto@localizafugas.com'; // conta de email a abrir (remetente)
+
+// Descarrega o PDF (a partir de base64) para o utilizador anexar ao email
+function _propostaDescarregarPdf(base64, numProposta){
+  if(!base64) return false;
+  try{
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], {type:'application/pdf'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'Proposta_' + String(numProposta).replace(/[^A-Za-z0-9_-]/g,'_') + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    return true;
+  }catch(e){ console.warn('Descarregar PDF falhou:', e); return false; }
+}
+
+// Copia o corpo para a área de transferência (HTML formatado + texto simples)
+async function _propostaCopiarHtml(htmlEmail, corpo){
+  try{
+    if(navigator.clipboard && window.ClipboardItem && htmlEmail){
+      const item = new ClipboardItem({
+        'text/html':  new Blob([htmlEmail], {type:'text/html'}),
+        'text/plain': new Blob([corpo||''], {type:'text/plain'}),
+      });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+    if(navigator.clipboard && corpo){ await navigator.clipboard.writeText(corpo); return true; }
+  }catch(e){ console.warn('Copiar corpo falhou:', e); }
+  return false;
+}
+
+// Fluxo completo: descarrega PDF → abre a conta de email → copia corpo
+async function _propostaAbrirEmailManual({assunto, corpo, htmlEmail, pdfBase64, numProposta, emailDest, nomeDest}){
+  // 1) Descarregar o PDF para anexar
+  const temPdf = _propostaDescarregarPdf(pdfBase64, numProposta);
+  // 2) Abrir a conta de email (Gmail) já com destinatário, assunto e corpo
+  const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&authuser=' + encodeURIComponent(PROP_EMAIL_CONTA)
+    + '&to='       + encodeURIComponent(emailDest||'')
+    + '&su='       + encodeURIComponent(assunto||'')
+    + '&body='     + encodeURIComponent(corpo||'');
+  window.open(gmailUrl, '_blank');
+  // 3) Copiar o corpo formatado para a área de transferência (para colar, se quiser)
+  const copiou = await _propostaCopiarHtml(htmlEmail, corpo);
+  // 4) Instruções ao utilizador
+  const partes = ['Email aberto de ' + PROP_EMAIL_CONTA];
+  if(temPdf) partes.push('PDF descarregado — anexe-o');
+  if(copiou) partes.push('corpo copiado (Ctrl+V p/ versão formatada)');
+  toast(partes.join(' · '), '📧');
+  return true;
+}
+
 
 async function propostaEnviarLivre(){
   const nome=document.getElementById('prop-nome')?.value.trim()||'Cliente';
@@ -31639,53 +31705,21 @@ async function propostaEnviarLivre(){
       .replace(/<button[^>]*>🖨️[^<]*<\/button>/gi,'');
   }catch(pdfErr){ console.warn('PDF generation error:',pdfErr); }
 
-  if(cfg.brevoApiKey){
-    const emp=window._empCfg||{};
-    const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
-    const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
-    const replyToEmail = cfg.replyTo||'localizafugas@gmail.com';
-    // Cópia interna por BCC para o email da empresa (oculta ao cliente)
-    const bccList = (emailCopiaEmpresa && emailCopiaEmpresa!==emailDest)
-      ? [{email:emailCopiaEmpresa, name:'Localiza Fugas'}] : [];
-    try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',
-        headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
-        body:JSON.stringify({
-          sender:{name:nomeRem, email:remetente},
-          replyTo:{email:replyToEmail, name:nomeRem},
-          to:[{email:emailDest,name:nome}],
-          ...(bccList.length ? {bcc:bccList} : {}),
-          subject:assunto,
-          textContent:corpo,
-          ...(window._propostaPdfAnexo||[]).length ? {attachment:window._propostaPdfAnexo} : {},
-        })});
-      if(r.ok||r.status===201){
-        const ccMsg  = bccList.length             ? ` (cópia: ${emailCopiaEmpresa})`  : '';
-        const pdfMsg = (window._propostaPdfAnexo||[]).length ? ' + proposta em anexo' : '';
-        toast(`Proposta enviada ✅${ccMsg}${pdfMsg}`, '📋');
-        window._propostaPdfAnexo = null;
-        await window.fsSet('propostas',numProposta,_dadosProposta);
-        _propostaUpsertLocal(_dadosProposta);
-        await auditLog('proposta_enviada',`${numProposta}: ${nomeServ} para ${emailDest} (por ${autor})${ccMsg}`);
-        document.getElementById('mo-proposta')?.remove();
-        return;
-      } else {
-        const errText = await r.text().catch(()=>'');
-        toast(`Erro ao enviar email (${r.status}). Verifique as configurações Brevo.`,'❌');
-        console.error('Brevo error:', r.status, errText);
-        return;
-      }
-    }catch(e){
-      toast('Erro de rede ao enviar. Verifique a ligação.','❌');
-      console.error('Brevo fetch error:',e);
-      return;
-    }
-  }
-  // Sem Brevo configurado: avisar e abrir Gmail como fallback
-  toast('Email Brevo não configurado — a abrir Gmail como alternativa','⚠️');
-  window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(emailDest)+'&su='+encodeURIComponent(assunto)+'&body='+encodeURIComponent(corpo),'_blank');
-  // Guardar mesmo sem envio via API
-  try{ await window.fsSet('propostas',numProposta,_dadosProposta); _propostaUpsertLocal(_dadosProposta); }catch(e){}
+  // ── Envio manual: abrir a conta de email do utilizador para anexar o PDF ──
+  const _pdfB64 = (window._propostaPdfAnexo||[])[0]?.content || null;
+  await _propostaAbrirEmailManual({
+    assunto, corpo,
+    htmlEmail: window._propostaHtmlEmail || '',
+    pdfBase64: _pdfB64,
+    numProposta, emailDest, nomeDest: nome,
+  });
+  window._propostaPdfAnexo = null;
+  // Guardar o registo da proposta e histórico
+  try{
+    await window.fsSet('propostas', numProposta, _dadosProposta);
+    _propostaUpsertLocal(_dadosProposta);
+    await auditLog('proposta_enviada', `${numProposta}: ${nomeServ} para ${emailDest} (envio manual, por ${autor})`);
+  }catch(e){ console.warn('Guardar proposta falhou:', e); }
   document.getElementById('mo-proposta')?.remove();
 }
 
@@ -31787,27 +31821,29 @@ async function propostaEnviarRascunho(propId){
         window._propostaHtmlEmailRasc = pdfHtml;
       }
   }catch(e){ console.warn('PDF err:',e); }
-  if(cfg.brevoApiKey){
-    const remetente=cfg.remetente||emp.email||'propostas@hidrogest.net';
-    const nomeRem=emp.nome||cfg.empresa||'Localiza Fugas';
-    const replyToEmail=cfg.replyTo||'localizafugas@gmail.com';
-    const _bccEmp = (p.email!=='localizafugas@gmail.com') ? [{email:'localizafugas@gmail.com',name:'Localiza Fugas'}] : [];
-    try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},replyTo:{email:replyToEmail,name:nomeRem},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
-      if(r.ok||r.status===201){
-        toast('Proposta enviada ✅'+(pdfAnexo?' + PDF em anexo':''),'📋');
-        await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});
-        _propostaUpsertLocal({id:propId,estado:'enviada',enviadoEm:new Date().toISOString()});
-        await auditLog('proposta_enviada',`${p.numero}: ${nomeServ} para ${p.email} (por ${autor})`);
-        return;
-      }
-    }catch(e){ toast('Erro de rede ao enviar','❌'); return; }
-  }
-  // Fallback Gmail
-  toast('Email Brevo não configurado — a abrir Gmail','⚠️');
-  window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(p.email)+'&su='+encodeURIComponent(assunto)+'&body='+encodeURIComponent(corpo),'_blank');
+  // ── Envio manual: gerar PDF real, abrir a conta de email e anexar ──
+  let _pdfB64Rasc = null;
+  try{
+    window._propostaParaPdf = {
+      numProposta:p.numero, dataDoc:p.dataDoc||new Date().toLocaleDateString('pt-PT'),
+      autor, nomeCliente:p.nome, email:p.email, tel:p.tel||'', morada:p.morada||'',
+      nomeServico:nomeServ, h1, hadd, horas, tipoCobranca:p.tipoCobranca||'hora',
+      corteMetros:p.corteMetros||0, iva, intro:p.intro||'', descritivo:p.descritivo||'',
+      obs:p.obs||'', validade:p.validade||'', marca:p.marca||'localiza',
+      empresa:empresa2, telEmp:tel2, emailEmp:emailEmp2,
+      moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+    };
+    _pdfB64Rasc = await _gerarPdfBase64(window._propostaHtmlEmailRasc||'', p.numero);
+  }catch(e){ console.warn('PDF rascunho falhou:', e); }
+  await _propostaAbrirEmailManual({
+    assunto, corpo,
+    htmlEmail: window._propostaHtmlEmailRasc || '',
+    pdfBase64: _pdfB64Rasc,
+    numProposta: p.numero, emailDest: p.email, nomeDest: p.nome,
+  });
   await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});
   _propostaUpsertLocal({id:propId,estado:'enviada',enviadoEm:new Date().toISOString()});
+  await auditLog('proposta_enviada',`${p.numero}: ${nomeServ} para ${p.email} (envio manual, por ${autor})`);
 }
 
 // ══════════════════════════════════════════════════════════════

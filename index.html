@@ -13045,7 +13045,7 @@ function osRenderLista(){
       <td style="font-size:12px;">${srv?.nome||'—'}</td>
       <td>${typeof osTecNomes==='function'?osTecNomes(o.tecnicos):(o.tecnicos||[]).join(', ')||'—'}</td>
       <td style="font-family:monospace;font-weight:700;white-space:nowrap;">€${osFmt(o.total)}</td>
-      <td>${osBadge(o.estado,o)}</td>
+      <td>${osBadge(o.estado,o)}${o.naoRealizada?`<div style="margin-top:3px;font-size:10px;color:#b91c1c;line-height:1.3;">🚫 ${(o.motivoNaoRealizacao||'').slice(0,70)}${o.fotoLocal&&o.fotoLocal.url?` · <a href="${o.fotoLocal.url}" target="_blank" onclick="event.stopPropagation();" style="color:#b91c1c;text-decoration:underline;">📷 foto</a>`:''}</div>`:''}</td>
       <td style="min-width:120px;">
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
           ${relBadge}
@@ -13278,6 +13278,7 @@ function osAbrirDetalhe(id){
       ${o.canceladoPeloCliente
         ? `<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.3);padding:4px 10px;border-radius:6px;display:inline-block;">🚫 Cancelado pelo cliente${o.cancelamentoCliente&&o.cancelamentoCliente.quando?' · '+new Date(o.cancelamentoCliente.quando).toLocaleString('pt-PT'):''}${o.cancelamentoCliente&&o.cancelamentoCliente.motivo?' · '+o.cancelamentoCliente.motivo:''}</div>`
         : `<div style="font-size:11px;margin-top:6px;background:rgba(16,185,129,.28);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}</div>`}
+      ${o.naoRealizada?`<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.35);padding:4px 10px;border-radius:6px;display:block;">🚫 Serviço não realizado${o.naoRealizadaEm?' · '+new Date(o.naoRealizadaEm).toLocaleString('pt-PT'):''} — ${o.motivoNaoRealizacao||''}${o.naoRealizadaPorNome?' · por '+o.naoRealizadaPorNome:''}${o.fotoLocal&&o.fotoLocal.url?` · <a href="${o.fotoLocal.url}" target="_blank" style="color:#fecaca;text-decoration:underline;">📷 ver foto do local</a>`:''}</div>`:''}
     </div>
 
     ${o.encerramentoAutomatico?`
@@ -13488,6 +13489,11 @@ function osAbrirDetalhe(id){
             style="width:100%;background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;padding:10px;font-size:12px;color:#92400e;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;">
             🔒 Fechar sem relatório agora<br>
             <span style="font-size:10px;font-weight:400;color:#b45309;">⚠️ Prazo de 5 dias para enviar o relatório</span>
+          </button>
+          <button onclick="osNaoRealizada('${id}')"
+            style="width:100%;margin-top:8px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#991b1b;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;">
+            🚫 Serviço não realizado<br>
+            <span style="font-size:10px;font-weight:400;color:#b91c1c;">Cheguei ao local mas não foi possível fazer o trabalho — escrever motivo e tirar foto</span>
           </button>
         </div>
       </div>`:`
@@ -26609,6 +26615,65 @@ async function osFecharSemRelatorio(osId){
   if(typeof osRenderAgenda==='function') osRenderAgenda();
   if(typeof osRenderMinhas==='function') osRenderMinhas();
 }
+
+// ── Serviço não realizado ───────────────────────────────────────
+// O técnico chegou ao local mas não pôde fazer o trabalho. Escreve o
+// motivo, tira foto do local (obrigatória), a OS sai das listas ativas
+// (fica em "Cancelada") e guarda motivo/foto/quem/quando para o admin.
+function _osNRlerFicheiro(f){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('falha a ler a foto')); r.readAsDataURL(f); });
+}
+function _osNRpedirFoto(){
+  return new Promise((resolve)=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='image/*'; inp.capture='environment'; inp.style.display='none';
+    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; try{document.body.removeChild(inp);}catch(_){}; resolve(f||null); };
+    document.body.appendChild(inp); inp.click();
+  });
+}
+async function osNaoRealizada(osId){
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  const motivo=(prompt('SERVIÇO NÃO REALIZADO\n\nEscreva o motivo pelo qual não foi possível fazer o trabalho:')||'').trim();
+  if(!motivo){ toast('Motivo em branco — nada foi registado.','⚠️'); return; }
+  if(!confirm('A seguir tem de TIRAR UMA FOTO do local (obrigatória).\n\nToque em OK para abrir a câmara.')) return;
+  const file=await _osNRpedirFoto();
+  if(!file){ toast('Foto obrigatória — não foi registado. Tente de novo.','⚠️'); return; }
+  toast('A enviar a foto do local…','⏳');
+  let fotoLocal=null;
+  try{
+    let dataUrl=await _osNRlerFicheiro(file);
+    if(typeof _compressImageDataUrl==='function'){
+      dataUrl=await _compressImageDataUrl(dataUrl,1400,0.65);
+      if(dataUrl.length>700000) dataUrl=await _compressImageDataUrl(dataUrl,1000,0.5);
+    }
+    if(typeof window.fsUploadFoto==='function'){
+      const up=await window.fsUploadFoto('os-nao-realizada/'+osId+'/'+Date.now()+'.jpg', dataUrl);
+      fotoLocal={ url:up.url, path:up.path };
+    } else {
+      fotoLocal={ url:dataUrl }; // Storage indisponível — guarda a imagem embutida
+    }
+  }catch(e){
+    console.warn('upload foto não-realizada falhou:',e);
+    if(!confirm('Não consegui enviar a foto ('+(e.message||e)+').\n\nQuer registar mesmo assim, sem foto?')) return;
+  }
+  const agora=new Date().toISOString();
+  await window.fsSetMerge('ordens', osId, {
+    estado:'cancelada',
+    naoRealizada:true,
+    motivoNaoRealizacao:motivo,
+    fotoLocal: fotoLocal||null,
+    naoRealizadaEm:agora,
+    naoRealizadaPor:window.currentUser?.id,
+    naoRealizadaPorNome:window.currentUser?.name||'',
+  });
+  document.querySelectorAll('.os-popover').forEach(p=>p.remove());
+  closeMo('mo-os-tec');
+  toast(`OS ${osId} registada como não realizada — ${motivo}`,'🚫');
+  if(typeof auditLog==='function') auditLog('os_nao_realizada',`OS ${osId} não realizada por ${window.currentUser?.name}. Motivo: ${motivo}`);
+  if(typeof osRenderAgenda==='function') osRenderAgenda();
+  if(typeof osRenderMinhas==='function') osRenderMinhas();
+}
+window.osNaoRealizada = osNaoRealizada;
 
 // ── Serviços não faturáveis (garantia / orçamento) ──────────────
 // Sem modalidade de pagamento e sem aviso de faturação.

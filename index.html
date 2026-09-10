@@ -16588,7 +16588,7 @@ async function tecReabrirParaRelatorio(osId){
       if(cfg.brevoApiKey){
         const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
         const dest=cfg.remetente||emp.email||'propostas@hidrogest.net';
-        await fetch('https://api.brevo.com/v3/smtp/email',{
+        await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
           method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
           body:JSON.stringify({
             sender:{name:emp.nome||'HidroGest',email:dest},
@@ -20542,7 +20542,7 @@ async function rpNotificarAlteracaoTecnico(os, rel){
         `OS: ${os.id}\nCliente: ${cli.nome||'—'}\nData/hora da alteração: ${quando}\n\n`+
         `O dia e a hora trabalhada NÃO foram alterados (são bloqueados ao técnico).\n`+
         `Apenas o conteúdo do relatório foi editado. Reveja a alteração no sistema e marque como revista.`;
-      await fetch('https://api.brevo.com/v3/smtp/email',{
+      await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -20804,7 +20804,7 @@ async function ejsEnviar(tipoTemplate, params){
     };
 
     try{
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':brevoKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),
@@ -22953,7 +22953,7 @@ async function rpEnviarRelacaoTecnicos(auto){
     totalGlobalE  += emElab.length;
 
     try{
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -22976,7 +22976,7 @@ async function rpEnviarRelacaoTecnicos(auto){
     const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} por iniciar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
     const assuntoC = `📋 Relação consolidada — ${totalGlobalOS} OS pendentes (${new Date().toLocaleDateString('pt-PT')})`;
     try{
-      const rc = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const rc = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -25867,7 +25867,7 @@ async function brevoEnviarRelatorio(osId){
 
   try{
     toast('⏳ A enviar email ao cliente...','📧');
-    const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+    const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
       method:'POST',
       headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
       body:JSON.stringify(payload),
@@ -33880,7 +33880,7 @@ window.cliHistoricoImprimir = function(cliId){
 
     try{
       _toast('⏳ A enviar o relatório ao cliente...','📧');
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),
@@ -34956,7 +34956,7 @@ Deixa vazio o que não conseguires ler.`);
       '<table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="background:#eef2f4;"><th style="padding:8px 10px;text-align:left;">O quê</th><th style="padding:8px 10px;text-align:right;">Valor</th><th style="padding:8px 10px;text-align:left;">Vencimento</th><th style="padding:8px 10px;text-align:left;">Estado</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
       '<p style="color:#94a3b8;font-size:12px;margin-top:16px;">Enviado automaticamente pelo HidroGest · Contas a Pagar.</p></div>';
     try{
-      const resp=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',
+      const resp=await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({sender:{name:emp.nome||'HidroGest',email:dest},to:[{email:dest,name:emp.nome||'Gestão'}],
           subject:'⏰ Contas a pagar — '+lista.length+' a vencer'+(venc.length?' ('+venc.length+' vencidas)':''),htmlContent:html})});
@@ -35892,7 +35892,7 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
 
     try{
       _toast('⏳ A enviar o relatório ao cliente...','📧');
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),

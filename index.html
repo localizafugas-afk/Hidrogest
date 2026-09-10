@@ -22647,6 +22647,19 @@ function rpEntraPipeline(o){
   return o.estado==='concluida' || (o.estado==='os_fechada' && o.fechadaSemRelatorio);
 }
 
+// "Trabalho feito" para o cartão de relatórios em falta:
+// em curso, vista (agendada já aberta pelo técnico), concluída ou fechada.
+// Ficam de fora: agendada NÃO vista e cancelada.
+function rpTrabalhoFeitoEstado(o){
+  if(!o || o.estado==='cancelada') return false;
+  if(o.estado==='em_curso' || o.estado==='concluida' || o.estado==='os_fechada') return true;
+  if(o.estado==='agendada' && o.notificadoTecnico===true) return true; // "vista"
+  return false;
+}
+function rpHojeStr(){
+  const d=new Date(); d.setHours(0,0,0,0);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function rpRenderHomeCards(){
   const cards = document.getElementById('rp-home-cards');
   if(!cards) return;
@@ -22668,10 +22681,14 @@ function rpRenderHomeCards(){
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
-  // Vista única: trabalho feito (concluída/fechada) mas relatório ainda por elaborar — todas, sem prazo
-  counts.sem_rel_todos = ordens.filter(os=>{
+  // Vista única: trabalho feito (em curso/vista/concluída/fechada) mas relatório
+  // ainda por elaborar, com data até hoje. Inclui Garantia/Orçamento.
+  // Ficam de fora: futuras, agendadas não vistas e canceladas.
+  const _hojeSRT = rpHojeStr();
+  counts.sem_rel_todos = (window.DB.ordens||[]).filter(os=>{
     if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return false;
-    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return false;
+    if(!rpTrabalhoFeitoEstado(os)) return false;
+    if(os.data && os.data>_hojeSRT) return false;
     const _r = rels.find(x=>x.id===os.id);
     return typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado');
   }).length;
@@ -22737,7 +22754,7 @@ function rpRender(){
   const q = (document.getElementById('rp-search')?.value||'').toLowerCase().trim();
 
   // Ordenar OS concluídas — agendas ainda não realizadas não entram nesta listagem
-  let ordens = [...(window.DB.ordens||[])].filter(rpEntraPipeline);
+  let ordens = [...(window.DB.ordens||[])].filter(filterEst==='sem_rel_todos' ? rpTrabalhoFeitoEstado : rpEntraPipeline);
   ordens.sort((a,b)=>(b.concluidoEm||b.data||'').localeCompare(a.concluidoEm||a.data||''));
 
   // Garantia/Orçamento não são cobradas — ficam fora da vista normal,
@@ -22745,7 +22762,7 @@ function rpRender(){
   // para não se misturarem com os pendentes do dia-a-dia (faturação).
   if(filterEst==='nao_faturavel'){
     ordens = ordens.filter(o=>typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
-  } else {
+  } else if(filterEst!=='sem_rel_todos'){
     ordens = ordens.filter(o=>!(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   }
 
@@ -22753,6 +22770,7 @@ function rpRender(){
   if(filterEst && filterEst!=='nao_faturavel'){
     ordens = ordens.filter(os=>{
       if(filterEst==='sem_rel_todos'){
+        if(os.data && os.data>rpHojeStr()) return false;
         const _relSRT=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
         return typeof relatorioFeito==='function' ? !relatorioFeito(_relSRT) : (_relSRT?.estado!=='enviado');
       }

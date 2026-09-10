@@ -22855,7 +22855,7 @@ function rpRender(){
         }
       </td>
       <td data-col="prazo">${rpPrazoLabel(os)}</td>
-      <td>${rpBadgeEstado(est, dias)}</td>
+      <td>${rpBadgeEstado(est, dias)}${filterEst==='sem_rel_todos'?((rel&&rel.campos&&Object.keys(rel.campos).length>0)?` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;white-space:nowrap;">📝 Rascunho</span>`:` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;white-space:nowrap;">⏳ Por fazer</span>`):''}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;">
         <div style="display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;">
           ${rel ? `<button class="btn btn-sm" style="font-size:11px;padding:4px 8px;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;" onclick="rpVerRelatorio('${os.id}')" title="Ver relatório">👁</button>` : ''}

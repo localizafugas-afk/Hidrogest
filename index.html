@@ -20814,8 +20814,8 @@ async function ejsEnviar(tipoTemplate, params){
         return {modo:'brevo', ok:true};
       }
       const err = await r.json().catch(()=>({}));
-      console.error(`❌ Brevo erro ${r.status}:`, err);
-      toast(`❌ Erro Brevo (${r.status}): ${err.message||'verifique a API Key em Configurações → Email'}`,'❌');
+      console.error(`❌ Brevo erro ${r.status} → ${params.to_email}:`, err);
+      toast(`❌ Erro Brevo (${r.status}) ao enviar para ${params.to_email}: ${err.message||'verifique a API Key / remetente em Configurações → Email'}`,'❌',9000);
       return {modo:'brevo-erro', status:r.status};
     }catch(e){
       console.error('❌ Brevo ligação falhou:', e);

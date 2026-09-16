@@ -3583,6 +3583,7 @@ Localiza Fugas
     <div class="mb" id="mo-os-tec-body"></div>
     <div class="mf" id="mo-os-tec-footer">
       <button class="btn btn-ghost" onclick="_osHistCliente()">📚 Histórico do cliente</button>
+      <button id="mo-os-tec-editar" class="btn btn-primary btn-sm" style="display:none;background:#1e3a5f;" onclick="_osEditarRelatorio()">✏️ Editar relatório</button>
       <button class="btn btn-ghost" onclick="closeMo('mo-os-tec')">Fechar</button>
     </div>
   </div>
@@ -13133,6 +13134,7 @@ function osBloquearAuxiliar(o, acao){
 
 function osAbrirDetalhe(id){
   window._osDetalheId=id;
+  if(typeof _osAtualizarBotaoEditar==='function') _osAtualizarBotaoEditar(id);
   const o=(window.DB.ordens||[]).find(x=>x.id===id); if(!o) return;
   const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
   const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
@@ -13342,7 +13344,7 @@ function osAbrirDetalhe(id){
             const cls2=pronto?'rp-pulse-green':emElab?'rp-pulse-yellow':'';
             const txt2=pronto?'Relatório enviado ao cliente':emElab?'Relatório em elaboração':'Criar relatório';
             return `<div class="${cls2}" style="width:28px;height:28px;border-radius:50%;background:${cor2};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">${pronto?'✓':emElab?'📝':'2'}</div>
-            <div style="font-weight:700;font-size:14px;color:${cor2};">${txt2}</div>`;
+            <div style="font-weight:700;font-size:14px;color:${cor2};">${txt2}</div>${emElab?`<button class="btn btn-primary btn-sm" style="background:#d97706;color:#fff;margin-left:auto;white-space:nowrap;flex-shrink:0;" onclick="closeMo('mo-os-tec');rpAbrirFormulario('${o.id}')">✏️ Editar relatório</button>`:''}`;
           })()}
         </div>
         ${(()=>{
@@ -22150,13 +22152,13 @@ function agRecEditarSimples(id){
         </div>
         <div id="rp-autosave-badge" style="display:none;margin-left:auto;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;white-space:nowrap;"></div>
       </div>
-      <button class="mc" onclick="rpFecharComGuardaRascunho().then(()=>{const _oid1=window._rpEditOsId;closeMo('mo-relat-pesquisa');if(_oid1)setTimeout(()=>osAbrirConcluir(_oid1),300);});" style="color:#fff;font-size:22px;">×</button>
+      <button class="mc" onclick="_rpVoltarOS();" style="color:#fff;font-size:22px;">×</button>
     </div>
     <div class="mb" id="rp-modal-body">
       <!-- Preenchido dinamicamente -->
     </div>
     <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);z-index:10;gap:8px;flex-wrap:wrap;padding-bottom:calc(10px + env(safe-area-inset-bottom));">
-      <button class="btn btn-ghost" onclick="rpFecharComGuardaRascunho().then(()=>{const _oid=window._rpEditOsId;closeMo('mo-relat-pesquisa');if(_oid)setTimeout(()=>osAbrirConcluir(_oid),300);});">← Voltar à OS</button>
+      <button class="btn btn-ghost" onclick="_rpVoltarOS();">← Voltar à OS</button>
       <button class="btn btn-ghost btn-sm" onclick="rpSalvarRascunho()">💾 Guardar rascunho</button>
       <button class="btn btn-ghost btn-sm" onclick="rpPreviewFormulario()" style="color:var(--accent);border-color:var(--accent);">👁 Pré-visualizar</button>
       <button class="btn btn-primary" onclick="rpSalvarRelatorio()">✅ Guardar e voltar à OS</button>
@@ -24085,11 +24087,24 @@ window.rpTecAnomIn=function(val){ window._rpTecAnom=val; };
 window.rpTecAddLocal=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'loc_'+Date.now(),grupo:'__outros',nome:'',tipo:'tempo',min:5,status:'',obs:'',custom:true}); rpTecFormAbrir(window._rpEditOsId,true); };
 window.rpTecAddDano=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'dano_'+Date.now(),grupo:'__danos',nome:'',dano:true,obs:'',status:''}); rpTecFormAbrir(window._rpEditOsId,true); };
 window.rpTecRemLocal=function(key){ window._rpTecTestes=(window._rpTecTestes||[]).filter(t=>t.key!==key); rpTecFormAbrir(window._rpEditOsId,true); };
-window.rpTecVoltar=function(){
-  if(typeof rpFecharComGuardaRascunho==='function'){
-    rpFecharComGuardaRascunho().then(function(){ var _oid=window._rpEditOsId; closeMo('mo-relat-pesquisa'); if(_oid&&typeof osAbrirConcluir==='function') setTimeout(function(){osAbrirConcluir(_oid);},300); }).catch(function(){ closeMo('mo-relat-pesquisa'); });
-  } else { var _oid=window._rpEditOsId; closeMo('mo-relat-pesquisa'); if(_oid&&typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid); }
+window._rpVoltarOS=function(){
+  var _oid=window._rpEditOsId;
+  var go=function(){
+    closeMo('mo-relat-pesquisa');
+    if(!_oid) return;
+    var os=(window.DB.ordens||[]).find(function(x){return x.id===_oid;})||{};
+    // Se a OS já foi assinada/concluída, voltar à FICHA (mantém assinaturas) em vez de reabrir a conclusão.
+    var jaAssinada=!!(os.assinaturaCliente||os.assinaturaTecnico||os.fechadoEm||os.fechadaEm||os.estado==='os_fechada');
+    setTimeout(function(){
+      if(jaAssinada&&typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid);
+      else if(typeof osAbrirConcluir==='function') osAbrirConcluir(_oid);
+      else if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid);
+    },300);
+  };
+  if(typeof rpFecharComGuardaRascunho==='function') rpFecharComGuardaRascunho().then(go).catch(go);
+  else go();
 };
+window.rpTecVoltar=function(){ if(typeof _rpVoltarOS==='function') _rpVoltarOS(); };
 
 async function _rpTecComprimir(file){
   const MAX=1600;
@@ -24283,6 +24298,25 @@ window._abrirGmailSeguro=function(para, assunto, corpo, authuser){
   window.open(url,'_blank');
   if(extra && typeof toast==='function') toast('📧 Gmail aberto'+extra,'📧');
   return true;
+};
+
+/* ── Garantir edição de relatório em elaboração (botão no rodapé da OS) ── */
+window._osEditarRelatorio=function(){
+  const id=window._osDetalheId; if(!id) return;
+  if(typeof closeMo==='function') closeMo('mo-os-tec');
+  if(typeof rpAbrirFormulario==='function') rpAbrirFormulario(id);
+};
+window._osAtualizarBotaoEditar=function(id){
+  try{
+    const b=document.getElementById('mo-os-tec-editar'); if(!b) return;
+    const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===id);
+    const role=window.currentUser?.role||'';
+    const os=(window.DB.ordens||[]).find(x=>x.id===id)||{};
+    const podeGestao=['admin','gerente','supervisor'].includes(role);
+    const atribuido=(role==='tecnico')&&(os.tecnicos||[]).includes(window.currentUser?.id);
+    const emElab=rel&&rel.campos&&Object.keys(rel.campos).length>0&&rel.estado!=='enviado'&&!rel.bloqueadoEdicao;
+    b.style.display=((podeGestao||atribuido)&&emElab)?'':'none';
+  }catch(e){}
 };
 
 async function rpSalvarRelatorio(){

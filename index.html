@@ -3582,6 +3582,7 @@ Localiza Fugas
     <div class="mh"><div class="mh-title">Ficha de Ordem de Serviço</div><button class="mc" onclick="closeMo('mo-os-tec')">×</button></div>
     <div class="mb" id="mo-os-tec-body"></div>
     <div class="mf" id="mo-os-tec-footer">
+      <button class="btn btn-ghost" onclick="_osHistCliente()">📚 Histórico do cliente</button>
       <button class="btn btn-ghost" onclick="closeMo('mo-os-tec')">Fechar</button>
     </div>
   </div>
@@ -13131,6 +13132,7 @@ function osBloquearAuxiliar(o, acao){
 }
 
 function osAbrirDetalhe(id){
+  window._osDetalheId=id;
   const o=(window.DB.ordens||[]).find(x=>x.id===id); if(!o) return;
   const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
   const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
@@ -20665,7 +20667,7 @@ function mostrarAvisoEmailManual(para, assunto, corpo){
       <div style="font-size:11px;opacity:.8;margin-top:2px;">Configure a API Key Brevo em Configurações → Email para envio automático</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent('${para}')+'&su='+encodeURIComponent('${assEsc}')+'&body='+encodeURIComponent('${corpoEsc}'),'_blank');document.getElementById('aviso-email-manual')?.remove();" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">📧 Enviar pelo Gmail</button>
+      <button onclick="_abrirGmailSeguro('${para}','${assEsc}','${corpoEsc}');document.getElementById('aviso-email-manual')?.remove();" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">📧 Enviar pelo Gmail</button>
       <button onclick="navigate('configuracoes');setTimeout(()=>cfgTabEmail(),150);document.getElementById('aviso-email-manual')?.remove();" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">⚙️ Configurar Brevo</button>
       <button onclick="document.getElementById('aviso-email-manual')?.remove();" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:16px;">×</button>
     </div>`;
@@ -22632,7 +22634,8 @@ function rpAbrirLista(estado, titulo){
     'atras_antigos':'📦 Relatórios antigos a analisar · anteriores a 01/08/2026',
     'atras_pagamento':'💰 Atrasados por falta de pagamento · desde 01/08/2026',
     'atras_tecnico':'🔧 Atrasados por falta de preenchimento técnico · desde 01/08/2026',
-    'sem_rel_todos':'🔴 Trabalho feito · sem relatório — todas'
+    'sem_rel_todos':'🔴 Trabalho feito · sem relatório — todas',
+    'submetido_tecnico':'📤 Enviados pelo técnico · a concluir'
   };
   const el = document.getElementById('rp-lista-titulo');
   if(el) el.textContent = titulo || titulos[estado] || 'Relatórios';
@@ -22693,8 +22696,16 @@ function rpRenderHomeCards(){
     return typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado');
   }).length;
 
+  counts.submetido_tecnico = (window.DB.ordens||[]).filter(os=>{
+    if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return false;
+    if(!rpTrabalhoFeitoEstado(os)) return false;
+    const _rST = rels.find(x=>x.id===os.id);
+    return _rST && _rST.submetidoPeloTecnico && _rST.estado!=='enviado';
+  }).length;
+
   const defs = [
     {key:'sem_rel_todos',   icon:'🔴', label:'Trabalho feito · sem relatório', desc:'Todas · relatório por elaborar', urgente:true},
+    {key:'submetido_tecnico', icon:'📤', label:'Enviados pelo técnico', desc:'A concluir pela gestão', urgente:true},
     {key:'atras_antigos',   icon:'📦', label:'Antigos a analisar',      desc:'Anteriores a 01/08/2026'},
     {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · transf./valor por confirmar', urgente:true},
     {key:'atras_tecnico',   icon:'🔧', label:'Atraso · falta relatório', desc:'Desde 01/08 · pago, falta preencher', urgente:true},
@@ -22754,7 +22765,7 @@ function rpRender(){
   const q = (document.getElementById('rp-search')?.value||'').toLowerCase().trim();
 
   // Ordenar OS concluídas — agendas ainda não realizadas não entram nesta listagem
-  let ordens = [...(window.DB.ordens||[])].filter(filterEst==='sem_rel_todos' ? rpTrabalhoFeitoEstado : rpEntraPipeline);
+  let ordens = [...(window.DB.ordens||[])].filter((filterEst==='sem_rel_todos'||filterEst==='submetido_tecnico') ? rpTrabalhoFeitoEstado : rpEntraPipeline);
   ordens.sort((a,b)=>(b.concluidoEm||b.data||'').localeCompare(a.concluidoEm||a.data||''));
 
   // Garantia/Orçamento não são cobradas — ficam fora da vista normal,
@@ -22762,7 +22773,7 @@ function rpRender(){
   // para não se misturarem com os pendentes do dia-a-dia (faturação).
   if(filterEst==='nao_faturavel'){
     ordens = ordens.filter(o=>typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
-  } else if(filterEst!=='sem_rel_todos'){
+  } else if(filterEst!=='sem_rel_todos' && filterEst!=='submetido_tecnico'){
     ordens = ordens.filter(o=>!(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   }
 
@@ -22780,6 +22791,10 @@ function rpRender(){
       }
       if(filterEst==='atras_antigos'||filterEst==='atras_pagamento'||filterEst==='atras_tecnico'){
         return rpSubAtraso(os)===filterEst;
+      }
+      if(filterEst==='submetido_tecnico'){
+        const _relST=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+        return _relST && _relST.submetidoPeloTecnico && _relST.estado!=='enviado';
       }
       return rpEstadoCard(os)===filterEst;
     });
@@ -23324,6 +23339,7 @@ function rpAbrirFormulario(osId, preserveTemp){
   }
   // Guardar flag global para uso no formulário e no salvamento
   window._rpFormIsTecnico = _isTecnico;
+  if(_isTecnico){ return rpTecFormAbrir(osId, preserveTemp); }
   // ─────────────────────────────────────────────────────────────────────────
 
   window._rpEditOsId  = osId;
@@ -23847,6 +23863,7 @@ function rpRecolherCampos(){
     equipamentos: temControlo('rp-eq')   ? getChecked('rp-eq')   : (existing.equipamentos||[]),
     conclusao:    gc('rp-conclusao')   || existing.conclusao   || '',
     conclusaoIA:  document.getElementById('rp-conclusao')?.dataset.ia==='1',
+    testes:       (window._rpFormIsTecnico && Array.isArray(window._rpTecTestes)) ? window._rpTecTestes : (existing.testes||[]),
     sugestao:     gc('rp-sugestao')    || existing.sugestao    || '',
     fotos:        window._rpFotosTemp  || [],
     // Novos campos de caracterização
@@ -24012,6 +24029,262 @@ async function rpSalvarRascunho(){
 }
 
 // ── Guardar relatório completo ───────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   FORMULÁRIO DO TÉCNICO — "Testes realizados"
+   Cada teste: 3 estados (anomalia/sem/não se aplica), tempo, FOTO e
+   OBSERVAÇÃO próprias. "Outros locais testados" = cartões onde o
+   técnico escreve o local. Fotos vão para a galeria da OS com o nome
+   do teste como legenda (entram no PDF). Grava RASCUNHO para a gestão.
+   ═══════════════════════════════════════════════════════════════ */
+function _rpTecEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _rpTecEscAttr(s){return _rpTecEsc(s).replace(/"/g,'&quot;');}
+
+function _rpTecListaBase(){
+  const G1='Sistema de água sob pressão — teste de estanqueidade';
+  const G2='Tubulações de esgoto — teste de estanqueidade';
+  const G3='Teste de alagamento';
+  const G4='Deteção / pesquisa';
+  const G5='Testes visuais';
+  return [
+    {key:'agua_fria',   grupo:G1, nome:'Água fria',   tipo:'tempo', min:5},
+    {key:'agua_quente', grupo:G1, nome:'Água quente', tipo:'tempo', min:5},
+    {key:'esg_duche', grupo:G2, nome:'Base de duche e banheira', tipo:'tempo', min:5},
+    {key:'esg_bide',  grupo:G2, nome:'Bidé', tipo:'tempo', min:5},
+    {key:'esg_lav',   grupo:G2, nome:'Lavatório', tipo:'tempo', min:5},
+    {key:'esg_loica', grupo:G2, nome:'Lava-loiça (cozinha)', tipo:'tempo', min:5},
+    {key:'esg_ml',    grupo:G2, nome:'Máquina de lavar loiça (ligações)', tipo:'tempo', min:5},
+    {key:'esg_mr',    grupo:G2, nome:'Máquina de lavar roupa (ligações)', tipo:'tempo', min:5},
+    {key:'esg_ralos', grupo:G2, nome:'Ralos e caixas de esgoto', tipo:'tempo', min:5},
+    {key:'alag_telhado', grupo:G3, nome:'Telhado', tipo:'tempo', min:10},
+    {key:'alag_terraco', grupo:G3, nome:'Terraço', tipo:'tempo', min:10},
+    {key:'alag_varanda', grupo:G3, nome:'Varanda', tipo:'tempo', min:10},
+    {key:'det_rastreador', grupo:G4, nome:'Leitura com rastreador químico (UV)', tipo:'simple'},
+    {key:'vis_autoclismo', grupo:G5, nome:'Autoclismo', tipo:'visual'},
+    {key:'vis_sanita',     grupo:G5, nome:'Sanita',     tipo:'visual'},
+  ];
+}
+
+function _rpTecInitEstado(c){
+  const base=_rpTecListaBase();
+  const saved={}; (Array.isArray(c.testes)?c.testes:[]).forEach(t=>{ if(t&&t.key) saved[t.key]=t; });
+  const preds=base.map(t=>({...t, status:(saved[t.key]&&saved[t.key].status)||'', obs:(saved[t.key]&&saved[t.key].obs)||'', min:(saved[t.key]&&saved[t.key].min!=null)?saved[t.key].min:(t.min!=null?t.min:null)}));
+  const extras=(Array.isArray(c.testes)?c.testes:[]).filter(t=>t&&(t.custom||t.dano)).map(t=>({key:t.key,grupo:t.dano?'__danos':'__outros',nome:t.nome||'',tipo:t.tipo||'tempo',min:(t.min!=null?t.min:5),status:t.status||'',obs:t.obs||'',custom:!!t.custom,dano:!!t.dano}));
+  window._rpTecTestes=[...preds, ...extras];
+  window._rpTecObs=c.reclamacao||c.descritivo||'';
+  window._rpTecEquips=new Set(c.equipamentos||[]);
+}
+
+window._rpTecFind=function(key){ return (window._rpTecTestes||[]).find(x=>x.key===key); };
+window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(t){ t.status=(t.status===st?'':st); rpTecFormAbrir(window._rpEditOsId,true); } };
+window.rpTecMin=function(key,val){ const t=window._rpTecFind(key); if(t) t.min=parseInt(val)||0; };
+window._rpTecSetNome=function(key,val){ const t=window._rpTecFind(key); if(t) t.nome=val; };
+window._rpTecTesteObs=function(key,val){ const t=window._rpTecFind(key); if(t) t.obs=val; };
+window.rpTecEquip=function(name,on){ if(!window._rpTecEquips) window._rpTecEquips=new Set(); if(on) window._rpTecEquips.add(name); else window._rpTecEquips.delete(name); };
+window.rpTecObsIn=function(val){ window._rpTecObs=val; };
+window.rpTecAnomIn=function(val){ window._rpTecAnom=val; };
+window.rpTecAddLocal=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'loc_'+Date.now(),grupo:'__outros',nome:'',tipo:'tempo',min:5,status:'',obs:'',custom:true}); rpTecFormAbrir(window._rpEditOsId,true); };
+window.rpTecAddDano=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'dano_'+Date.now(),grupo:'__danos',nome:'',dano:true,obs:'',status:''}); rpTecFormAbrir(window._rpEditOsId,true); };
+window.rpTecRemLocal=function(key){ window._rpTecTestes=(window._rpTecTestes||[]).filter(t=>t.key!==key); rpTecFormAbrir(window._rpEditOsId,true); };
+window.rpTecVoltar=function(){
+  if(typeof rpFecharComGuardaRascunho==='function'){
+    rpFecharComGuardaRascunho().then(function(){ var _oid=window._rpEditOsId; closeMo('mo-relat-pesquisa'); if(_oid&&typeof osAbrirConcluir==='function') setTimeout(function(){osAbrirConcluir(_oid);},300); }).catch(function(){ closeMo('mo-relat-pesquisa'); });
+  } else { var _oid=window._rpEditOsId; closeMo('mo-relat-pesquisa'); if(_oid&&typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid); }
+};
+
+async function _rpTecComprimir(file){
+  const MAX=1600;
+  const draw=(src,w,h)=>{ let nw=w,nh=h; if(w>MAX||h>MAX){ if(w>h){nh=Math.round(h*MAX/w);nw=MAX;}else{nw=Math.round(w*MAX/h);nh=MAX;} } const cv=document.createElement('canvas'); cv.width=nw;cv.height=nh; cv.getContext('2d').drawImage(src,0,0,nw,nh); return cv.toDataURL('image/jpeg',.82); };
+  if(typeof createImageBitmap==='function'){ try{ const bmp=await createImageBitmap(file); const d=draw(bmp,bmp.width,bmp.height); if(bmp.close) bmp.close(); return d; }catch(e){} }
+  return await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>res(draw(img,img.naturalWidth,img.naturalHeight)); img.onerror=rej; img.src=r.result; }; r.onerror=rej; r.readAsDataURL(file); });
+}
+window._rpTecAddFoto=async function(inputEl,key){
+  const t=window._rpTecFind(key); if(!t){ inputEl.value=''; return; }
+  const nome=(t.nome||'').trim();
+  if(!nome){ if(typeof toast==='function') toast('Escreve primeiro o local testado.','📍',4000); else alert('Escreve primeiro o local testado.'); inputEl.value=''; return; }
+  const files=[...inputEl.files]; inputEl.value=''; if(!files.length) return;
+  for(const f of files){ if(!f.type||!f.type.startsWith('image/')) continue; try{ const d=await _rpTecComprimir(f); (window._rpFotosTemp=window._rpFotosTemp||[]).push({dataUrl:d, legenda:nome}); }catch(e){ console.warn('rpTec foto falhou:',e); } }
+  rpTecFormAbrir(window._rpEditOsId,true);
+};
+
+function _rpTecStatusBtns(t){
+  const opt=[['anomalia','🔴 Anomalia detetada','#dc2626','#fef2f2','#fecaca'],['sem','🟢 Sem anomalia','#16a34a','#f0fdf4','#bbf7d0'],['na','⚪ Não se aplica','#64748b','#f8fafc','#e2e8f0']];
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+opt.map(function(o){
+    const on=t.status===o[0];
+    return '<button type="button" onclick="rpTecStatus(\''+t.key+'\',\''+o[0]+'\')" style="flex:1;min-width:100px;border:1.5px solid '+(on?o[2]:o[4])+';background:'+(on?o[3]:'#fff')+';color:'+(on?o[2]:'#64748b')+';border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:700;cursor:pointer;">'+o[1]+'</button>';
+  }).join('')+'</div>';
+}
+
+function _rpTecCard(t){
+  const bc=t.dano?'#f59e0b':(t.status==='anomalia'?'#dc2626':(t.status==='sem'?'#16a34a':(t.status==='na'?'#cbd5e1':'#e2e8f0')));
+  const vtag=(t.tipo==='visual')?'<span style="display:inline-block;font-size:9px;font-weight:700;color:#6d28d9;background:#f3e8ff;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px;">Visual</span>':'';
+  const _ph=t.dano?'Local do dano (ex: teto do WC, parede do quarto...)':'Escreve o local testado (ex: cozinha, garagem, terraço...)';
+  const nomeHTML=(t.custom||t.dano)
+    ? '<div style="display:flex;align-items:center;gap:8px;"><input type="text" value="'+_rpTecEscAttr(t.nome||'')+'" oninput="_rpTecSetNome(\''+t.key+'\',this.value)" placeholder="'+_ph+'" style="flex:1;font-size:15px;font-weight:600;color:#0f2447;border:none;border-bottom:1.5px solid #cbd5e1;background:transparent;outline:none;padding:3px 0;"><button type="button" onclick="rpTecRemLocal(\''+t.key+'\')" title="Remover" style="background:#fee2e2;border:none;border-radius:7px;width:30px;height:30px;color:#dc2626;cursor:pointer;font-size:15px;flex-shrink:0;">🗑</button></div>'
+    : '<div style="font-size:15px;font-weight:600;color:#0f2447;">'+vtag+_rpTecEsc(t.nome)+'</div>';
+  const tempo=(t.tipo==='tempo' && !t.dano)
+    ? '<div style="display:flex;align-items:center;gap:7px;margin-top:9px;background:#ecfeff;border-radius:9px;padding:6px 8px;width:max-content;"><span style="font-size:10px;font-weight:700;color:#0e7490;text-transform:uppercase;">Tempo</span><input type="number" min="1" max="120" value="'+(t.min!=null?t.min:5)+'" oninput="rpTecMin(\''+t.key+'\',this.value)" style="width:44px;text-align:center;border:1px solid #a5d8e0;border-radius:6px;padding:5px 2px;font-size:14px;font-weight:700;"><span style="font-size:11px;color:#475569;">min</span></div>'
+    : '';
+  const nm=(t.nome||'').trim();
+  let fotosHTML='';
+  if(nm){
+    (window._rpFotosTemp||[]).forEach((f,gi)=>{
+      if((f.legenda||'')!==nm) return;
+      fotosHTML+='<div style="position:relative;width:66px;height:66px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;"><img src="'+(f.url||f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;"><button onclick="window._rpFotosTemp.splice('+gi+',1);rpTecFormAbrir(window._rpEditOsId,true)" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,.85);border:none;border-radius:50%;width:18px;height:18px;color:#fff;cursor:pointer;font-size:11px;line-height:1;">×</button></div>';
+    });
+  }
+  const addFoto='<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px dashed #94a3b8;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;color:#0f2447;font-size:12.5px;flex-shrink:0;">📷 Foto<input type="file" accept="image/*" multiple style="display:none;" onchange="_rpTecAddFoto(this,\''+t.key+'\')"></label>';
+  const obsHTML='<textarea oninput="_rpTecTesteObs(\''+t.key+'\',this.value)" rows="2" placeholder="'+(t.dano?'Observação do dano (opcional)':'Observação deste teste (opcional)')+'" style="width:100%;margin-top:10px;font-size:13px;min-height:44px;resize:vertical;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">'+_rpTecEsc(t.obs||'')+'</textarea>';
+  return '<div data-tec-card="'+t.key+'" style="border:1.5px solid '+bc+';border-radius:11px;padding:11px 12px;margin-bottom:9px;">'
+    +nomeHTML+tempo+(t.dano?'':_rpTecStatusBtns(t))
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'+fotosHTML+addFoto+'</div>'
+    +obsHTML+'</div>';
+}
+
+function rpTecFormAbrir(osId, preserveTemp){
+  osId=osId||window._rpEditOsId;
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  window._rpEditOsId=osId;
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const c=rel.campos||{};
+  if(!preserveTemp){
+    try{ window._rpFotosTemp=[...(typeof rpGetFotos==='function'?rpGetFotos(osId,c,rel):(c.fotos||rel.fotos||[]))]; }
+    catch(e){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
+  } else if(!Array.isArray(window._rpFotosTemp)){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
+  if(!preserveTemp || !Array.isArray(window._rpTecTestes)) _rpTecInitEstado(c);
+  if(!preserveTemp || typeof window._rpTecAnom!=='string') window._rpTecAnom=(c.tipoProblema||os.tipoAnomalia||'');
+
+  const EQUIPS_DEFAULT=['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
+  const EQUIPS=(window.DB&&window.DB.empresaConfig&&window.DB.empresaConfig.equipamentosRelatorio&&window.DB.empresaConfig.equipamentosRelatorio.length)?window.DB.empresaConfig.equipamentosRelatorio:EQUIPS_DEFAULT;
+
+  let grupoAtual='', testesHTML='';
+  (window._rpTecTestes||[]).filter(t=>!t.custom && !t.dano).forEach(t=>{
+    if(t.grupo!==grupoAtual){ grupoAtual=t.grupo; testesHTML+='<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0e7490;margin:16px 4px 8px;">'+_rpTecEsc(t.grupo)+'</div>'; }
+    testesHTML+=_rpTecCard(t);
+  });
+
+  const customs=(window._rpTecTestes||[]).filter(t=>t.custom && !t.dano);
+  const _sec=(t)=>'<div style="font-size:13px;font-weight:800;color:#0f2447;margin:20px 2px 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;">'+t+'</div>';
+  let outrosHTML=_sec('Outros locais testados')
+    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Escreve o local que testaste e marca o resultado (podes juntar foto e observação).</div>'
+    +customs.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddLocal()" style="width:100%;min-height:46px;border:1.5px dashed #0e7490;background:#fff;color:#0e7490;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar local testado</button>';
+
+  const danos=(window._rpTecTestes||[]).filter(t=>t.dano);
+  let danosHTML=_sec('Danos observados')
+    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Indica o local onde aparecem os danos e junta as fotos dos mesmos.</div>'
+    +danos.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddDano()" style="width:100%;min-height:46px;border:1.5px dashed #f59e0b;background:#fff;color:#b45309;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar dano</button>';
+
+  const ANOM=['Fuga de água','Fuga em piscina','Fuga em rede de incêndio','Infiltração','Entupimento','Rotura','Humidade','Outro'];
+  const anomBloco=_sec('Anomalia')
+    +'<select id="rp-tipo-anomalia" onchange="rpTecAnomIn(this.value)" style="width:100%;font-size:15px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f2447;"><option value="">— Seleciona a anomalia —</option>'
+    +ANOM.map(a=>'<option value="'+_rpTecEscAttr(a)+'" '+(window._rpTecAnom===a?'selected':'')+'>'+_rpTecEsc(a)+'</option>').join('')+'</select>';
+
+  const equipsHTML=EQUIPS.map(e=>{
+    const ck=window._rpTecEquips&&window._rpTecEquips.has(e);
+    return '<label style="display:flex;align-items:center;gap:11px;padding:9px 6px;border-top:1px solid #eef2f7;cursor:pointer;"><input type="checkbox" name="rp-eq" value="'+_rpTecEscAttr(e)+'" '+(ck?'checked':'')+' onchange="rpTecEquip(this.value,this.checked)" style="width:20px;height:20px;accent-color:#0e7490;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#0f2447;">'+_rpTecEsc(e)+'</span></label>';
+  }).join('');
+
+  document.getElementById('rp-modal-body').innerHTML=
+    '<div style="margin-bottom:12px;"><button type="button" onclick="rpTecVoltar()" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;color:#0f2447;cursor:pointer;">← Voltar à OS</button></div>'
+    +'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;color:#1e3a5f;line-height:1.5;">📋 <strong>Testes realizados.</strong> Em cada teste marca 🔴/🟢/⚪, indica o tempo, junta foto e escreve observação se precisares. O relatório é depois elaborado pela gestão a partir daqui.</div>'
+    +anomBloco
+    +_sec('Testes realizados')+testesHTML
+    +outrosHTML
+    +danosHTML
+    +_sec('Equipamentos utilizados')+'<div style="border:1px solid #e2e8f0;border-radius:11px;padding:2px 10px;">'+equipsHTML+'</div>'
+    +_sec('O que observou durante a pesquisa (geral)')
+    +'<div style="font-size:12.5px;color:#475569;margin:0 2px 8px;line-height:1.45;">Resumo geral do que viste. Não precisas de redigir — a gestão faz o relatório a partir daqui.</div>'
+    +'<textarea class="fta" id="rp-reclamacao" rows="6" oninput="rpTecObsIn(this.value)" placeholder="Ex.: Mancha de humidade no teto do WC do 1.º esq. Testei a base de duche e o lavatório com corante — apareceu no teto. Não consegui aceder à varanda (estore preso)." style="width:100%;font-size:14px;min-height:120px;resize:vertical;border:1px solid #cbd5e1;border-radius:10px;padding:11px 13px;">'+_rpTecEsc(window._rpTecObs)+'</textarea>';
+
+  openMo('mo-relat-pesquisa');
+  const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]')||document.querySelector('#mo-relat-pesquisa [onclick="rpSalvarRelatorio()"]')||document.querySelector('#mo-relat-pesquisa .btn-primary');
+  if(_sb){ _sb.removeAttribute('onclick'); _sb.onclick=function(){ rpTecSalvar(osId); }; _sb.textContent='📤 Enviar à gestão'; _sb.setAttribute('data-rptec-save','1'); }
+}
+
+async function rpTecSalvar(osId){
+  osId=osId||window._rpEditOsId; if(!osId) return;
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  const existing=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const campos=rpRecolherCampos();
+  const marcados=(window._rpTecTestes||[]).filter(t=> !t.dano && (t.status || (t.custom && (t.nome||'').trim()) || (t.obs||'').trim()));
+  const danosF=(window._rpTecTestes||[]).filter(t=> t.dano && ((t.nome||'').trim() || (t.obs||'').trim()));
+  const eqs=[...(window._rpTecEquips||[])];
+  if(marcados.length||danosF.length||eqs.length){
+    const linhas=marcados.map(t=>{
+      const nm=t.custom?((t.nome||'').trim()||'(local sem nome)'):t.nome;
+      let s='• '+nm;
+      if(t.status==='anomalia') s+=' — ANOMALIA DETETADA';
+      else if(t.status==='sem') s+=' — sem anomalia';
+      else if(t.status==='na') s+=' — não se aplica';
+      if(t.tipo==='tempo'&&t.min!=null&&(t.status==='anomalia'||t.status==='sem')) s+=' ('+t.min+' min)';
+      if((t.obs||'').trim()) s+='\n   ↳ '+t.obs.trim();
+      return s;
+    });
+    let resumo='TESTES REALIZADOS:\n'+(linhas.length?linhas.join('\n'):'(nenhum)');
+    if(danosF.length) resumo+='\n\nDANOS OBSERVADOS:\n'+danosF.map(t=>'• '+((t.nome||'').trim()||'(local não indicado)')+((t.obs||'').trim()?(' — '+t.obs.trim()):'')).join('\n');
+    if(eqs.length) resumo+='\n\nEQUIPAMENTOS: '+eqs.join(', ');
+    campos.trabalho=resumo; campos.detalhamento=resumo;
+  }
+  campos.descritivo=campos.reclamacao||campos.descritivo||'';
+  const _jaEnviado=existing.estado==='enviado';
+  const rel={...existing, id:osId, osId,
+    estado:_jaEnviado?'enviado':'rascunho',
+    campos, fotos:window._rpFotosTemp||[],
+    anexos:(window._rpAnexosTemp||[]).map(a=>({nome:a.nome,tamanho:a.tamanho,tipo:a.tipo,data:a.data,base64:a.base64||''})),
+    criadoEm:existing.criadoEm||new Date().toISOString(),
+    editadoEm:new Date().toISOString(), editadoPor:window.currentUser?.id,
+    submetidoPeloTecnico:true, submetidoEm:new Date().toISOString(), submetidoPor:window.currentUser?.id,
+  };
+  const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]');
+  const _txt=_sb?_sb.textContent:''; if(_sb){ _sb.disabled=true; _sb.textContent='⏳ A enviar...'; }
+  try{
+    if(typeof rpUploadFotosPendentes==='function'){
+      await rpUploadFotosPendentes(osId,({done,total})=>{ if(_sb&&total>0) _sb.textContent='⏳ Fotos '+done+'/'+total+'...'; });
+      rel.fotos=window._rpFotosTemp||[];
+    }
+  }catch(e){ console.warn('rpTecSalvar — envio de fotos falhou:',e); rel.fotos=window._rpFotosTemp||[]; }
+  try{ await rpSaveDoc(osId, rel); }
+  catch(e){ if(_sb){ _sb.disabled=false; _sb.textContent=_txt||'📤 Enviar à gestão'; } if(typeof toast==='function') toast('❌ Não foi possível enviar: '+((e&&e.message)||'erro de ligação'),'❌',8000); return; }
+  if(window._rpAutoSaveInterval){ clearInterval(window._rpAutoSaveInterval); window._rpAutoSaveInterval=null; }
+  try{ if(typeof auditLog==='function') auditLog('relatorio_testes_tecnico','OS '+osId+' — técnico submeteu testes/observações'); }catch(e){}
+  try{ if(!existing.campos && typeof rpNotificarSupervisoresRelatorio==='function') await rpNotificarSupervisoresRelatorio(os, rel); }catch(e){}
+  if(typeof toast==='function') toast('✅ Testes e fotos enviados à gestão. Obrigado!','✅');
+  closeMo('mo-relat-pesquisa');
+  if(typeof osAbrirDetalhe==='function') setTimeout(()=>osAbrirDetalhe(osId),250);
+}
+
+/* ── Propostas: "Peritagem por" — só em recuperação de tubagem / impermeabilização ── */
+window._propPrecisaPeritagem=function(n){ n=String(n||'').toLowerCase(); return n.includes('impermeab')||n.includes('cipp')||n.includes('epóxi')||n.includes('epoxi')||n.includes('recupera')||n.includes('reabilita')||n.includes('tubagem'); };
+window._propNomeServicoAtual=function(){ const sel=document.getElementById('prop-servico'); if(!sel) return ''; const o=sel.options[sel.selectedIndex]; return (o&&o.getAttribute('data-nome'))||sel.value||''; };
+window._propTogglePeritagem=function(){ const w=document.getElementById('prop-peritagem-wrap'); if(!w) return; w.style.display=window._propPrecisaPeritagem(window._propNomeServicoAtual())?'':'none'; };
+
+/* ── Botão "Histórico do cliente" na ficha da OS (técnico e gestão) ── */
+window._osHistCliente=function(){
+  const id=window._osDetalheId; if(!id){ if(typeof toast==='function') toast('OS não identificada.','⚠️'); return; }
+  const o=(window.DB.ordens||[]).find(x=>x.id===id);
+  if(o && o.clienteId && typeof cliHistorico==='function'){ cliHistorico(o.clienteId); }
+  else if(typeof toast==='function') toast('Cliente não associado a esta OS.','⚠️');
+};
+
+
+/* ── Abrir Gmail em segurança: encurta o corpo se for grande (evita Error 400) ── */
+window._abrirGmailSeguro=function(para, assunto, corpo, authuser){
+  corpo=String(corpo==null?'':corpo);
+  let body=corpo, extra='';
+  if(encodeURIComponent(corpo).length>1500){
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(corpo); }catch(e){}
+    body='Boa tarde,\n\nSegue em anexo o documento em PDF. O texto detalhado foi copiado para a área de transferência — pode colá-lo aqui com Ctrl+V.\n\nCom os melhores cumprimentos.';
+    extra=' · texto copiado (Ctrl+V)';
+  }
+  let url='https://mail.google.com/mail/?view=cm&fs=1';
+  if(authuser) url+='&authuser='+encodeURIComponent(authuser);
+  url+='&to='+encodeURIComponent(para||'')+'&su='+encodeURIComponent(assunto||'')+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank');
+  if(extra && typeof toast==='function') toast('📧 Gmail aberto'+extra,'📧');
+  return true;
+};
+
 async function rpSalvarRelatorio(){
   const osId = window._rpEditOsId; if(!osId) return;
   const os = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
@@ -26004,8 +26277,7 @@ ${empNome}`;
   }catch(e){ console.warn('EmailJS falhou, abrindo Gmail:', e); }
 
   // Fallback: abrir Gmail com o corpo já preenchido
-  const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-  window.open(mailto,'_blank');
+  _abrirGmailSeguro(cli.email, assunto, corpo);
   toast('📧 Gmail aberto — adicione o PDF como anexo e envie!', 5000);
 };
 
@@ -26140,8 +26412,7 @@ Conclusão: ${rel.campos?.conclusao||'—'}
 
 Com os melhores cumprimentos,
 ${empNomeR}`;
-    const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assuntoFb)}&body=${encodeURIComponent(corpoFb)}`;
-    window.open(mailto,'_blank');
+    _abrirGmailSeguro(cli.email, assuntoFb, corpoFb);
     toast('📧 Gmail aberto — adicione o PDF como anexo e envie!','📧');
   }
 }
@@ -30784,6 +31055,10 @@ function propostaAbrir(clienteId){
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Elaborado por</div>
         <input class="fi" id="prop-autor" value="${utilizador}" style="font-size:13px;background:var(--s1);">
       </div>
+      <div id="prop-peritagem-wrap" style="display:none;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Peritagem por <span style="font-weight:400;text-transform:none;">(pesquisa/deteção)</span></div>
+        <input class="fi" id="prop-peritagem" value="" placeholder="Empresa ou técnico que fez a peritagem" style="font-size:13px;background:var(--s1);">
+      </div>
       <div>
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">🏷️ Marca da empresa</div>
         <select class="fs" id="prop-marca" style="font-size:13px;background:var(--s1);font-weight:700;">
@@ -30819,7 +31094,7 @@ function propostaAbrir(clienteId){
     <!-- Selecionar Serviço -->
     <div class="fg">
       <label style="font-weight:700;">Tipo de Serviço *</label>
-      <select class="fs" id="prop-servico" onchange="propostaCarregarModelo()">
+      <select class="fs" id="prop-servico" onchange="propostaCarregarModelo();window._propTogglePeritagem&&_propTogglePeritagem()">
         <option value="">— Selecione o serviço —</option>
         ${servicos.map(s=>`<option value="${s.id}" data-nome="${s.nome}" data-h1="${s.h1||0}" data-hadd="${s.hadd||0}" data-iva="${s.iva||23}">${s.nome}</option>`).join('')}
       </select>
@@ -30966,6 +31241,7 @@ function propostaAbrir(clienteId){
   setTimeout(()=>{
     const _sel = document.getElementById('prop-servico');
     if(_sel && _sel.value) propostaCarregarModelo();
+    if(window._propTogglePeritagem) _propTogglePeritagem();
   }, 50);
 }
 
@@ -31000,6 +31276,7 @@ function propostaEditar(propId){
 
     const selSrv = document.getElementById('prop-servico');
     if(selSrv && p.servicoId){ selSrv.value = p.servicoId; }
+    { const _pp=document.getElementById('prop-peritagem'); if(_pp) _pp.value=p.peritagemPor||''; if(window._propTogglePeritagem) _propTogglePeritagem(); }
     if(typeof propostaCarregarModelo==='function' && selSrv && selSrv.value){
       propostaCarregarModelo();
     }
@@ -31440,6 +31717,7 @@ async function _gerarPdfBase64(html, numProposta){
     pdf.setFontSize(9); pdf.setFont('helvetica','normal');
     pdf.setTextColor(80,80,80);
     pdf.text('Data: '+(d.dataDoc||'')+'   |   Elaborado por: '+(d.autor||''), M, y+6);
+    if(d.peritagem && window._propPrecisaPeritagem && window._propPrecisaPeritagem(d.nomeServico)){ pdf.text('Peritagem por: '+d.peritagem, M, y+11); y += 5; }
     y += 14;
 
     // ── Cliente ──
@@ -31679,11 +31957,14 @@ async function _propostaAbrirEmailManual({assunto, corpo, htmlEmail, pdfBase64, 
   // 1) Descarregar o PDF para anexar
   const temPdf = _propostaDescarregarPdf(pdfBase64, numProposta);
   // 2) Abrir a conta de email (Gmail) já com destinatário, assunto e corpo
+  // Corpo curto no URL (o Gmail devolve erro 400 se o link for demasiado longo).
+  // O corpo completo formatado é copiado para a área de transferência (colar com Ctrl+V) e o PDF vai em anexo.
+  const _corpoGmail = 'Boa tarde,\n\nSegue em anexo a nossa proposta em PDF. Pode também colar a versão detalhada com Ctrl+V (já foi copiada para a área de transferência).\n\nCom os melhores cumprimentos,\nLocaliza Fugas';
   const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&authuser=' + encodeURIComponent(PROP_EMAIL_CONTA)
     + '&to='       + encodeURIComponent(emailDest||'')
     + '&su='       + encodeURIComponent(assunto||'')
-    + '&body='     + encodeURIComponent(corpo||'');
+    + '&body='     + encodeURIComponent(_corpoGmail);
   window.open(gmailUrl, '_blank');
   // 3) Copiar o corpo formatado para a área de transferência (para colar, se quiser)
   const copiou = await _propostaCopiarHtml(htmlEmail, corpo);
@@ -31732,6 +32013,7 @@ async function propostaEnviarLivre(){
     cliId, estado:'enviada',
     criadoEm:new Date().toISOString(),
     criadoPor:autor,
+    peritagemPor:document.getElementById('prop-peritagem')?.value||'',
     dataDoc:document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
   };
 
@@ -31746,6 +32028,7 @@ async function propostaEnviarLivre(){
       numProposta,
       dataDoc:     _dadosProposta.dataDoc||new Date().toLocaleDateString('pt-PT'),
       autor,
+      peritagem:   document.getElementById('prop-peritagem')?.value||'',
       nomeCliente: nome,
       email:       emailDest,
       tel:         document.getElementById('prop-tel')?.value||'',
@@ -31864,6 +32147,7 @@ async function propostaGuardar(){
     criadoEm:_editandoId ? (_moEdit?._criadoEmOrig||new Date().toISOString()) : new Date().toISOString(),
     editadoEm:_editandoId ? new Date().toISOString() : undefined,
     criadoPor:autor,
+    peritagemPor:document.getElementById('prop-peritagem')?.value||'',
     dataDoc:document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
   };
   if(_dadosProposta.editadoEm===undefined) delete _dadosProposta.editadoEm;
@@ -31911,7 +32195,7 @@ async function propostaEnviarRascunho(propId){
   // Gerar PDF anexo
   let pdfAnexo=null;
   try{
-    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
+    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,peritagem:p.peritagemPor||'',nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
     const pdfBase64=await new Promise(res=>{const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});const fr=new FileReader();fr.onload=()=>{const parts=fr.result.split(',');res(parts[1]||null);};fr.onerror=()=>res(null);fr.readAsDataURL(blob);});
     if(pdfBase64){
         pdfAnexo=[{content:pdfBase64,name:'Proposta_'+p.numero.replace(/[^A-Za-z0-9_-]/g,'_')+'.pdf'}];
@@ -32444,7 +32728,7 @@ function _propostaHtmlPDF(dados){
   }
 
   const {
-    numProposta='', dataDoc='', autor='', nomeCliente='', email='', tel='', morada='',
+    numProposta='', dataDoc='', autor='', peritagem='', nomeCliente='', email='', tel='', morada='',
     nomeServico='', h1=0, hadd=0, horas=1, iva=23, tipoCobranca='hora', corteMetros=0,
     intro='', procedimento='', descritivo='', obs='',
     marca='localiza',
@@ -32614,6 +32898,7 @@ hr.div{border:none;border-top:2px solid ${cor};margin:0 0 20px;}
     <div>Data: <strong>${dataDoc}</strong></div>
     <div>Validade: <strong>${validadeFmt}</strong></div>
     ${autor ? `<div>Elaborado por: <strong>${autor}</strong></div>` : ''}
+    ${peritagem && window._propPrecisaPeritagem && window._propPrecisaPeritagem(nomeServico) ? `<div>Peritagem por: <strong>${peritagem}</strong></div>` : ''}
   </div>
 </div>
 <hr class="div">
@@ -32765,6 +33050,7 @@ function propostaGerarPDF(){
     numProposta: document.getElementById('prop-numero')?.value||_propostaProxNumero(),
     dataDoc:     document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
     autor:       document.getElementById('prop-autor')?.value||window.currentUser?.name||'',
+    peritagem:   document.getElementById('prop-peritagem')?.value||'',
     nomeCliente: document.getElementById('prop-nome')?.value||'',
     email:       document.getElementById('prop-email')?.value||'',
     tel:         document.getElementById('prop-tel')?.value||'',

@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.84<br>
+      HidroGest v15.88<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.84 · Set 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.88 · Set 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.84<br>
+      HidroGest v15.88<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -1347,6 +1347,9 @@ tr:hover td{background:rgba(37,99,235,.03);}
           </button>
           <button onclick="abrirTrabalhosReceber()" style="padding:12px 36px;background:#b45309;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
             📋 Trabalhos a Receber
+          </button>
+          <button onclick="hgAbrirBaixaMassa()" style="padding:12px 36px;background:#15803d;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">
+            ⬇️ Dar baixa em massa (por data)
           </button>
         </div>
       </div>
@@ -5700,10 +5703,21 @@ async function recConfirmarBaixa(){
     await window.fsSetMerge('recibos', id, {status:'paid', pagoEm:data, pagoPor:window.currentUser?.id, pagoPorNome:window.currentUser?.name});
     const idx=(window.DB.recibos||[]).findIndex(x=>x.id===id);
     if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'paid', pagoEm:data, pagoPor:window.currentUser?.id, pagoPorNome:window.currentUser?.name};
+    // Atualizar TAMBÉM a OS associada — senão o recibo fica pago mas a OS continua "por faturar".
+    if(r.osId){
+      const _o=(window.DB.ordens||[]).find(x=>x.id===r.osId);
+      const _patch={pago:true, pagoEm:data, pagoPor:window.currentUser?.id};
+      if(!_o || !_o.faturaEmitida){ _patch.faturaEmitida=true; _patch.faturaEmitidaEm=new Date().toISOString(); }
+      try{
+        await window.fsSetMerge('ordens', r.osId, _patch);
+        if(_o){ _o.pago=true; _o.pagoEm=data; _o.pagoPor=window.currentUser?.id; if(_patch.faturaEmitida){ _o.faturaEmitida=true; _o.faturaEmitidaEm=_patch.faturaEmitidaEm; } }
+      }catch(_e){ console.warn('atualizar OS na baixa falhou:', _e); }
+    }
     if(typeof auditLog==='function') auditLog('recibo_pago',`Recibo ${id} (${r.client||'—'}) marcado como pago em ${data} por ${window.currentUser?.name||''}`);
     closeMo('mo-rec-baixa');
     toast('✅ Recebimento confirmado!','✔');
     renderRecibos();
+    if(typeof osRenderAgenda==='function') osRenderAgenda();
   }catch(e){
     toast('Erro ao confirmar: '+e.message,'❌');
   }finally{
@@ -5717,9 +5731,18 @@ async function recAnularBaixa(id){
     await window.fsSetMerge('recibos', id, {status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null});
     const idx=(window.DB.recibos||[]).findIndex(x=>x.id===id);
     if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null};
+    // Reverter também a OS (deixa de estar "pago"; mantém-se faturada).
+    if(r.osId){
+      const _o=(window.DB.ordens||[]).find(x=>x.id===r.osId);
+      try{
+        await window.fsSetMerge('ordens', r.osId, {pago:false, pagoEm:null});
+        if(_o){ _o.pago=false; _o.pagoEm=null; }
+      }catch(_e){ console.warn('reverter OS na anulação falhou:', _e); }
+    }
     if(typeof auditLog==='function') auditLog('recibo_pago_anulado',`Recibo ${id} (${r.client||'—'}) — recebimento anulado por ${window.currentUser?.name||''}`);
     toast('↩ Recebimento anulado — voltou a pendente.','↩');
     renderRecibos();
+    if(typeof osRenderAgenda==='function') osRenderAgenda();
   }catch(e){
     toast('Erro ao anular: '+e.message,'❌');
   }
@@ -14966,6 +14989,7 @@ function osRenderMinhas(){
           </button>`;
         } else {
           const relLabel = relEst==='pronto'   ? (rel?.pendenteFoto?'📷 Pronto · falta adicionar foto':'✅ Pronto · Aguarda envio')
+                         : (rel?.submetidoPeloTecnico) ? '✅ Enviado à gestão · toque para editar'
                          : rel?.campos         ? '📝 Continuar relatório'
                          :                       '📄 Criar relatório';
           const relCorBg  = relEst==='pronto' ? '#f0fdf4' : rel?.campos ? '#fffbeb' : '#eff6ff';
@@ -16505,9 +16529,10 @@ function tecNotificarRelatoriosPendentes(){
     o.estado==='os_fechada' &&
     !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o))
   );
-  // Filtrar só as que ainda não têm relatório feito (pronto/enviado/com data)
+  // Filtrar só as que ainda não têm relatório feito (pronto/enviado/com data) e ainda não foram submetidas pelo técnico
   const pendentes = ordens.filter(o=>{
     const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
+    if(rel && rel.submetidoPeloTecnico && rel.estado!=='enviado') return false; // já enviado à gestão
     return typeof relatorioFeito==='function' ? !relatorioFeito(rel) : (!rel || rel.estado!=='enviado'); // v15.72
   });
   if(!pendentes.length) return;
@@ -16702,8 +16727,82 @@ async function osReconciliarAvisosFatura(){
   }catch(e){ console.warn('osReconciliarAvisosFatura falhou:', e.message); }
 }
 
+// Confirmação fiável (a janela nativa confirm() é bloqueada em muitas apps
+// instaladas no telemóvel — aí o "OK" não era registado e a ação não acontecia).
+function hgConfirm(message){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;font-family:\'Outfit\',sans-serif;';
+    ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+      +'<div style="font-size:14px;color:#1e293b;line-height:1.5;white-space:pre-line;margin-bottom:16px;">'+String(message||'').replace(/</g,'&lt;')+'</div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
+      +'<button id="hgc-no" style="padding:10px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;">Cancelar</button>'
+      +'<button id="hgc-yes" style="padding:10px 16px;border:none;background:#15803d;color:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Confirmar</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    const done=v=>{ try{ov.remove();}catch(e){} resolve(v); };
+    ov.querySelector('#hgc-yes').onclick=()=>done(true);
+    ov.querySelector('#hgc-no').onclick=()=>done(false);
+    ov.onclick=e=>{ if(e.target===ov) done(false); };
+  });
+}
+window.hgConfirm=hgConfirm;
+
+// ── Dar baixa (marcar como Faturada + Paga) em massa até uma data ──────────
+window.hgDarBaixaAte = async function(dataLimite){
+  dataLimite = (dataLimite||'2026-07-31').slice(0,10);
+  const _role=window.currentUser?.role;
+  if(!['admin','gerente','supervisor'].includes(_role)){ toast('Sem permissão para dar baixa em massa.','🔒'); return; }
+  const alvo = (window.DB.ordens||[]).filter(o=>{
+    const d=(o.data||(o.concluidoEm||'').slice(0,10)||'').slice(0,10);
+    if(!d || d>dataLimite) return false;
+    if(o.estado==='cancelada') return false;
+    if(!['concluida','os_fechada'].includes(o.estado)) return false;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return false;
+    if(o.pago===true) return false;
+    return true;
+  });
+  if(!alvo.length){ toast('Não há OS por dar baixa até '+dataLimite+' (ou já estão todas pagas).','ℹ️',6000); return; }
+  if(!(await hgConfirm('Dar baixa (marcar como FATURADA + PAGA) em '+alvo.length+' OS com data até '+dataLimite+'?\n\nOs recibos passam a pagos. Pode anular recibo a recibo depois, se precisar.'))) return;
+  let ok=0, err=0;
+  for(const o of alvo){
+    try{
+      const now=new Date().toISOString();
+      await window.fsSetMerge('ordens', o.id, {pago:true, pagoEm:now, pagoPor:window.currentUser?.id, faturaEmitida:true, faturaEmitidaEm:(o.faturaEmitidaEm||now)});
+      const _i=(window.DB.ordens||[]).findIndex(x=>x.id===o.id); if(_i>=0) window.DB.ordens[_i]={...window.DB.ordens[_i], pago:true, pagoEm:now, faturaEmitida:true, faturaEmitidaEm:(o.faturaEmitidaEm||now)};
+      let rec=(window.DB.recibos||[]).find(r=>r.osId===o.id);
+      if(!rec){ try{ rec=await osCriarReciboAutomatico(o,'paid'); }catch(_e){} }
+      else if(rec.status!=='paid'){ await window.fsSet('recibos',rec.id,{...rec,status:'paid',pagoEm:(rec.pagoEm||today())}); rec.status='paid'; }
+      ok++;
+    }catch(e){ console.warn('baixa em massa — OS '+o.id+':',e); err++; }
+  }
+  if(typeof auditLog==='function') auditLog('baixa_massa','Baixa em massa até '+dataLimite+' — '+ok+' OS'+(err?(', '+err+' com erro'):''));
+  toast('✅ Baixa concluída: '+ok+' OS marcadas como pagas'+(err?(' · '+err+' com erro'):'')+'.','✅',9000);
+  if(typeof renderRecibos==='function') renderRecibos();
+  if(typeof recRenderHomeCards==='function') recRenderHomeCards();
+  if(typeof osRenderAgenda==='function') osRenderAgenda();
+};
+window.hgAbrirBaixaMassa=function(){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:20px;font-family:\'Outfit\',sans-serif;';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:380px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+    +'<div style="font-size:16px;font-weight:800;color:#1e3a5f;margin-bottom:6px;">⬇️ Dar baixa em massa</div>'
+    +'<div style="font-size:13px;color:#475569;line-height:1.5;margin-bottom:14px;">Marca como <strong>Faturada + Paga</strong> todas as OS concluídas (faturáveis e ainda não pagas) com data <strong>até</strong> à data escolhida.</div>'
+    +'<label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:5px;">Até à data (inclusive)</label>'
+    +'<input id="hg-baixa-data" type="date" value="2026-07-31" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px;font-size:14px;margin-bottom:16px;box-sizing:border-box;">'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
+    +'<button id="hg-baixa-no" style="padding:10px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;">Cancelar</button>'
+    +'<button id="hg-baixa-yes" style="padding:10px 16px;border:none;background:#15803d;color:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Continuar</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  const close=()=>{ try{ov.remove();}catch(e){} };
+  ov.querySelector('#hg-baixa-no').onclick=close;
+  ov.onclick=e=>{ if(e.target===ov) close(); };
+  ov.querySelector('#hg-baixa-yes').onclick=()=>{ const d=document.getElementById('hg-baixa-data')?.value||'2026-07-31'; close(); hgDarBaixaAte(d); };
+};
+
 function osMarcarFaturaEmitida(osId, fromDetalhe){
-  if(!confirm('Confirmar que a fatura foi EMITIDA para a OS '+osId+'? (1ª baixa)')) return;
+  hgConfirm('Confirmar que a fatura foi EMITIDA para a OS '+osId+'? (1ª baixa)').then(ok=>{ if(!ok) return;
   const o=(window.DB.ordens||[]).find(x=>x.id===osId);
   fsSetMerge('ordens', osId, {faturaEmitida: true, faturaEmitidaEm: new Date().toISOString()})
     .then(async ()=>{
@@ -16717,11 +16816,12 @@ function osMarcarFaturaEmitida(osId, fromDetalhe){
       if(typeof auditLog==='function')auditLog('fatura_emitida','OS '+osId+' marcada como FATURADA');
     })
     .catch(e=>toast('Erro: '+e.message,'❌'));
+  });
 }
 
 function osMarcarPago(osId, fromDetalhe){
   const o=(window.DB.ordens||[]).find(x=>x.id===osId);
-  if(!confirm('Confirmar RECEBIMENTO da OS '+osId+'?\n\nFica dado como faturado e pago. O relatório fica desbloqueado para envio.')) return;
+  hgConfirm('Confirmar RECEBIMENTO da OS '+osId+'?\n\nFica dado como faturado e pago. O relatório fica desbloqueado para envio.').then(ok=>{ if(!ok) return;
   const now=new Date().toISOString();
   const patch={pago: true, pagoEm: now, pagoPor: window.currentUser?.id};
   if(o && !o.faturaEmitida){ patch.faturaEmitida=true; patch.faturaEmitidaEm=now; }
@@ -16741,6 +16841,7 @@ function osMarcarPago(osId, fromDetalhe){
       if(typeof auditLog==='function')auditLog('pagamento_recebido','OS '+osId+' marcada como PAGA');
     })
     .catch(e=>toast('Erro: '+e.message,'❌'));
+  });
 }
 
 // Corrige OS antigas marcadas como pagas (antes desta versão) que ficaram sem recibo
@@ -22706,7 +22807,7 @@ function rpRenderHomeCards(){
     if(!rpTrabalhoFeitoEstado(os)) return false;
     if(os.data && os.data>_hojeSRT) return false;
     const _r = rels.find(x=>x.id===os.id);
-    return typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado');
+    return (typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado')) && !(_r && _r.submetidoPeloTecnico);
   }).length;
 
   counts.submetido_tecnico = (window.DB.ordens||[]).filter(os=>{
@@ -22796,7 +22897,7 @@ function rpRender(){
       if(filterEst==='sem_rel_todos'){
         if(os.data && os.data>rpHojeStr()) return false;
         const _relSRT=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
-        return typeof relatorioFeito==='function' ? !relatorioFeito(_relSRT) : (_relSRT?.estado!=='enviado');
+        return (typeof relatorioFeito==='function' ? !relatorioFeito(_relSRT) : (_relSRT?.estado!=='enviado')) && !(_relSRT && _relSRT.submetidoPeloTecnico);
       }
       if(filterEst==='aguarda_pagamento'){
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
@@ -22883,7 +22984,7 @@ function rpRender(){
         }
       </td>
       <td data-col="prazo">${rpPrazoLabel(os)}</td>
-      <td>${rpBadgeEstado(est, dias)}${filterEst==='sem_rel_todos'?((rel&&rel.campos&&Object.keys(rel.campos).length>0)?` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;white-space:nowrap;">📝 Rascunho</span>`:` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;white-space:nowrap;">⏳ Por fazer</span>`):''}</td>
+      <td>${(rel&&rel.submetidoPeloTecnico&&rel.estado!=='enviado') ? '<span style="font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;background:#e0f2fe;color:#075985;border:1px solid #7dd3fc;white-space:nowrap;">📥 Submetido pelo técnico</span>' : rpBadgeEstado(est, dias)}${filterEst==='sem_rel_todos'?((rel&&rel.campos&&Object.keys(rel.campos).length>0)?` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;white-space:nowrap;">📝 Rascunho</span>`:` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;white-space:nowrap;">⏳ Por fazer</span>`):''}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;">
         <div style="display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;">
           ${rel ? `<button class="btn btn-sm" style="font-size:11px;padding:4px 8px;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;" onclick="rpVerRelatorio('${os.id}')" title="Ver relatório">👁</button>` : ''}

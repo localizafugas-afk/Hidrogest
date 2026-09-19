@@ -2213,6 +2213,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#ede9fe;color:#7c3aed;border:1.5px solid #c4b5fd;">📤 Enviada</span>
     </div>
     <button class="btn btn-sm" style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;flex-shrink:0;" onclick="propostaAbrir(null)">📋 Nova Proposta</button>
+    <button class="btn btn-sm" style="background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;flex-shrink:0;" onclick="abrirApresentacaoGrupo()">📎 Apresentação do grupo</button>
   </div>
 
   <!-- ALERTAS follow-up do dia -->
@@ -3581,6 +3582,8 @@ Localiza Fugas
     <div class="mh"><div class="mh-title">Ficha de Ordem de Serviço</div><button class="mc" onclick="closeMo('mo-os-tec')">×</button></div>
     <div class="mb" id="mo-os-tec-body"></div>
     <div class="mf" id="mo-os-tec-footer">
+      <button class="btn btn-ghost" onclick="_osHistCliente()">📚 Histórico do cliente</button>
+      <button id="mo-os-tec-editar" class="btn btn-primary btn-sm" style="display:none;background:#1e3a5f;" onclick="_osEditarRelatorio()">✏️ Editar relatório</button>
       <button class="btn btn-ghost" onclick="closeMo('mo-os-tec')">Fechar</button>
     </div>
   </div>
@@ -7564,11 +7567,16 @@ function repRenderAtrasos(){
 
   const totalPendente = recibos.reduce((s,r)=>s+parseFloat(r.total||r.valor||0),0);
 
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+  return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:#475569;line-height:1.6;">
+    <strong style="color:#0f172a;">Dois tipos de atraso — independentes um do outro:</strong><br>
+    💰 <strong>Atraso de pagamento</strong> — o recibo já foi emitido mas o cliente ainda não pagou (passou dos 30 dias). É um problema de cobrança.<br>
+    📋 <strong>Atraso do técnico</strong> — a intervenção foi concluída mas o <strong>relatório</strong> não foi entregue dentro de 5 dias úteis. Não tem nada a ver com o pagamento: uma OS pode estar <span style="color:#16a34a;font-weight:700;">✓ paga</span> (ex.: MBWay) e mesmo assim contar como atraso do técnico enquanto o relatório não sair.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
     
     <!-- Recibos pendentes -->
     <div class="rep-card">
-      <div class="rep-card-title">💰 Recibos por Receber — €${fmt(totalPendente)}</div>
+      <div class="rep-card-title">💰 Atraso de PAGAMENTO · Recibos por Receber — €${fmt(totalPendente)}</div>
       ${!recibos.length
         ? '<div style="color:#16a34a;font-size:13px;padding:16px 0;text-align:center;">✅ Sem recibos pendentes</div>'
         : `<div style="overflow:auto;max-height:320px;">
@@ -7600,7 +7608,7 @@ function repRenderAtrasos(){
 
     <!-- OS sem relatório -->
     <div class="rep-card">
-      <div class="rep-card-title">📋 OS sem Relatório — ${osSemRel.length} pendentes</div>
+      <div class="rep-card-title">📋 Atraso do TÉCNICO · OS sem relatório entregue — ${osSemRel.length}</div>
       ${!osSemRel.length
         ? '<div style="color:#16a34a;font-size:13px;padding:16px 0;text-align:center;">✅ Todos os relatórios em dia</div>'
         : `<div style="overflow:auto;max-height:320px;">
@@ -7618,8 +7626,9 @@ function repRenderAtrasos(){
                 const dias = rpDiasParaEnvio(o);
                 const cor = dias===null?'#64748b':dias<=0?'#dc2626':dias===1?'#d97706':'#16a34a';
                 const label = dias===null?'—':dias<=0?`ATRASADO ${Math.abs(dias)}d`:dias===1?'Amanhã!':dias+'d';
+                const _pago = (o.pago===true) || (window.DB.recibos||[]).some(r=>r.osId===o.id && r.status==='paid');
                 return `<tr style="border-bottom:1px solid #fde68a;background:${dias<=0?'#fff5f5':'#fff'};">
-                  <td style="padding:8px;font-weight:700;">${o.id}</td>
+                  <td style="padding:8px;font-weight:700;">${o.id}${_pago?'<div style="font-size:9px;color:#16a34a;font-weight:700;">✓ pago — falta só o relatório</div>':''}</td>
                   <td style="padding:8px;">${cli.nome||'—'}</td>
                   <td style="padding:8px;color:#64748b;">${tec}</td>
                   <td style="padding:8px;text-align:center;">
@@ -8903,6 +8912,19 @@ window.osPrecoCalculator = {
   }
 };
 
+// ── Serviços faturados a VALOR FIXO (não por hora de trabalho) ──
+// Recuperação de tubagem e reabilitação (CIPP, Spray Epóxi) cobram o valor
+// fixo acordado do serviço. As horas trabalhadas NÃO alteram o valor.
+function srvEhValorFixo(srv){
+  const nome=((srv&&srv.nome)||'').toLowerCase();
+  return ['cipp','epóxi','epoxi','reabilit','recuper'].some(k=>nome.includes(k));
+}
+function osServicoValorFixo(o){
+  const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
+  const nome=(srv.nome||o.servicoNome||'').toLowerCase();
+  return ['cipp','epóxi','epoxi','reabilit','recuper'].some(k=>nome.includes(k));
+}
+
 // ── Fração e valor cobrado a partir do tempo AGENDADO ──
 function osFracaoInfo(o){
   const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
@@ -8917,21 +8939,34 @@ function osFracaoInfo(o){
   let durMin = (iniUse && fimUse) ? (_m(fimUse)-_m(iniUse)) : 0;
   if(durMin < 0) durMin += 1440;     // fim no dia seguinte
   durMin = Math.max(0, durMin);
+  const _valorFixo = typeof osServicoValorFixo==='function' && osServicoValorFixo(o);
   let addUnits=(o.haddN!=null&&o.haddN!=='')?parseFloat(o.haddN):((typeof calcHorasAddQuartos==='function')?calcHorasAddQuartos(Math.max(1,durMin/60||1)):0);
   if(isNaN(addUnits)) addUnits=0;
+  if(_valorFixo) addUnits=0;                       // valor fixo: horas trabalhadas não contam
   const horasCobradas=1+addUnits;
-  const net=(o.net!=null&&o.net!=='')?parseFloat(o.net):(h1+addUnits*haddV);
+  const net=_valorFixo
+    ? ((o.net!=null&&o.net!=='')?parseFloat(o.net):h1)                 // valor fixo do serviço
+    : ((o.net!=null&&o.net!=='')?parseFloat(o.net):(h1+addUnits*haddV));
   const total=(o.total!=null&&o.total!=='')?parseFloat(o.total):net*(1+ivaPct/100);
   const _hC=Math.floor(horasCobradas), _mC=Math.round((horasCobradas-_hC)*60);
   const fracLabel=`${_hC}h${_mC?(' '+_mC+'min'):''}`;
   const addMinLabel=addUnits>0?`+ ${Math.round(addUnits*60)} min adicionais`:'sem tempo adicional';
   const _dH=Math.floor(durMin/60), _dM=durMin%60;
   const durLabel=durMin>0?`${_dH}h${_dM?(' '+_dM+'min'):''}`:'—';
-  return {durMin,durLabel,addUnits,horasCobradas,h1,haddV,net,total,ivaPct,fracLabel,addMinLabel,temReal};
+  return {durMin,durLabel,addUnits,horasCobradas,h1,haddV,net,total,ivaPct,fracLabel,addMinLabel,temReal,valorFixo:_valorFixo};
 }
 function osFracaoCardHtml(o){
   if(o.naoFaturavel || o.servicoTipo==='garantia' || o.tipoServico==='garantia') return '';
   const f=osFracaoInfo(o);
+  if(f.valorFixo){
+    if(!(f.net>0)) return '';
+    return `<div style="border:2px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💶 Faturação a valor fixo do serviço</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span style="color:#475569;">Modalidade</span><strong>Valor fixo — horas de trabalho não contam</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0 0;margin-top:4px;border-top:1px solid #c7d2fe;"><strong>Valor s/ IVA</strong><strong style="color:#4338ca;">€${osFmt(f.net)}</strong></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0;"><span style="color:#475569;">Total c/ IVA (${f.ivaPct}%)</span><strong>€${osFmt(f.total)}</strong></div>
+    </div>`;
+  }
   if(!f.h1) return '';
   return `<div style="border:2px solid #c7d2fe;background:#eef2ff;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
     <div style="font-size:11px;font-weight:800;color:#4338ca;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">💶 ${f.temReal?'Faturação pelo tempo trabalhado':'Faturação pelo tempo agendado (estimativa)'}</div>
@@ -8959,9 +8994,11 @@ function osCalcValor(){
     return;
   }
   const h1=parseFloat(document.getElementById('os-h1')?.value)||0;
-  const nAdd=parseFloat(document.getElementById('os-hadd-n')?.value)||0;
+  let nAdd=parseFloat(document.getElementById('os-hadd-n')?.value)||0;
   const vAdd=parseFloat(document.getElementById('os-hadd-v')?.value)||0;
   const ivaPct=parseInt(document.getElementById('os-iva')?.value)||23;
+  const _srvSel=(window.DB.servicos||[]).find(s=>s.id===document.getElementById('os-srv-sel')?.value);
+  if(typeof srvEhValorFixo==='function' && srvEhValorFixo(_srvSel)) nAdd=0;  // valor fixo: horas não contam
   const net=h1+(nAdd*vAdd);
   const ivaVal=net*(ivaPct/100);
   const total=net+ivaVal;
@@ -9689,6 +9726,19 @@ function osAutoFillServico(){
       if(_dcalc2) _dcalc2.style.display = 'none';
       if(haddGrp) haddGrp.style.display = '';
     }
+  }
+
+  // ── Valor fixo (recuperação de tubagem / reabilitação): esconder horas adicionais ──
+  const _vfSrv   = srvEhValorFixo(srv);
+  const _h1lbl   = document.getElementById('os-h1-label');
+  const _haddGrp = document.getElementById('os-hadd-group');
+  if(_vfSrv && !ehMedida){
+    if(_h1lbl)   _h1lbl.innerHTML = 'Valor fixo (€) <span style="font-size:10px;color:var(--text3);">do serviço</span>';
+    if(_haddGrp) _haddGrp.style.display = 'none';
+    const _hn=document.getElementById('os-hadd-n'); if(_hn) _hn.value=0;
+    const _hv=document.getElementById('os-hadd-v'); if(_hv) _hv.value=0;
+  } else if(!ehMedida){
+    if(_h1lbl)   _h1lbl.innerHTML = '1ª hora (€) <span style="font-size:10px;color:var(--text3);">do serviço</span>';
   }
 
   // Calcular hora de fim baseado no tempo do serviço
@@ -12997,7 +13047,7 @@ function osRenderLista(){
       <td style="font-size:12px;">${srv?.nome||'—'}</td>
       <td>${typeof osTecNomes==='function'?osTecNomes(o.tecnicos):(o.tecnicos||[]).join(', ')||'—'}</td>
       <td style="font-family:monospace;font-weight:700;white-space:nowrap;">€${osFmt(o.total)}</td>
-      <td>${osBadge(o.estado,o)}</td>
+      <td>${osBadge(o.estado,o)}${o.naoRealizada?`<div style="margin-top:3px;font-size:10px;color:#b91c1c;line-height:1.3;">🚫 ${(o.motivoNaoRealizacao||'').slice(0,70)}${o.fotoLocal&&o.fotoLocal.url?` · <a href="${o.fotoLocal.url}" target="_blank" onclick="event.stopPropagation();" style="color:#b91c1c;text-decoration:underline;">📷 foto</a>`:''}</div>`:''}</td>
       <td style="min-width:120px;">
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
           ${relBadge}
@@ -13083,6 +13133,8 @@ function osBloquearAuxiliar(o, acao){
 }
 
 function osAbrirDetalhe(id){
+  window._osDetalheId=id;
+  if(typeof _osAtualizarBotaoEditar==='function') _osAtualizarBotaoEditar(id);
   const o=(window.DB.ordens||[]).find(x=>x.id===id); if(!o) return;
   const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
   const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
@@ -13230,6 +13282,7 @@ function osAbrirDetalhe(id){
       ${o.canceladoPeloCliente
         ? `<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.3);padding:4px 10px;border-radius:6px;display:inline-block;">🚫 Cancelado pelo cliente${o.cancelamentoCliente&&o.cancelamentoCliente.quando?' · '+new Date(o.cancelamentoCliente.quando).toLocaleString('pt-PT'):''}${o.cancelamentoCliente&&o.cancelamentoCliente.motivo?' · '+o.cancelamentoCliente.motivo:''}</div>`
         : `<div style="font-size:11px;margin-top:6px;background:rgba(16,185,129,.28);padding:4px 10px;border-radius:6px;display:inline-block;">✅ Agendamento confirmado${o.confirmacaoVistaEm?' · cliente viu em '+new Date(o.confirmacaoVistaEm).toLocaleString('pt-PT'):''}</div>`}
+      ${o.naoRealizada?`<div style="font-size:11px;margin-top:6px;background:rgba(220,38,38,.35);padding:4px 10px;border-radius:6px;display:block;">🚫 Serviço não realizado${o.naoRealizadaEm?' · '+new Date(o.naoRealizadaEm).toLocaleString('pt-PT'):''} — ${o.motivoNaoRealizacao||''}${o.naoRealizadaPorNome?' · por '+o.naoRealizadaPorNome:''}${o.fotoLocal&&o.fotoLocal.url?` · <a href="${o.fotoLocal.url}" target="_blank" style="color:#fecaca;text-decoration:underline;">📷 ver foto do local</a>`:''}</div>`:''}
     </div>
 
     ${o.encerramentoAutomatico?`
@@ -13291,7 +13344,7 @@ function osAbrirDetalhe(id){
             const cls2=pronto?'rp-pulse-green':emElab?'rp-pulse-yellow':'';
             const txt2=pronto?'Relatório enviado ao cliente':emElab?'Relatório em elaboração':'Criar relatório';
             return `<div class="${cls2}" style="width:28px;height:28px;border-radius:50%;background:${cor2};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;">${pronto?'✓':emElab?'📝':'2'}</div>
-            <div style="font-weight:700;font-size:14px;color:${cor2};">${txt2}</div>`;
+            <div style="font-weight:700;font-size:14px;color:${cor2};">${txt2}</div>${emElab?`<button class="btn btn-primary btn-sm" style="background:#d97706;color:#fff;margin-left:auto;white-space:nowrap;flex-shrink:0;" onclick="closeMo('mo-os-tec');rpAbrirFormulario('${o.id}')">✏️ Editar relatório</button>`:''}`;
           })()}
         </div>
         ${(()=>{
@@ -13440,6 +13493,11 @@ function osAbrirDetalhe(id){
             style="width:100%;background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;padding:10px;font-size:12px;color:#92400e;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;">
             🔒 Fechar sem relatório agora<br>
             <span style="font-size:10px;font-weight:400;color:#b45309;">⚠️ Prazo de 5 dias para enviar o relatório</span>
+          </button>
+          <button onclick="osNaoRealizada('${id}')"
+            style="width:100%;margin-top:8px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#991b1b;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;">
+            🚫 Serviço não realizado<br>
+            <span style="font-size:10px;font-weight:400;color:#b91c1c;">Cheguei ao local mas não foi possível fazer o trabalho — escrever motivo e tirar foto</span>
           </button>
         </div>
       </div>`:`
@@ -16540,7 +16598,7 @@ async function tecReabrirParaRelatorio(osId){
       if(cfg.brevoApiKey){
         const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
         const dest=cfg.remetente||emp.email||'propostas@hidrogest.net';
-        await fetch('https://api.brevo.com/v3/smtp/email',{
+        await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
           method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
           body:JSON.stringify({
             sender:{name:emp.nome||'HidroGest',email:dest},
@@ -20494,7 +20552,7 @@ async function rpNotificarAlteracaoTecnico(os, rel){
         `OS: ${os.id}\nCliente: ${cli.nome||'—'}\nData/hora da alteração: ${quando}\n\n`+
         `O dia e a hora trabalhada NÃO foram alterados (são bloqueados ao técnico).\n`+
         `Apenas o conteúdo do relatório foi editado. Reveja a alteração no sistema e marque como revista.`;
-      await fetch('https://api.brevo.com/v3/smtp/email',{
+      await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -20611,7 +20669,7 @@ function mostrarAvisoEmailManual(para, assunto, corpo){
       <div style="font-size:11px;opacity:.8;margin-top:2px;">Configure a API Key Brevo em Configurações → Email para envio automático</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent('${para}')+'&su='+encodeURIComponent('${assEsc}')+'&body='+encodeURIComponent('${corpoEsc}'),'_blank');document.getElementById('aviso-email-manual')?.remove();" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">📧 Enviar pelo Gmail</button>
+      <button onclick="_abrirGmailSeguro('${para}','${assEsc}','${corpoEsc}');document.getElementById('aviso-email-manual')?.remove();" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">📧 Enviar pelo Gmail</button>
       <button onclick="navigate('configuracoes');setTimeout(()=>cfgTabEmail(),150);document.getElementById('aviso-email-manual')?.remove();" style="background:#f59e0b;color:#000;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:12px;">⚙️ Configurar Brevo</button>
       <button onclick="document.getElementById('aviso-email-manual')?.remove();" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:16px;">×</button>
     </div>`;
@@ -20756,7 +20814,7 @@ async function ejsEnviar(tipoTemplate, params){
     };
 
     try{
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':brevoKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),
@@ -20766,8 +20824,8 @@ async function ejsEnviar(tipoTemplate, params){
         return {modo:'brevo', ok:true};
       }
       const err = await r.json().catch(()=>({}));
-      console.error(`❌ Brevo erro ${r.status}:`, err);
-      toast(`❌ Erro Brevo (${r.status}): ${err.message||'verifique a API Key em Configurações → Email'}`,'❌');
+      console.error(`❌ Brevo erro ${r.status} → ${params.to_email}:`, err);
+      toast(`❌ Erro Brevo (${r.status}) ao enviar para ${params.to_email}: ${err.message||'verifique a API Key / remetente em Configurações → Email'}`,'❌',9000);
       return {modo:'brevo-erro', status:r.status};
     }catch(e){
       console.error('❌ Brevo ligação falhou:', e);
@@ -22094,13 +22152,13 @@ function agRecEditarSimples(id){
         </div>
         <div id="rp-autosave-badge" style="display:none;margin-left:auto;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;white-space:nowrap;"></div>
       </div>
-      <button class="mc" onclick="rpFecharComGuardaRascunho().then(()=>{const _oid1=window._rpEditOsId;closeMo('mo-relat-pesquisa');if(_oid1)setTimeout(()=>osAbrirConcluir(_oid1),300);});" style="color:#fff;font-size:22px;">×</button>
+      <button class="mc" onclick="_rpVoltarOS();" style="color:#fff;font-size:22px;">×</button>
     </div>
     <div class="mb" id="rp-modal-body">
       <!-- Preenchido dinamicamente -->
     </div>
     <div class="mf" style="position:sticky;bottom:0;background:#fff;border-top:1px solid var(--border);z-index:10;gap:8px;flex-wrap:wrap;padding-bottom:calc(10px + env(safe-area-inset-bottom));">
-      <button class="btn btn-ghost" onclick="rpFecharComGuardaRascunho().then(()=>{const _oid=window._rpEditOsId;closeMo('mo-relat-pesquisa');if(_oid)setTimeout(()=>osAbrirConcluir(_oid),300);});">← Voltar à OS</button>
+      <button class="btn btn-ghost" onclick="_rpVoltarOS();">← Voltar à OS</button>
       <button class="btn btn-ghost btn-sm" onclick="rpSalvarRascunho()">💾 Guardar rascunho</button>
       <button class="btn btn-ghost btn-sm" onclick="rpPreviewFormulario()" style="color:var(--accent);border-color:var(--accent);">👁 Pré-visualizar</button>
       <button class="btn btn-primary" onclick="rpSalvarRelatorio()">✅ Guardar e voltar à OS</button>
@@ -22371,6 +22429,44 @@ function rpEstadoCard(os){
   return 'a_realizar'; // rascunho ou pendente, dentro do prazo → "Relatório a Realizar"
 }
 
+// ── Subclassificação dos relatórios ATRASADOS (v15.82) ──
+// Corte: relatórios com data anterior a 01/08/2026 são "antigos a analisar".
+// A partir de 01/08/2026 mantêm-se atrasados, mas separados por causa:
+//  • atras_pagamento → o dinheiro ainda não entrou (falta pagamento);
+//  • atras_tecnico   → já está pago, só falta o técnico preencher/enviar o
+//    relatório (ex.: OS paga por MBWay que ficou em rascunho).
+function rpDataRefAtraso(os){
+  return String(os.concluidoEm||os.data||'').slice(0,10);
+}
+function rpOSPaga(os){
+  // "Recebido" = dinheiro já entrou. Alinhado com a app e com a aba Recebimentos:
+  const recs=(window.DB.recibos||[]).filter(r=>r.osId===os.id);
+  if(recs.some(r=>r.status==='pending')) return false;                          // recibo emitido e por pagar (Recebimentos › Pendentes) → NÃO recebido
+  if(os.pago===true) return true;                                               // marcado como pago
+  if(recs.some(r=>r.status==='paid')) return true;                             // recibo pago
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  if(os.pagamento?.confirmadoEm || rel?.pagamento?.confirmadoEm) return true;   // pagamento confirmado pelo admin
+  const met=(os.pagamento?.metodo||rel?.pagamento?.metodo||'').toLowerCase();
+  if(['mb','mbway','dinheiro','numerario','cheque'].includes(met)) return true; // pagamento imediato (no ato)
+  return false;
+}
+function rpSubAtraso(os){
+  if(!rpEntraPipeline(os)) return null;                                          // só OS concluídas/fechadas
+  if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(os)) return null; // garantia/orçamento não conta
+  const d = rpDataRefAtraso(os);
+  const antigo = !!(d && d < '2026-08-01');
+  // 1) Dinheiro ainda não entrou → atraso de PAGAMENTO — mesmo que o relatório já
+  //    tenha sido enviado. Inclui recibos "pendentes" da aba Recebimentos e
+  //    transferências por confirmar.
+  if(!rpOSPaga(os)) return antigo ? 'atras_antigos' : 'atras_pagamento';
+  // 2) Já recebido: relatório enviado ao cliente → resolvido; caso contrário, é
+  //    atraso do TÉCNICO se o relatório estiver fora do prazo.
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+  if(rel && (rel.estado==='enviado' || rel.enviadoEm || rel.recebidoEm)) return null;
+  if(rpEstadoCard(os)!=='atrasado') return null;
+  return antigo ? 'atras_antigos' : 'atras_tecnico';
+}
+
 function rpBadgeEstado(est, dias){
   const MAP = {
     a_realizar:{bg:'#f0f9ff',c:'#0369a1',txt:'📅 A realizar'},
@@ -22536,7 +22632,12 @@ function rpAbrirLista(estado, titulo){
   const titulos = {
     '':'Todos os Relatórios', 'a_realizar':'📝 Relatório a Realizar',
     'pronto':'✅ Prontos',
-    'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados'
+    'atrasado':'🔴 Atrasados', 'enviado':'✅ Enviados',
+    'atras_antigos':'📦 Relatórios antigos a analisar · anteriores a 01/08/2026',
+    'atras_pagamento':'💰 Atrasados por falta de pagamento · desde 01/08/2026',
+    'atras_tecnico':'🔧 Atrasados por falta de preenchimento técnico · desde 01/08/2026',
+    'sem_rel_todos':'🔴 Trabalho feito · sem relatório — todas',
+    'submetido_tecnico':'📤 Enviados pelo técnico · a concluir'
   };
   const el = document.getElementById('rp-lista-titulo');
   if(el) el.textContent = titulo || titulos[estado] || 'Relatórios';
@@ -22551,6 +22652,19 @@ function rpEntraPipeline(o){
   return o.estado==='concluida' || (o.estado==='os_fechada' && o.fechadaSemRelatorio);
 }
 
+// "Trabalho feito" para o cartão de relatórios em falta:
+// em curso, vista (agendada já aberta pelo técnico), concluída ou fechada.
+// Ficam de fora: agendada NÃO vista e cancelada.
+function rpTrabalhoFeitoEstado(o){
+  if(!o || o.estado==='cancelada') return false;
+  if(o.estado==='em_curso' || o.estado==='concluida' || o.estado==='os_fechada') return true;
+  if(o.estado==='agendada' && o.notificadoTecnico===true) return true; // "vista"
+  return false;
+}
+function rpHojeStr(){
+  const d=new Date(); d.setHours(0,0,0,0);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function rpRenderHomeCards(){
   const cards = document.getElementById('rp-home-cards');
   if(!cards) return;
@@ -22561,17 +22675,42 @@ function rpRenderHomeCards(){
   const isTec = window.currentUser?.role==='tecnico';
 
   // Contar por card (rpEstadoCard já filtra agendas não realizadas)
-  let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0};
+  let counts = {a_realizar:0, pronto:0, atrasado:0, enviado:0, atras_antigos:0, atras_pagamento:0, atras_tecnico:0};
   ordens.forEach(os=>{
     if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return;
+    const sub = rpSubAtraso(os);
+    if(sub){ counts[sub] = (counts[sub]||0)+1; return; }   // atraso: antigos / pagamento / técnico
     const card = rpEstadoCard(os);
     if(!card) return;
     counts[card] = (counts[card]||0)+1;
   });
   const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
+  // Vista única: trabalho feito (em curso/vista/concluída/fechada) mas relatório
+  // ainda por elaborar, com data até hoje. Inclui Garantia/Orçamento.
+  // Ficam de fora: futuras, agendadas não vistas e canceladas.
+  const _hojeSRT = rpHojeStr();
+  counts.sem_rel_todos = (window.DB.ordens||[]).filter(os=>{
+    if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return false;
+    if(!rpTrabalhoFeitoEstado(os)) return false;
+    if(os.data && os.data>_hojeSRT) return false;
+    const _r = rels.find(x=>x.id===os.id);
+    return typeof relatorioFeito==='function' ? !relatorioFeito(_r) : (_r?.estado!=='enviado');
+  }).length;
+
+  counts.submetido_tecnico = (window.DB.ordens||[]).filter(os=>{
+    if(isTec && !(os.tecnicos||[]).includes(window.currentUser?.id)) return false;
+    if(!rpTrabalhoFeitoEstado(os)) return false;
+    const _rST = rels.find(x=>x.id===os.id);
+    return _rST && _rST.submetidoPeloTecnico && _rST.estado!=='enviado';
+  }).length;
+
   const defs = [
-    {key:'atrasado',  icon:'🔴', label:'Atrasados',            desc:'Fora do prazo de entrega', urgente:true},
+    {key:'sem_rel_todos',   icon:'🔴', label:'Trabalho feito · sem relatório', desc:'Todas · relatório por elaborar', urgente:true},
+    {key:'submetido_tecnico', icon:'📤', label:'Enviados pelo técnico', desc:'A concluir pela gestão', urgente:true},
+    {key:'atras_antigos',   icon:'📦', label:'Antigos a analisar',      desc:'Anteriores a 01/08/2026'},
+    {key:'atras_pagamento', icon:'💰', label:'Atraso · falta pagamento', desc:'Desde 01/08 · transf./valor por confirmar', urgente:true},
+    {key:'atras_tecnico',   icon:'🔧', label:'Atraso · falta relatório', desc:'Desde 01/08 · pago, falta preencher', urgente:true},
     {key:'a_realizar',icon:'📝', label:'Relatório a Realizar', desc:'Dentro do prazo'},
     {key:'pronto',    icon:'✅', label:'Prontos',              desc:'Prontos para enviar'},
     {key:'enviado',   icon:'📨', label:'Enviados',             desc:'Já enviados ao cliente'},
@@ -22589,7 +22728,7 @@ function rpRenderHomeCards(){
   // Atualizar alerta pendentes
   const alertaDiv = document.getElementById('rp-alerta-pendentes');
   if(alertaDiv){
-    const urgentes = counts.atrasado;
+    const urgentes = (counts.atras_pagamento||0)+(counts.atras_tecnico||0);
     if(urgentes>0){
       alertaDiv.style.display='';
       alertaDiv.textContent=`⚠️ ${urgentes} relatório${urgentes>1?'s':''} requer${urgentes>1?'em':''} atenção`;
@@ -22628,7 +22767,7 @@ function rpRender(){
   const q = (document.getElementById('rp-search')?.value||'').toLowerCase().trim();
 
   // Ordenar OS concluídas — agendas ainda não realizadas não entram nesta listagem
-  let ordens = [...(window.DB.ordens||[])].filter(rpEntraPipeline);
+  let ordens = [...(window.DB.ordens||[])].filter((filterEst==='sem_rel_todos'||filterEst==='submetido_tecnico') ? rpTrabalhoFeitoEstado : rpEntraPipeline);
   ordens.sort((a,b)=>(b.concluidoEm||b.data||'').localeCompare(a.concluidoEm||a.data||''));
 
   // Garantia/Orçamento não são cobradas — ficam fora da vista normal,
@@ -22636,16 +22775,28 @@ function rpRender(){
   // para não se misturarem com os pendentes do dia-a-dia (faturação).
   if(filterEst==='nao_faturavel'){
     ordens = ordens.filter(o=>typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
-  } else {
+  } else if(filterEst!=='sem_rel_todos' && filterEst!=='submetido_tecnico'){
     ordens = ordens.filter(o=>!(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   }
 
   // Filtrar
   if(filterEst && filterEst!=='nao_faturavel'){
     ordens = ordens.filter(os=>{
+      if(filterEst==='sem_rel_todos'){
+        if(os.data && os.data>rpHojeStr()) return false;
+        const _relSRT=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+        return typeof relatorioFeito==='function' ? !relatorioFeito(_relSRT) : (_relSRT?.estado!=='enviado');
+      }
       if(filterEst==='aguarda_pagamento'){
         const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
         return !rel?.pagamento?.metodo;
+      }
+      if(filterEst==='atras_antigos'||filterEst==='atras_pagamento'||filterEst==='atras_tecnico'){
+        return rpSubAtraso(os)===filterEst;
+      }
+      if(filterEst==='submetido_tecnico'){
+        const _relST=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===os.id);
+        return _relST && _relST.submetidoPeloTecnico && _relST.estado!=='enviado';
       }
       return rpEstadoCard(os)===filterEst;
     });
@@ -22721,7 +22872,7 @@ function rpRender(){
         }
       </td>
       <td data-col="prazo">${rpPrazoLabel(os)}</td>
-      <td>${rpBadgeEstado(est, dias)}</td>
+      <td>${rpBadgeEstado(est, dias)}${filterEst==='sem_rel_todos'?((rel&&rel.campos&&Object.keys(rel.campos).length>0)?` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;white-space:nowrap;">📝 Rascunho</span>`:` <span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;white-space:nowrap;">⏳ Por fazer</span>`):''}</td>
       <td onclick="event.stopPropagation()" style="text-align:center;">
         <div style="display:flex;gap:3px;justify-content:center;flex-wrap:nowrap;">
           ${rel ? `<button class="btn btn-sm" style="font-size:11px;padding:4px 8px;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;" onclick="rpVerRelatorio('${os.id}')" title="Ver relatório">👁</button>` : ''}
@@ -22857,7 +23008,7 @@ async function rpEnviarRelacaoTecnicos(auto){
     totalGlobalE  += emElab.length;
 
     try{
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -22880,7 +23031,7 @@ async function rpEnviarRelacaoTecnicos(auto){
     const corpoC = `Relação consolidada de relatórios pendentes — ${new Date().toLocaleDateString('pt-PT')}\n\nTotal: ${totalGlobalOS} OS (${totalGlobalA} por iniciar, ${totalGlobalE} em elaboração) em ${tecnicos.length} técnico(s).\n${consolidado}\n\n— ${nomeRem}`;
     const assuntoC = `📋 Relação consolidada — ${totalGlobalOS} OS pendentes (${new Date().toLocaleDateString('pt-PT')})`;
     try{
-      const rc = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const rc = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({
@@ -23159,10 +23310,7 @@ function tecHistoricoCliente(clienteId, excludeOsId){
 
 
 // ── Abrir formulário de preenchimento (wizard simplificado) ──
-// ── Testes relevantes por tipo de anomalia ───────────────────────────────
-// Ajuste livre: para cada anomalia, a lista de testes que fazem sentido.
-// Um teste personalizado (não listado aqui) aparece sempre; anomalia sem
-// regra ("Outro" ou vazio) mostra todos os testes.
+// ── Testes relevantes por anomalia (formulário da gestão — checkboxes) ────
 const RP_TESTES_POR_ANOMALIA = {
   'Fuga de água':            ['Teste de Estanqueidade','Inspeção Visual','Ensaio Electro-Acústico','Ensaio com Gás Traçador','Termografia Infravermelha','Rastreador Químico'],
   'Fuga em piscina':         ['Teste de Estanqueidade','Inspeção Visual','Rastreador Químico','Ensaio com Gás Traçador','Ensaio Electro-Acústico','Alagamento com Rastreador Químico'],
@@ -23174,9 +23322,9 @@ const RP_TESTES_POR_ANOMALIA = {
 };
 const RP_TESTES_CONHECIDOS = new Set(Object.values(RP_TESTES_POR_ANOMALIA).flat());
 function rpTesteRelevante(teste, anom){
-  if(!anom) return true;                              // sem anomalia definida → mostra tudo
+  if(!anom) return true;
   const mapa = RP_TESTES_POR_ANOMALIA[anom];
-  if(!mapa) return true;                              // anomalia sem regra (ex.: "Outro") → mostra tudo
+  if(!mapa) return true;
   if(!RP_TESTES_CONHECIDOS.has(teste)) return true;   // teste personalizado → mostra sempre
   return mapa.includes(teste);
 }
@@ -23185,7 +23333,6 @@ function rpFiltrarTestes(){
   const verTodos = window._rpVerTodosTestes===true;
   document.querySelectorAll('#rp-modal-body input[name="rp-met"]').forEach(inp=>{
     const lbl = inp.closest('label'); if(!lbl) return;
-    // Nunca esconder um teste já marcado, nem quando "ver todos" está activo.
     const mostra = verTodos || inp.checked || rpTesteRelevante(inp.value, anom);
     lbl.style.display = mostra ? '' : 'none';
   });
@@ -23194,7 +23341,7 @@ function rpFiltrarTestes(){
 function rpAbrirFormulario(osId, preserveTemp){
   const os  = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   if(osBloquearAuxiliar(os,'O relatório')) return;
-  // ── Antes de reconstruir o formulário (ex.: ao adicionar/remover foto ou anexo) ──
+  // ── Antes de reconstruir o formulário (ex.: adicionar/remover foto ou anexo) ──
   // guardar o que já foi escrito e a posição do ecrã, para não voltar à 1ª pergunta
   // nem perder texto ainda não gravado.
   const _scrollKeep = preserveTemp ? (document.querySelector('#mo-relat-pesquisa .md')?.scrollTop||0) : 0;
@@ -23237,6 +23384,7 @@ function rpAbrirFormulario(osId, preserveTemp){
   }
   // Guardar flag global para uso no formulário e no salvamento
   window._rpFormIsTecnico = _isTecnico;
+  if(_isTecnico){ return rpTecFormAbrir(osId, preserveTemp); }
   // ─────────────────────────────────────────────────────────────────────────
 
   window._rpEditOsId  = osId;
@@ -23770,6 +23918,7 @@ function rpRecolherCampos(){
     equipamentos: temControlo('rp-eq')   ? getChecked('rp-eq')   : (existing.equipamentos||[]),
     conclusao:    gc('rp-conclusao')   || existing.conclusao   || '',
     conclusaoIA:  document.getElementById('rp-conclusao')?.dataset.ia==='1',
+    testes:       (window._rpFormIsTecnico && Array.isArray(window._rpTecTestes)) ? window._rpTecTestes : (existing.testes||[]),
     sugestao:     gc('rp-sugestao')    || existing.sugestao    || '',
     fotos:        window._rpFotosTemp  || [],
     // Novos campos de caracterização
@@ -23935,6 +24084,323 @@ async function rpSalvarRascunho(){
 }
 
 // ── Guardar relatório completo ───────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   FORMULÁRIO DO TÉCNICO — "Testes realizados"
+   Cada teste: 3 estados (anomalia/sem/não se aplica), tempo, FOTO e
+   OBSERVAÇÃO próprias. "Outros locais testados" = cartões onde o
+   técnico escreve o local. Fotos vão para a galeria da OS com o nome
+   do teste como legenda (entram no PDF). Grava RASCUNHO para a gestão.
+   ═══════════════════════════════════════════════════════════════ */
+function _rpTecEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function _rpTecEscAttr(s){return _rpTecEsc(s).replace(/"/g,'&quot;');}
+
+function _rpTecListaBase(){
+  const G1='Sistema de água sob pressão — teste de estanqueidade';
+  const G2='Tubulações de esgoto — teste de estanqueidade';
+  const G3='Teste de alagamento';
+  const G4='Deteção / pesquisa';
+  const G5='Testes visuais';
+  return [
+    {key:'agua_fria',   grupo:G1, nome:'Água fria',   tipo:'tempo', min:5},
+    {key:'agua_quente', grupo:G1, nome:'Água quente', tipo:'tempo', min:5},
+    {key:'esg_duche', grupo:G2, nome:'Base de duche e banheira', tipo:'tempo', min:5},
+    {key:'esg_bide',  grupo:G2, nome:'Bidé', tipo:'tempo', min:5},
+    {key:'esg_lav',   grupo:G2, nome:'Lavatório', tipo:'tempo', min:5},
+    {key:'esg_loica', grupo:G2, nome:'Lava-loiça (cozinha)', tipo:'tempo', min:5},
+    {key:'esg_ml',    grupo:G2, nome:'Máquina de lavar loiça (ligações)', tipo:'tempo', min:5},
+    {key:'esg_mr',    grupo:G2, nome:'Máquina de lavar roupa (ligações)', tipo:'tempo', min:5},
+    {key:'esg_ralos', grupo:G2, nome:'Ralos e caixas de esgoto', tipo:'tempo', min:5},
+    {key:'alag_telhado', grupo:G3, nome:'Telhado', tipo:'tempo', min:10},
+    {key:'alag_terraco', grupo:G3, nome:'Terraço', tipo:'tempo', min:10},
+    {key:'alag_varanda', grupo:G3, nome:'Varanda', tipo:'tempo', min:10},
+    {key:'det_rastreador', grupo:G4, nome:'Leitura com rastreador químico (UV)', tipo:'simple'},
+    {key:'vis_autoclismo', grupo:G5, nome:'Autoclismo', tipo:'visual'},
+    {key:'vis_sanita',     grupo:G5, nome:'Sanita',     tipo:'visual'},
+  ];
+}
+
+// ── Grupos de testes relevantes por anomalia (formulário do técnico) ──────
+// Ajuste livre. Anomalia sem regra ("Outro"/vazio) mostra todos os grupos.
+// Os nomes têm de ser IGUAIS aos grupos de _rpTecListaBase.
+const RP_TEC_GRUPOS_POR_ANOMALIA = {
+  'Fuga de água':            ['Sistema de água sob pressão — teste de estanqueidade','Tubulações de esgoto — teste de estanqueidade','Deteção / pesquisa','Testes visuais'],
+  'Fuga em piscina':         ['Sistema de água sob pressão — teste de estanqueidade','Deteção / pesquisa','Teste de alagamento','Testes visuais'],
+  'Fuga em rede de incêndio':['Sistema de água sob pressão — teste de estanqueidade','Testes visuais'],
+  'Infiltração':             ['Teste de alagamento','Deteção / pesquisa','Tubulações de esgoto — teste de estanqueidade','Testes visuais'],
+  'Entupimento':             ['Tubulações de esgoto — teste de estanqueidade','Testes visuais'],
+  'Rotura':                  ['Sistema de água sob pressão — teste de estanqueidade','Tubulações de esgoto — teste de estanqueidade'],
+  'Humidade':                ['Teste de alagamento','Deteção / pesquisa','Tubulações de esgoto — teste de estanqueidade','Testes visuais'],
+};
+function _rpTecGrupoRelevante(grupo, anom){
+  if(!anom) return true;
+  const gs = RP_TEC_GRUPOS_POR_ANOMALIA[anom];
+  if(!gs) return true;                 // "Outro" ou anomalia sem regra → mostra tudo
+  return gs.includes(grupo);
+}
+
+function _rpTecInitEstado(c){
+  const base=_rpTecListaBase();
+  const saved={}; (Array.isArray(c.testes)?c.testes:[]).forEach(t=>{ if(t&&t.key) saved[t.key]=t; });
+  const preds=base.map(t=>({...t, status:(saved[t.key]&&saved[t.key].status)||'', obs:(saved[t.key]&&saved[t.key].obs)||'', min:(saved[t.key]&&saved[t.key].min!=null)?saved[t.key].min:(t.min!=null?t.min:null)}));
+  const extras=(Array.isArray(c.testes)?c.testes:[]).filter(t=>t&&(t.custom||t.dano)).map(t=>({key:t.key,grupo:t.dano?'__danos':'__outros',nome:t.nome||'',tipo:t.tipo||'tempo',min:(t.min!=null?t.min:5),status:t.status||'',obs:t.obs||'',custom:!!t.custom,dano:!!t.dano}));
+  window._rpTecTestes=[...preds, ...extras];
+  window._rpTecObs=c.reclamacao||c.descritivo||'';
+  window._rpTecEquips=new Set(c.equipamentos||[]);
+}
+
+window._rpTecFind=function(key){ return (window._rpTecTestes||[]).find(x=>x.key===key); };
+window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(t){ t.status=(t.status===st?'':st); rpTecFormAbrir(window._rpEditOsId,true); } };
+window.rpTecMin=function(key,val){ const t=window._rpTecFind(key); if(t) t.min=parseInt(val)||0; };
+window._rpTecSetNome=function(key,val){ const t=window._rpTecFind(key); if(t) t.nome=val; };
+window._rpTecTesteObs=function(key,val){ const t=window._rpTecFind(key); if(t) t.obs=val; };
+window.rpTecEquip=function(name,on){ if(!window._rpTecEquips) window._rpTecEquips=new Set(); if(on) window._rpTecEquips.add(name); else window._rpTecEquips.delete(name); };
+window.rpTecObsIn=function(val){ window._rpTecObs=val; };
+window.rpTecAnomIn=function(val){ window._rpTecAnom=val; };
+window.rpTecAddLocal=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'loc_'+Date.now(),grupo:'__outros',nome:'',tipo:'tempo',min:5,status:'',obs:'',custom:true}); rpTecFormAbrir(window._rpEditOsId,true); };
+window.rpTecAddDano=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'dano_'+Date.now(),grupo:'__danos',nome:'',dano:true,obs:'',status:''}); rpTecFormAbrir(window._rpEditOsId,true); };
+window.rpTecRemLocal=function(key){ window._rpTecTestes=(window._rpTecTestes||[]).filter(t=>t.key!==key); rpTecFormAbrir(window._rpEditOsId,true); };
+window._rpVoltarOS=function(){
+  var _oid=window._rpEditOsId;
+  var go=function(){
+    closeMo('mo-relat-pesquisa');
+    if(!_oid) return;
+    var os=(window.DB.ordens||[]).find(function(x){return x.id===_oid;})||{};
+    // Se a OS já foi assinada/concluída, voltar à FICHA (mantém assinaturas) em vez de reabrir a conclusão.
+    var jaAssinada=!!(os.assinaturaCliente||os.assinaturaTecnico||os.fechadoEm||os.fechadaEm||os.estado==='os_fechada');
+    setTimeout(function(){
+      if(jaAssinada&&typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid);
+      else if(typeof osAbrirConcluir==='function') osAbrirConcluir(_oid);
+      else if(typeof osAbrirDetalhe==='function') osAbrirDetalhe(_oid);
+    },300);
+  };
+  if(typeof rpFecharComGuardaRascunho==='function') rpFecharComGuardaRascunho().then(go).catch(go);
+  else go();
+};
+window.rpTecVoltar=function(){ if(typeof _rpVoltarOS==='function') _rpVoltarOS(); };
+
+async function _rpTecComprimir(file){
+  const MAX=1600;
+  const draw=(src,w,h)=>{ let nw=w,nh=h; if(w>MAX||h>MAX){ if(w>h){nh=Math.round(h*MAX/w);nw=MAX;}else{nw=Math.round(w*MAX/h);nh=MAX;} } const cv=document.createElement('canvas'); cv.width=nw;cv.height=nh; cv.getContext('2d').drawImage(src,0,0,nw,nh); return cv.toDataURL('image/jpeg',.82); };
+  if(typeof createImageBitmap==='function'){ try{ const bmp=await createImageBitmap(file); const d=draw(bmp,bmp.width,bmp.height); if(bmp.close) bmp.close(); return d; }catch(e){} }
+  return await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>{ const img=new Image(); img.onload=()=>res(draw(img,img.naturalWidth,img.naturalHeight)); img.onerror=rej; img.src=r.result; }; r.onerror=rej; r.readAsDataURL(file); });
+}
+window._rpTecAddFoto=async function(inputEl,key){
+  const t=window._rpTecFind(key); if(!t){ inputEl.value=''; return; }
+  const nome=(t.nome||'').trim();
+  if(!nome){ if(typeof toast==='function') toast('Escreve primeiro o local testado.','📍',4000); else alert('Escreve primeiro o local testado.'); inputEl.value=''; return; }
+  const files=[...inputEl.files]; inputEl.value=''; if(!files.length) return;
+  for(const f of files){ if(!f.type||!f.type.startsWith('image/')) continue; try{ const d=await _rpTecComprimir(f); (window._rpFotosTemp=window._rpFotosTemp||[]).push({dataUrl:d, legenda:nome}); }catch(e){ console.warn('rpTec foto falhou:',e); } }
+  rpTecFormAbrir(window._rpEditOsId,true);
+};
+
+function _rpTecStatusBtns(t){
+  const opt=[['anomalia','🔴 Anomalia detetada','#dc2626','#fef2f2','#fecaca'],['sem','🟢 Sem anomalia','#16a34a','#f0fdf4','#bbf7d0'],['na','⚪ Não se aplica','#64748b','#f8fafc','#e2e8f0']];
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+opt.map(function(o){
+    const on=t.status===o[0];
+    return '<button type="button" onclick="rpTecStatus(\''+t.key+'\',\''+o[0]+'\')" style="flex:1;min-width:100px;border:1.5px solid '+(on?o[2]:o[4])+';background:'+(on?o[3]:'#fff')+';color:'+(on?o[2]:'#64748b')+';border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:700;cursor:pointer;">'+o[1]+'</button>';
+  }).join('')+'</div>';
+}
+
+function _rpTecCard(t){
+  const bc=t.dano?'#f59e0b':(t.status==='anomalia'?'#dc2626':(t.status==='sem'?'#16a34a':(t.status==='na'?'#cbd5e1':'#e2e8f0')));
+  const vtag=(t.tipo==='visual')?'<span style="display:inline-block;font-size:9px;font-weight:700;color:#6d28d9;background:#f3e8ff;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px;">Visual</span>':'';
+  const _ph=t.dano?'Local do dano (ex: teto do WC, parede do quarto...)':'Escreve o local testado (ex: cozinha, garagem, terraço...)';
+  const nomeHTML=(t.custom||t.dano)
+    ? '<div style="display:flex;align-items:center;gap:8px;"><input type="text" value="'+_rpTecEscAttr(t.nome||'')+'" oninput="_rpTecSetNome(\''+t.key+'\',this.value)" placeholder="'+_ph+'" style="flex:1;font-size:15px;font-weight:600;color:#0f2447;border:none;border-bottom:1.5px solid #cbd5e1;background:transparent;outline:none;padding:3px 0;"><button type="button" onclick="rpTecRemLocal(\''+t.key+'\')" title="Remover" style="background:#fee2e2;border:none;border-radius:7px;width:30px;height:30px;color:#dc2626;cursor:pointer;font-size:15px;flex-shrink:0;">🗑</button></div>'
+    : '<div style="font-size:15px;font-weight:600;color:#0f2447;">'+vtag+_rpTecEsc(t.nome)+'</div>';
+  const tempo=(t.tipo==='tempo' && !t.dano)
+    ? '<div style="display:flex;align-items:center;gap:7px;margin-top:9px;background:#ecfeff;border-radius:9px;padding:6px 8px;width:max-content;"><span style="font-size:10px;font-weight:700;color:#0e7490;text-transform:uppercase;">Tempo</span><input type="number" min="1" max="120" value="'+(t.min!=null?t.min:5)+'" oninput="rpTecMin(\''+t.key+'\',this.value)" style="width:44px;text-align:center;border:1px solid #a5d8e0;border-radius:6px;padding:5px 2px;font-size:14px;font-weight:700;"><span style="font-size:11px;color:#475569;">min</span></div>'
+    : '';
+  const nm=(t.nome||'').trim();
+  let fotosHTML='';
+  if(nm){
+    (window._rpFotosTemp||[]).forEach((f,gi)=>{
+      if((f.legenda||'')!==nm) return;
+      fotosHTML+='<div style="position:relative;width:66px;height:66px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;"><img src="'+(f.url||f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;"><button onclick="window._rpFotosTemp.splice('+gi+',1);rpTecFormAbrir(window._rpEditOsId,true)" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,.85);border:none;border-radius:50%;width:18px;height:18px;color:#fff;cursor:pointer;font-size:11px;line-height:1;">×</button></div>';
+    });
+  }
+  const addFoto='<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px dashed #94a3b8;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;color:#0f2447;font-size:12.5px;flex-shrink:0;">📷 Foto<input type="file" accept="image/*" multiple style="display:none;" onchange="_rpTecAddFoto(this,\''+t.key+'\')"></label>';
+  const obsHTML='<textarea oninput="_rpTecTesteObs(\''+t.key+'\',this.value)" rows="2" placeholder="'+(t.dano?'Observação do dano (opcional)':'Observação deste teste (opcional)')+'" style="width:100%;margin-top:10px;font-size:13px;min-height:44px;resize:vertical;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">'+_rpTecEsc(t.obs||'')+'</textarea>';
+  return '<div data-tec-card="'+t.key+'" style="border:1.5px solid '+bc+';border-radius:11px;padding:11px 12px;margin-bottom:9px;">'
+    +nomeHTML+tempo+(t.dano?'':_rpTecStatusBtns(t))
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'+fotosHTML+addFoto+'</div>'
+    +obsHTML+'</div>';
+}
+
+function rpTecFormAbrir(osId, preserveTemp){
+  osId=osId||window._rpEditOsId;
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  window._rpEditOsId=osId;
+  // Guardar a posição do ecrã antes de reconstruir (senão volta ao topo)
+  const _scrollKeep = preserveTemp ? (document.querySelector('#mo-relat-pesquisa .md')?.scrollTop||0) : 0;
+  if(!preserveTemp) window._rpVerTodosTecTestes=false;
+  const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const c=rel.campos||{};
+  if(!preserveTemp){
+    try{ window._rpFotosTemp=[...(typeof rpGetFotos==='function'?rpGetFotos(osId,c,rel):(c.fotos||rel.fotos||[]))]; }
+    catch(e){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
+  } else if(!Array.isArray(window._rpFotosTemp)){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
+  if(!preserveTemp || !Array.isArray(window._rpTecTestes)) _rpTecInitEstado(c);
+  if(!preserveTemp || typeof window._rpTecAnom!=='string') window._rpTecAnom=(c.tipoProblema||os.tipoAnomalia||'');
+
+  const EQUIPS_DEFAULT=['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
+  const EQUIPS=(window.DB&&window.DB.empresaConfig&&window.DB.empresaConfig.equipamentosRelatorio&&window.DB.empresaConfig.equipamentosRelatorio.length)?window.DB.empresaConfig.equipamentosRelatorio:EQUIPS_DEFAULT;
+
+  let grupoAtual='', testesHTML='';
+  const _tecVerTodos = window._rpVerTodosTecTestes===true;
+  const _tecAnom = window._rpTecAnom||'';
+  (window._rpTecTestes||[]).filter(t=>!t.custom && !t.dano).forEach(t=>{
+    // Mostra o teste se: "ver todos", já tem resultado/observação, ou o grupo é relevante para a anomalia.
+    const _mostra = _tecVerTodos || !!t.status || (t.obs&&t.obs.trim()) || _rpTecGrupoRelevante(t.grupo, _tecAnom);
+    if(!_mostra) return;
+    if(t.grupo!==grupoAtual){ grupoAtual=t.grupo; testesHTML+='<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0e7490;margin:16px 4px 8px;">'+_rpTecEsc(t.grupo)+'</div>'; }
+    testesHTML+=_rpTecCard(t);
+  });
+  const _tecToggleTestes='<button type="button" onclick="window._rpVerTodosTecTestes=!window._rpVerTodosTecTestes;rpTecFormAbrir(window._rpEditOsId,true)" style="margin:6px 2px 0;background:none;border:none;color:#0e7490;font-size:12.5px;font-weight:700;cursor:pointer;padding:6px 0;">'+(_tecVerTodos?'➖ Mostrar só os relevantes':'➕ Mostrar todos os testes')+'</button>';
+
+  const customs=(window._rpTecTestes||[]).filter(t=>t.custom && !t.dano);
+  const _sec=(t)=>'<div style="font-size:13px;font-weight:800;color:#0f2447;margin:20px 2px 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;">'+t+'</div>';
+  let outrosHTML=_sec('Outros locais testados')
+    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Escreve o local que testaste e marca o resultado (podes juntar foto e observação).</div>'
+    +customs.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddLocal()" style="width:100%;min-height:46px;border:1.5px dashed #0e7490;background:#fff;color:#0e7490;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar local testado</button>';
+
+  const danos=(window._rpTecTestes||[]).filter(t=>t.dano);
+  let danosHTML=_sec('Danos observados')
+    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Indica o local onde aparecem os danos e junta as fotos dos mesmos.</div>'
+    +danos.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddDano()" style="width:100%;min-height:46px;border:1.5px dashed #f59e0b;background:#fff;color:#b45309;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar dano</button>';
+
+  const ANOM=['Fuga de água','Fuga em piscina','Fuga em rede de incêndio','Infiltração','Entupimento','Rotura','Humidade','Outro'];
+  const anomBloco=_sec('Anomalia')
+    +'<select id="rp-tipo-anomalia" onchange="rpTecAnomIn(this.value);rpTecFormAbrir(window._rpEditOsId,true)" style="width:100%;font-size:15px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f2447;"><option value="">— Seleciona a anomalia —</option>'
+    +ANOM.map(a=>'<option value="'+_rpTecEscAttr(a)+'" '+(window._rpTecAnom===a?'selected':'')+'>'+_rpTecEsc(a)+'</option>').join('')+'</select>';
+
+  const equipsHTML=EQUIPS.map(e=>{
+    const ck=window._rpTecEquips&&window._rpTecEquips.has(e);
+    return '<label style="display:flex;align-items:center;gap:11px;padding:9px 6px;border-top:1px solid #eef2f7;cursor:pointer;"><input type="checkbox" name="rp-eq" value="'+_rpTecEscAttr(e)+'" '+(ck?'checked':'')+' onchange="rpTecEquip(this.value,this.checked)" style="width:20px;height:20px;accent-color:#0e7490;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#0f2447;">'+_rpTecEsc(e)+'</span></label>';
+  }).join('');
+
+  document.getElementById('rp-modal-body').innerHTML=
+    '<div style="margin-bottom:12px;"><button type="button" onclick="rpTecVoltar()" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;color:#0f2447;cursor:pointer;">← Voltar à OS</button></div>'
+    +'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;color:#1e3a5f;line-height:1.5;">📋 <strong>Testes realizados.</strong> Em cada teste marca 🔴/🟢/⚪, indica o tempo, junta foto e escreve observação se precisares. O relatório é depois elaborado pela gestão a partir daqui.</div>'
+    +anomBloco
+    +_sec('Testes realizados')+testesHTML+_tecToggleTestes
+    +outrosHTML
+    +danosHTML
+    +_sec('Equipamentos utilizados')+'<div style="border:1px solid #e2e8f0;border-radius:11px;padding:2px 10px;">'+equipsHTML+'</div>'
+    +_sec('O que observou durante a pesquisa (geral)')
+    +'<div style="font-size:12.5px;color:#475569;margin:0 2px 8px;line-height:1.45;">Resumo geral do que viste. Não precisas de redigir — a gestão faz o relatório a partir daqui.</div>'
+    +'<textarea class="fta" id="rp-reclamacao" rows="6" oninput="rpTecObsIn(this.value)" placeholder="Ex.: Mancha de humidade no teto do WC do 1.º esq. Testei a base de duche e o lavatório com corante — apareceu no teto. Não consegui aceder à varanda (estore preso)." style="width:100%;font-size:14px;min-height:120px;resize:vertical;border:1px solid #cbd5e1;border-radius:10px;padding:11px 13px;">'+_rpTecEsc(window._rpTecObs)+'</textarea>';
+
+  openMo('mo-relat-pesquisa');
+  const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]')||document.querySelector('#mo-relat-pesquisa [onclick="rpSalvarRelatorio()"]')||document.querySelector('#mo-relat-pesquisa .btn-primary');
+  if(_sb){ _sb.removeAttribute('onclick'); _sb.onclick=function(){ rpTecSalvar(osId); }; _sb.textContent='📤 Enviar à gestão'; _sb.setAttribute('data-rptec-save','1'); }
+  if(preserveTemp){ const _md=document.querySelector('#mo-relat-pesquisa .md'); if(_md) setTimeout(()=>{ _md.scrollTop=_scrollKeep; }, 60); }
+}
+
+async function rpTecSalvar(osId){
+  osId=osId||window._rpEditOsId; if(!osId) return;
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  const existing=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  const campos=rpRecolherCampos();
+  const marcados=(window._rpTecTestes||[]).filter(t=> !t.dano && (t.status || (t.custom && (t.nome||'').trim()) || (t.obs||'').trim()));
+  const danosF=(window._rpTecTestes||[]).filter(t=> t.dano && ((t.nome||'').trim() || (t.obs||'').trim()));
+  const eqs=[...(window._rpTecEquips||[])];
+  if(marcados.length||danosF.length||eqs.length){
+    const linhas=marcados.map(t=>{
+      const nm=t.custom?((t.nome||'').trim()||'(local sem nome)'):t.nome;
+      let s='• '+nm;
+      if(t.status==='anomalia') s+=' — ANOMALIA DETETADA';
+      else if(t.status==='sem') s+=' — sem anomalia';
+      else if(t.status==='na') s+=' — não se aplica';
+      if(t.tipo==='tempo'&&t.min!=null&&(t.status==='anomalia'||t.status==='sem')) s+=' ('+t.min+' min)';
+      if((t.obs||'').trim()) s+='\n   ↳ '+t.obs.trim();
+      return s;
+    });
+    let resumo='TESTES REALIZADOS:\n'+(linhas.length?linhas.join('\n'):'(nenhum)');
+    if(danosF.length) resumo+='\n\nDANOS OBSERVADOS:\n'+danosF.map(t=>'• '+((t.nome||'').trim()||'(local não indicado)')+((t.obs||'').trim()?(' — '+t.obs.trim()):'')).join('\n');
+    if(eqs.length) resumo+='\n\nEQUIPAMENTOS: '+eqs.join(', ');
+    campos.trabalho=resumo; campos.detalhamento=resumo;
+  }
+  campos.descritivo=campos.reclamacao||campos.descritivo||'';
+  const _jaEnviado=existing.estado==='enviado';
+  const rel={...existing, id:osId, osId,
+    estado:_jaEnviado?'enviado':'rascunho',
+    campos, fotos:window._rpFotosTemp||[],
+    anexos:(window._rpAnexosTemp||[]).map(a=>({nome:a.nome,tamanho:a.tamanho,tipo:a.tipo,data:a.data,base64:a.base64||''})),
+    criadoEm:existing.criadoEm||new Date().toISOString(),
+    editadoEm:new Date().toISOString(), editadoPor:window.currentUser?.id,
+    submetidoPeloTecnico:true, submetidoEm:new Date().toISOString(), submetidoPor:window.currentUser?.id,
+  };
+  const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]');
+  const _txt=_sb?_sb.textContent:''; if(_sb){ _sb.disabled=true; _sb.textContent='⏳ A enviar...'; }
+  try{
+    if(typeof rpUploadFotosPendentes==='function'){
+      await rpUploadFotosPendentes(osId,({done,total})=>{ if(_sb&&total>0) _sb.textContent='⏳ Fotos '+done+'/'+total+'...'; });
+      rel.fotos=window._rpFotosTemp||[];
+    }
+  }catch(e){ console.warn('rpTecSalvar — envio de fotos falhou:',e); rel.fotos=window._rpFotosTemp||[]; }
+  try{ await rpSaveDoc(osId, rel); }
+  catch(e){ if(_sb){ _sb.disabled=false; _sb.textContent=_txt||'📤 Enviar à gestão'; } if(typeof toast==='function') toast('❌ Não foi possível enviar: '+((e&&e.message)||'erro de ligação'),'❌',8000); return; }
+  if(window._rpAutoSaveInterval){ clearInterval(window._rpAutoSaveInterval); window._rpAutoSaveInterval=null; }
+  try{ if(typeof auditLog==='function') auditLog('relatorio_testes_tecnico','OS '+osId+' — técnico submeteu testes/observações'); }catch(e){}
+  try{ if(!existing.campos && typeof rpNotificarSupervisoresRelatorio==='function') await rpNotificarSupervisoresRelatorio(os, rel); }catch(e){}
+  if(typeof toast==='function') toast('✅ Testes e fotos enviados à gestão. Obrigado!','✅');
+  closeMo('mo-relat-pesquisa');
+  if(typeof osAbrirDetalhe==='function') setTimeout(()=>osAbrirDetalhe(osId),250);
+}
+
+/* ── Propostas: "Peritagem por" — só em recuperação de tubagem / impermeabilização ── */
+window._propPrecisaPeritagem=function(n){ n=String(n||'').toLowerCase(); return n.includes('impermeab')||n.includes('cipp')||n.includes('epóxi')||n.includes('epoxi')||n.includes('recupera')||n.includes('reabilita')||n.includes('tubagem'); };
+window._propNomeServicoAtual=function(){ const sel=document.getElementById('prop-servico'); if(!sel) return ''; const o=sel.options[sel.selectedIndex]; return (o&&o.getAttribute('data-nome'))||sel.value||''; };
+window._propTogglePeritagem=function(){ const w=document.getElementById('prop-peritagem-wrap'); if(!w) return; w.style.display=window._propPrecisaPeritagem(window._propNomeServicoAtual())?'':'none'; };
+
+/* ── Botão "Histórico do cliente" na ficha da OS (técnico e gestão) ── */
+window._osHistCliente=function(){
+  const id=window._osDetalheId; if(!id){ if(typeof toast==='function') toast('OS não identificada.','⚠️'); return; }
+  const o=(window.DB.ordens||[]).find(x=>x.id===id);
+  if(o && o.clienteId && typeof cliHistorico==='function'){ cliHistorico(o.clienteId); }
+  else if(typeof toast==='function') toast('Cliente não associado a esta OS.','⚠️');
+};
+
+
+/* ── Abrir Gmail em segurança: encurta o corpo se for grande (evita Error 400) ── */
+window._abrirGmailSeguro=function(para, assunto, corpo, authuser){
+  corpo=String(corpo==null?'':corpo);
+  let body=corpo, extra='';
+  if(encodeURIComponent(corpo).length>1500){
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(corpo); }catch(e){}
+    body='Boa tarde,\n\nSegue em anexo o documento em PDF. O texto detalhado foi copiado para a área de transferência — pode colá-lo aqui com Ctrl+V.\n\nCom os melhores cumprimentos.';
+    extra=' · texto copiado (Ctrl+V)';
+  }
+  let url='https://mail.google.com/mail/?view=cm&fs=1';
+  if(authuser) url+='&authuser='+encodeURIComponent(authuser);
+  url+='&to='+encodeURIComponent(para||'')+'&su='+encodeURIComponent(assunto||'')+'&body='+encodeURIComponent(body);
+  window.open(url,'_blank');
+  if(extra && typeof toast==='function') toast('📧 Gmail aberto'+extra,'📧');
+  return true;
+};
+
+/* ── Garantir edição de relatório em elaboração (botão no rodapé da OS) ── */
+window._osEditarRelatorio=function(){
+  const id=window._osDetalheId; if(!id) return;
+  if(typeof closeMo==='function') closeMo('mo-os-tec');
+  if(typeof rpAbrirFormulario==='function') rpAbrirFormulario(id);
+};
+window._osAtualizarBotaoEditar=function(id){
+  try{
+    const b=document.getElementById('mo-os-tec-editar'); if(!b) return;
+    const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===id);
+    const role=window.currentUser?.role||'';
+    const os=(window.DB.ordens||[]).find(x=>x.id===id)||{};
+    const podeGestao=['admin','gerente','supervisor'].includes(role);
+    const atribuido=(role==='tecnico')&&(os.tecnicos||[]).includes(window.currentUser?.id);
+    const emElab=rel&&rel.campos&&Object.keys(rel.campos).length>0&&rel.estado!=='enviado'&&!rel.bloqueadoEdicao;
+    b.style.display=((podeGestao||atribuido)&&emElab)?'':'none';
+  }catch(e){}
+};
+
 async function rpSalvarRelatorio(){
   const osId = window._rpEditOsId; if(!osId) return;
   const os = (window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
@@ -25828,7 +26294,7 @@ async function brevoEnviarRelatorio(osId){
 
   try{
     toast('⏳ A enviar email ao cliente...','📧');
-    const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+    const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
       method:'POST',
       headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
       body:JSON.stringify(payload),
@@ -25927,8 +26393,7 @@ ${empNome}`;
   }catch(e){ console.warn('EmailJS falhou, abrindo Gmail:', e); }
 
   // Fallback: abrir Gmail com o corpo já preenchido
-  const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-  window.open(mailto,'_blank');
+  _abrirGmailSeguro(cli.email, assunto, corpo);
   toast('📧 Gmail aberto — adicione o PDF como anexo e envie!', 5000);
 };
 
@@ -26063,8 +26528,7 @@ Conclusão: ${rel.campos?.conclusao||'—'}
 
 Com os melhores cumprimentos,
 ${empNomeR}`;
-    const mailto = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(cli.email)}&su=${encodeURIComponent(assuntoFb)}&body=${encodeURIComponent(corpoFb)}`;
-    window.open(mailto,'_blank');
+    _abrirGmailSeguro(cli.email, assuntoFb, corpoFb);
     toast('📧 Gmail aberto — adicione o PDF como anexo e envie!','📧');
   }
 }
@@ -26557,6 +27021,65 @@ async function osFecharSemRelatorio(osId){
   if(typeof osRenderMinhas==='function') osRenderMinhas();
 }
 
+// ── Serviço não realizado ───────────────────────────────────────
+// O técnico chegou ao local mas não pôde fazer o trabalho. Escreve o
+// motivo, tira foto do local (obrigatória), a OS sai das listas ativas
+// (fica em "Cancelada") e guarda motivo/foto/quem/quando para o admin.
+function _osNRlerFicheiro(f){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('falha a ler a foto')); r.readAsDataURL(f); });
+}
+function _osNRpedirFoto(){
+  return new Promise((resolve)=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='image/*'; inp.capture='environment'; inp.style.display='none';
+    inp.onchange=()=>{ const f=inp.files&&inp.files[0]; try{document.body.removeChild(inp);}catch(_){}; resolve(f||null); };
+    document.body.appendChild(inp); inp.click();
+  });
+}
+async function osNaoRealizada(osId){
+  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
+  const motivo=(prompt('SERVIÇO NÃO REALIZADO\n\nEscreva o motivo pelo qual não foi possível fazer o trabalho:')||'').trim();
+  if(!motivo){ toast('Motivo em branco — nada foi registado.','⚠️'); return; }
+  if(!confirm('A seguir tem de TIRAR UMA FOTO do local (obrigatória).\n\nToque em OK para abrir a câmara.')) return;
+  const file=await _osNRpedirFoto();
+  if(!file){ toast('Foto obrigatória — não foi registado. Tente de novo.','⚠️'); return; }
+  toast('A enviar a foto do local…','⏳');
+  let fotoLocal=null;
+  try{
+    let dataUrl=await _osNRlerFicheiro(file);
+    if(typeof _compressImageDataUrl==='function'){
+      dataUrl=await _compressImageDataUrl(dataUrl,1400,0.65);
+      if(dataUrl.length>700000) dataUrl=await _compressImageDataUrl(dataUrl,1000,0.5);
+    }
+    if(typeof window.fsUploadFoto==='function'){
+      const up=await window.fsUploadFoto('os-nao-realizada/'+osId+'/'+Date.now()+'.jpg', dataUrl);
+      fotoLocal={ url:up.url, path:up.path };
+    } else {
+      fotoLocal={ url:dataUrl }; // Storage indisponível — guarda a imagem embutida
+    }
+  }catch(e){
+    console.warn('upload foto não-realizada falhou:',e);
+    if(!confirm('Não consegui enviar a foto ('+(e.message||e)+').\n\nQuer registar mesmo assim, sem foto?')) return;
+  }
+  const agora=new Date().toISOString();
+  await window.fsSetMerge('ordens', osId, {
+    estado:'cancelada',
+    naoRealizada:true,
+    motivoNaoRealizacao:motivo,
+    fotoLocal: fotoLocal||null,
+    naoRealizadaEm:agora,
+    naoRealizadaPor:window.currentUser?.id,
+    naoRealizadaPorNome:window.currentUser?.name||'',
+  });
+  document.querySelectorAll('.os-popover').forEach(p=>p.remove());
+  closeMo('mo-os-tec');
+  toast(`OS ${osId} registada como não realizada — ${motivo}`,'🚫');
+  if(typeof auditLog==='function') auditLog('os_nao_realizada',`OS ${osId} não realizada por ${window.currentUser?.name}. Motivo: ${motivo}`);
+  if(typeof osRenderAgenda==='function') osRenderAgenda();
+  if(typeof osRenderMinhas==='function') osRenderMinhas();
+}
+window.osNaoRealizada = osNaoRealizada;
+
 // ── Serviços não faturáveis (garantia / orçamento) ──────────────
 // Sem modalidade de pagamento e sem aviso de faturação.
 function osServicoNaoFaturavel(os){
@@ -26673,6 +27196,9 @@ function osAbrirConcluir(osId){
   setTimeout(()=>{
     osInitCanvas('canvas-tec');
     osInitCanvas('canvas-cli');
+    // Recarregar assinaturas já guardadas (não as perder ao voltar à OS)
+    osCarregarAssinatura('canvas-tec', os.assinaturaTecnico, 'os-tec-sig-label');
+    osCarregarAssinatura('canvas-cli', os.assinaturaCliente, null);
   },200);
 }
 
@@ -26777,6 +27303,23 @@ function osCanvasToDataURL(canvasId){
   return canvas.toDataURL('image/png');
 }
 
+// Recarregar uma assinatura já guardada para a tela — para NÃO a perder ao voltar à OS.
+function osCarregarAssinatura(canvasId, dataUrl, labelId){
+  if(!dataUrl) return;
+  const canvas=document.getElementById(canvasId); if(!canvas) return;
+  const img=new Image();
+  img.onload=function(){
+    try{
+      const ctx=canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      canvas.dataset.signed='true';
+      if(labelId){ const el=document.getElementById(labelId); if(el) el.style.display='none'; }
+    }catch(e){ console.warn('carregar assinatura falhou:', e); }
+  };
+  img.src=dataUrl;
+}
+
 // ── Mostrar/esconder os campos de quem assina (cliente não presente) ──
 function osToggleAssinante(){
   const chk=document.getElementById('os-ass-outro')?.checked;
@@ -26792,10 +27335,10 @@ async function osConcluirComAssinaturas(){
   // Parar temporizador se estiver a correr
   clearInterval(osTimerInterval);
 
-  const assTec=osCanvasToDataURL('canvas-tec');
+  const assTec=osCanvasToDataURL('canvas-tec') || os.assinaturaTecnico || '';
   if(!assTec){ toast('A assinatura do técnico é obrigatória!','⚠️'); return; }
 
-  const assCli=osCanvasToDataURL('canvas-cli');
+  const assCli=osCanvasToDataURL('canvas-cli') || os.assinaturaCliente || '';
   if(!assCli){
     toast('A assinatura do cliente é obrigatória para fechar a OS!','🚫');
     // Destaque visual no canvas do cliente
@@ -26850,7 +27393,13 @@ async function osConcluirComAssinaturas(){
   if(os.fluxoRelatorio!=='depois'){
     const _rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId) || {};
     const _cps = _rel.campos || {};
-    const _nFotos = (_rel.fotos||window._rpFotosTemp||[]).length;
+    // Contar fotos como o resto da app: rpGetFotos junta as fotos da coleção
+    // separada 'relatorios_fotos'. Antes contava só _rel.fotos (fica vazio nesta
+    // arquitetura), pelo que bloqueava o fecho a dizer "tem 0 fotos" mesmo havendo.
+    const _nFotos = Math.max(
+      (window._rpFotosTemp||[]).length,
+      ((typeof rpGetFotos==='function') ? rpGetFotos(osId, _cps, _rel) : (_cps.fotos||_rel.fotos||[])).length
+    );
     const _faltam = [];
     // A fração/nº de unidade só faz sentido em apartamentos/condomínios; numa moradia não se exige.
     const _osFrac = (window.DB.ordens||[]).find(x=>x.id===osId) || {};
@@ -26858,8 +27407,13 @@ async function osConcluirComAssinaturas(){
     const _multiUnidade = _tipolFrac.includes('apart') || _tipolFrac.includes('condom') || _tipolFrac.includes('comum') || _tipolFrac.includes('fraç') || _tipolFrac.includes('frac');
     if(_multiUnidade && (!_cps.numeroFracao || !_cps.numeroFracao.trim())) _faltam.push('número da fração inspecionada');
     if(!_cps.tipoProblema) _faltam.push('tipo de anomalia');
-    if(!_cps.localManifestacao || !_cps.localManifestacao.trim()) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
-    if(!_cps.locaisPesquisados || !_cps.locaisPesquisados.trim()) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
+    // O local pode vir dos campos próprios (formulário da gestão) OU da descrição
+    // do técnico (observação geral / testes), que já contém os locais. Aceitar ambos,
+    // para não pedir o local quando ele já foi informado noutro formato.
+    const _temLocalManif = (_cps.localManifestacao&&_cps.localManifestacao.trim()) || (_cps.reclamacao&&_cps.reclamacao.trim()) || (_cps.descritivo&&_cps.descritivo.trim());
+    const _temLocaisPesq = (_cps.locaisPesquisados&&_cps.locaisPesquisados.trim()) || (_cps.trabalho&&_cps.trabalho.trim()) || (_cps.detalhamento&&_cps.detalhamento.trim()) || (_cps.reclamacao&&_cps.reclamacao.trim());
+    if(!_temLocalManif) _faltam.push('local onde o problema se manifesta (fração/divisão específica)');
+    if(!_temLocaisPesq) _faltam.push('local(is) onde se fez a pesquisa (fração/divisão específica)');
     if(_estadoFecho==='definitivo' && !((_cps.conclusao&&_cps.conclusao.trim())||(_cps.trabalho&&_cps.trabalho.trim()))) _faltam.push('descrição do trabalho / conclusão (obrigatória num relatório definitivo)');
     if(_nFotos < 4) _faltam.push('mínimo de 4 fotos do problema (tem '+_nFotos+')');
     if(_faltam.length){
@@ -30648,6 +31202,10 @@ function propostaAbrir(clienteId){
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Elaborado por</div>
         <input class="fi" id="prop-autor" value="${utilizador}" style="font-size:13px;background:var(--s1);">
       </div>
+      <div id="prop-peritagem-wrap" style="display:none;">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Peritagem por <span style="font-weight:400;text-transform:none;">(pesquisa/deteção)</span></div>
+        <input class="fi" id="prop-peritagem" value="" placeholder="Empresa ou técnico que fez a peritagem" style="font-size:13px;background:var(--s1);">
+      </div>
       <div>
         <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">🏷️ Marca da empresa</div>
         <select class="fs" id="prop-marca" style="font-size:13px;background:var(--s1);font-weight:700;">
@@ -30683,7 +31241,7 @@ function propostaAbrir(clienteId){
     <!-- Selecionar Serviço -->
     <div class="fg">
       <label style="font-weight:700;">Tipo de Serviço *</label>
-      <select class="fs" id="prop-servico" onchange="propostaCarregarModelo()">
+      <select class="fs" id="prop-servico" onchange="propostaCarregarModelo();window._propTogglePeritagem&&_propTogglePeritagem()">
         <option value="">— Selecione o serviço —</option>
         ${servicos.map(s=>`<option value="${s.id}" data-nome="${s.nome}" data-h1="${s.h1||0}" data-hadd="${s.hadd||0}" data-iva="${s.iva||23}">${s.nome}</option>`).join('')}
       </select>
@@ -30830,6 +31388,7 @@ function propostaAbrir(clienteId){
   setTimeout(()=>{
     const _sel = document.getElementById('prop-servico');
     if(_sel && _sel.value) propostaCarregarModelo();
+    if(window._propTogglePeritagem) _propTogglePeritagem();
   }, 50);
 }
 
@@ -30864,6 +31423,7 @@ function propostaEditar(propId){
 
     const selSrv = document.getElementById('prop-servico');
     if(selSrv && p.servicoId){ selSrv.value = p.servicoId; }
+    { const _pp=document.getElementById('prop-peritagem'); if(_pp) _pp.value=p.peritagemPor||''; if(window._propTogglePeritagem) _propTogglePeritagem(); }
     if(typeof propostaCarregarModelo==='function' && selSrv && selSrv.value){
       propostaCarregarModelo();
     }
@@ -31304,6 +31864,7 @@ async function _gerarPdfBase64(html, numProposta){
     pdf.setFontSize(9); pdf.setFont('helvetica','normal');
     pdf.setTextColor(80,80,80);
     pdf.text('Data: '+(d.dataDoc||'')+'   |   Elaborado por: '+(d.autor||''), M, y+6);
+    if(d.peritagem && window._propPrecisaPeritagem && window._propPrecisaPeritagem(d.nomeServico)){ pdf.text('Peritagem por: '+d.peritagem, M, y+11); y += 5; }
     y += 14;
 
     // ── Cliente ──
@@ -31493,6 +32054,75 @@ async function _gerarPdfBase64(html, numProposta){
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+//  ENVIO MANUAL DE PROPOSTA
+//  Abre a conta de email do utilizador (contacto@localizafugas.com),
+//  descarrega o PDF para anexar e copia o corpo formatado para a
+//  área de transferência. Substitui o envio automático (Brevo)
+//  que estava a devolver erro 400.
+// ══════════════════════════════════════════════════════════════
+const PROP_EMAIL_CONTA = 'contacto@localizafugas.com'; // conta de email a abrir (remetente)
+
+// Descarrega o PDF (a partir de base64) para o utilizador anexar ao email
+function _propostaDescarregarPdf(base64, numProposta){
+  if(!base64) return false;
+  try{
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], {type:'application/pdf'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'Proposta_' + String(numProposta).replace(/[^A-Za-z0-9_-]/g,'_') + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    return true;
+  }catch(e){ console.warn('Descarregar PDF falhou:', e); return false; }
+}
+
+// Copia o corpo para a área de transferência (HTML formatado + texto simples)
+async function _propostaCopiarHtml(htmlEmail, corpo){
+  try{
+    if(navigator.clipboard && window.ClipboardItem && htmlEmail){
+      const item = new ClipboardItem({
+        'text/html':  new Blob([htmlEmail], {type:'text/html'}),
+        'text/plain': new Blob([corpo||''], {type:'text/plain'}),
+      });
+      await navigator.clipboard.write([item]);
+      return true;
+    }
+    if(navigator.clipboard && corpo){ await navigator.clipboard.writeText(corpo); return true; }
+  }catch(e){ console.warn('Copiar corpo falhou:', e); }
+  return false;
+}
+
+// Fluxo completo: descarrega PDF → abre a conta de email → copia corpo
+async function _propostaAbrirEmailManual({assunto, corpo, htmlEmail, pdfBase64, numProposta, emailDest, nomeDest}){
+  // 1) Descarregar o PDF para anexar
+  const temPdf = _propostaDescarregarPdf(pdfBase64, numProposta);
+  // 2) Abrir a conta de email (Gmail) já com destinatário, assunto e corpo
+  // Corpo curto no URL (o Gmail devolve erro 400 se o link for demasiado longo).
+  // O corpo completo formatado é copiado para a área de transferência (colar com Ctrl+V) e o PDF vai em anexo.
+  const _corpoGmail = 'Boa tarde,\n\nSegue em anexo a nossa proposta em PDF. Pode também colar a versão detalhada com Ctrl+V (já foi copiada para a área de transferência).\n\nCom os melhores cumprimentos,\nLocaliza Fugas';
+  const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&authuser=' + encodeURIComponent(PROP_EMAIL_CONTA)
+    + '&to='       + encodeURIComponent(emailDest||'')
+    + '&su='       + encodeURIComponent(assunto||'')
+    + '&body='     + encodeURIComponent(_corpoGmail);
+  window.open(gmailUrl, '_blank');
+  // 3) Copiar o corpo formatado para a área de transferência (para colar, se quiser)
+  const copiou = await _propostaCopiarHtml(htmlEmail, corpo);
+  // 4) Instruções ao utilizador
+  const partes = ['Email aberto de ' + PROP_EMAIL_CONTA];
+  if(temPdf) partes.push('PDF descarregado — anexe-o');
+  if(copiou) partes.push('corpo copiado (Ctrl+V p/ versão formatada)');
+  toast(partes.join(' · '), '📧');
+  return true;
+}
+
 
 async function propostaEnviarLivre(){
   const nome=document.getElementById('prop-nome')?.value.trim()||'Cliente';
@@ -31530,6 +32160,7 @@ async function propostaEnviarLivre(){
     cliId, estado:'enviada',
     criadoEm:new Date().toISOString(),
     criadoPor:autor,
+    peritagemPor:document.getElementById('prop-peritagem')?.value||'',
     dataDoc:document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
   };
 
@@ -31544,6 +32175,7 @@ async function propostaEnviarLivre(){
       numProposta,
       dataDoc:     _dadosProposta.dataDoc||new Date().toLocaleDateString('pt-PT'),
       autor,
+      peritagem:   document.getElementById('prop-peritagem')?.value||'',
       nomeCliente: nome,
       email:       emailDest,
       tel:         document.getElementById('prop-tel')?.value||'',
@@ -31600,53 +32232,21 @@ async function propostaEnviarLivre(){
       .replace(/<button[^>]*>🖨️[^<]*<\/button>/gi,'');
   }catch(pdfErr){ console.warn('PDF generation error:',pdfErr); }
 
-  if(cfg.brevoApiKey){
-    const emp=window._empCfg||{};
-    const remetente = cfg.remetente||emp.email||'propostas@hidrogest.net';
-    const nomeRem   = emp.nome||cfg.empresa||'Localiza Fugas';
-    const replyToEmail = cfg.replyTo||'localizafugas@gmail.com';
-    // Cópia interna por BCC para o email da empresa (oculta ao cliente)
-    const bccList = (emailCopiaEmpresa && emailCopiaEmpresa!==emailDest)
-      ? [{email:emailCopiaEmpresa, name:'Localiza Fugas'}] : [];
-    try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',
-        headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
-        body:JSON.stringify({
-          sender:{name:nomeRem, email:remetente},
-          replyTo:{email:replyToEmail, name:nomeRem},
-          to:[{email:emailDest,name:nome}],
-          ...(bccList.length ? {bcc:bccList} : {}),
-          subject:assunto,
-          textContent:corpo,
-          ...(window._propostaPdfAnexo||[]).length ? {attachment:window._propostaPdfAnexo} : {},
-        })});
-      if(r.ok||r.status===201){
-        const ccMsg  = bccList.length             ? ` (cópia: ${emailCopiaEmpresa})`  : '';
-        const pdfMsg = (window._propostaPdfAnexo||[]).length ? ' + proposta em anexo' : '';
-        toast(`Proposta enviada ✅${ccMsg}${pdfMsg}`, '📋');
-        window._propostaPdfAnexo = null;
-        await window.fsSet('propostas',numProposta,_dadosProposta);
-        _propostaUpsertLocal(_dadosProposta);
-        await auditLog('proposta_enviada',`${numProposta}: ${nomeServ} para ${emailDest} (por ${autor})${ccMsg}`);
-        document.getElementById('mo-proposta')?.remove();
-        return;
-      } else {
-        const errText = await r.text().catch(()=>'');
-        toast(`Erro ao enviar email (${r.status}). Verifique as configurações Brevo.`,'❌');
-        console.error('Brevo error:', r.status, errText);
-        return;
-      }
-    }catch(e){
-      toast('Erro de rede ao enviar. Verifique a ligação.','❌');
-      console.error('Brevo fetch error:',e);
-      return;
-    }
-  }
-  // Sem Brevo configurado: avisar e abrir Gmail como fallback
-  toast('Email Brevo não configurado — a abrir Gmail como alternativa','⚠️');
-  window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(emailDest)+'&su='+encodeURIComponent(assunto)+'&body='+encodeURIComponent(corpo),'_blank');
-  // Guardar mesmo sem envio via API
-  try{ await window.fsSet('propostas',numProposta,_dadosProposta); _propostaUpsertLocal(_dadosProposta); }catch(e){}
+  // ── Envio manual: abrir a conta de email do utilizador para anexar o PDF ──
+  const _pdfB64 = (window._propostaPdfAnexo||[])[0]?.content || null;
+  await _propostaAbrirEmailManual({
+    assunto, corpo,
+    htmlEmail: window._propostaHtmlEmail || '',
+    pdfBase64: _pdfB64,
+    numProposta, emailDest, nomeDest: nome,
+  });
+  window._propostaPdfAnexo = null;
+  // Guardar o registo da proposta e histórico
+  try{
+    await window.fsSet('propostas', numProposta, _dadosProposta);
+    _propostaUpsertLocal(_dadosProposta);
+    await auditLog('proposta_enviada', `${numProposta}: ${nomeServ} para ${emailDest} (envio manual, por ${autor})`);
+  }catch(e){ console.warn('Guardar proposta falhou:', e); }
   document.getElementById('mo-proposta')?.remove();
 }
 
@@ -31694,6 +32294,7 @@ async function propostaGuardar(){
     criadoEm:_editandoId ? (_moEdit?._criadoEmOrig||new Date().toISOString()) : new Date().toISOString(),
     editadoEm:_editandoId ? new Date().toISOString() : undefined,
     criadoPor:autor,
+    peritagemPor:document.getElementById('prop-peritagem')?.value||'',
     dataDoc:document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
   };
   if(_dadosProposta.editadoEm===undefined) delete _dadosProposta.editadoEm;
@@ -31741,34 +32342,36 @@ async function propostaEnviarRascunho(propId){
   // Gerar PDF anexo
   let pdfAnexo=null;
   try{
-    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
+    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,peritagem:p.peritagemPor||'',nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
     const pdfBase64=await new Promise(res=>{const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});const fr=new FileReader();fr.onload=()=>{const parts=fr.result.split(',');res(parts[1]||null);};fr.onerror=()=>res(null);fr.readAsDataURL(blob);});
     if(pdfBase64){
         pdfAnexo=[{content:pdfBase64,name:'Proposta_'+p.numero.replace(/[^A-Za-z0-9_-]/g,'_')+'.pdf'}];
         window._propostaHtmlEmailRasc = pdfHtml;
       }
   }catch(e){ console.warn('PDF err:',e); }
-  if(cfg.brevoApiKey){
-    const remetente=cfg.remetente||emp.email||'propostas@hidrogest.net';
-    const nomeRem=emp.nome||cfg.empresa||'Localiza Fugas';
-    const replyToEmail=cfg.replyTo||'localizafugas@gmail.com';
-    const _bccEmp = (p.email!=='localizafugas@gmail.com') ? [{email:'localizafugas@gmail.com',name:'Localiza Fugas'}] : [];
-    try{
-      const r=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},body:JSON.stringify({sender:{name:nomeRem,email:remetente},replyTo:{email:replyToEmail,name:nomeRem},to:[{email:p.email,name:p.nome}],...(_bccEmp.length?{bcc:_bccEmp}:{}),subject:assunto,htmlContent:window._propostaHtmlEmailRasc||corpo.replace(/\n/g,'<br>'),textContent:corpo})});
-      if(r.ok||r.status===201){
-        toast('Proposta enviada ✅'+(pdfAnexo?' + PDF em anexo':''),'📋');
-        await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});
-        _propostaUpsertLocal({id:propId,estado:'enviada',enviadoEm:new Date().toISOString()});
-        await auditLog('proposta_enviada',`${p.numero}: ${nomeServ} para ${p.email} (por ${autor})`);
-        return;
-      }
-    }catch(e){ toast('Erro de rede ao enviar','❌'); return; }
-  }
-  // Fallback Gmail
-  toast('Email Brevo não configurado — a abrir Gmail','⚠️');
-  window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(p.email)+'&su='+encodeURIComponent(assunto)+'&body='+encodeURIComponent(corpo),'_blank');
+  // ── Envio manual: gerar PDF real, abrir a conta de email e anexar ──
+  let _pdfB64Rasc = null;
+  try{
+    window._propostaParaPdf = {
+      numProposta:p.numero, dataDoc:p.dataDoc||new Date().toLocaleDateString('pt-PT'),
+      autor, nomeCliente:p.nome, email:p.email, tel:p.tel||'', morada:p.morada||'',
+      nomeServico:nomeServ, h1, hadd, horas, tipoCobranca:p.tipoCobranca||'hora',
+      corteMetros:p.corteMetros||0, iva, intro:p.intro||'', descritivo:p.descritivo||'',
+      obs:p.obs||'', validade:p.validade||'', marca:p.marca||'localiza',
+      empresa:empresa2, telEmp:tel2, emailEmp:emailEmp2,
+      moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
+    };
+    _pdfB64Rasc = await _gerarPdfBase64(window._propostaHtmlEmailRasc||'', p.numero);
+  }catch(e){ console.warn('PDF rascunho falhou:', e); }
+  await _propostaAbrirEmailManual({
+    assunto, corpo,
+    htmlEmail: window._propostaHtmlEmailRasc || '',
+    pdfBase64: _pdfB64Rasc,
+    numProposta: p.numero, emailDest: p.email, nomeDest: p.nome,
+  });
   await window.fsSetMerge('propostas',propId,{estado:'enviada',enviadoEm:new Date().toISOString()});
   _propostaUpsertLocal({id:propId,estado:'enviada',enviadoEm:new Date().toISOString()});
+  await auditLog('proposta_enviada',`${p.numero}: ${nomeServ} para ${p.email} (envio manual, por ${autor})`);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -32272,7 +32875,7 @@ function _propostaHtmlPDF(dados){
   }
 
   const {
-    numProposta='', dataDoc='', autor='', nomeCliente='', email='', tel='', morada='',
+    numProposta='', dataDoc='', autor='', peritagem='', nomeCliente='', email='', tel='', morada='',
     nomeServico='', h1=0, hadd=0, horas=1, iva=23, tipoCobranca='hora', corteMetros=0,
     intro='', procedimento='', descritivo='', obs='',
     marca='localiza',
@@ -32442,6 +33045,7 @@ hr.div{border:none;border-top:2px solid ${cor};margin:0 0 20px;}
     <div>Data: <strong>${dataDoc}</strong></div>
     <div>Validade: <strong>${validadeFmt}</strong></div>
     ${autor ? `<div>Elaborado por: <strong>${autor}</strong></div>` : ''}
+    ${peritagem && window._propPrecisaPeritagem && window._propPrecisaPeritagem(nomeServico) ? `<div>Peritagem por: <strong>${peritagem}</strong></div>` : ''}
   </div>
 </div>
 <hr class="div">
@@ -32593,6 +33197,7 @@ function propostaGerarPDF(){
     numProposta: document.getElementById('prop-numero')?.value||_propostaProxNumero(),
     dataDoc:     document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
     autor:       document.getElementById('prop-autor')?.value||window.currentUser?.name||'',
+    peritagem:   document.getElementById('prop-peritagem')?.value||'',
     nomeCliente: document.getElementById('prop-nome')?.value||'',
     email:       document.getElementById('prop-email')?.value||'',
     tel:         document.getElementById('prop-tel')?.value||'',
@@ -33805,7 +34410,7 @@ window.cliHistoricoImprimir = function(cliId){
 
     try{
       _toast('⏳ A enviar o relatório ao cliente...','📧');
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),
@@ -34881,7 +35486,7 @@ Deixa vazio o que não conseguires ler.`);
       '<table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="background:#eef2f4;"><th style="padding:8px 10px;text-align:left;">O quê</th><th style="padding:8px 10px;text-align:right;">Valor</th><th style="padding:8px 10px;text-align:left;">Vencimento</th><th style="padding:8px 10px;text-align:left;">Estado</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
       '<p style="color:#94a3b8;font-size:12px;margin-top:16px;">Enviado automaticamente pelo HidroGest · Contas a Pagar.</p></div>';
     try{
-      const resp=await fetch('https://api.brevo.com/v3/smtp/email',{method:'POST',
+      const resp=await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{method:'POST',
         headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
         body:JSON.stringify({sender:{name:emp.nome||'HidroGest',email:dest},to:[{email:dest,name:emp.nome||'Gestão'}],
           subject:'⏰ Contas a pagar — '+lista.length+' a vencer'+(venc.length?' ('+venc.length+' vencidas)':''),htmlContent:html})});
@@ -35817,7 +36422,7 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
 
     try{
       _toast('⏳ A enviar o relatório ao cliente...','📧');
-      const r = await fetch('https://api.brevo.com/v3/smtp/email',{
+      const r = await fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
         method:'POST',
         headers:{'api-key':apiKey,'Content-Type':'application/json','accept':'application/json'},
         body: JSON.stringify(payload),
@@ -35950,6 +36555,46 @@ window.osLimparClausulas = osLimparClausulas;
     });
   };
 })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     HidroGest — Botão "Apresentação do grupo"
+     contacto@localizafugas.com NÃO é conta Google, por isso NÃO se usa
+     o Gmail. Este botão abre a app de email predefinida do dispositivo
+     (mailto). No ecrã de composição: escolher "De: contacto@localizafugas.com"
+     (essa conta tem de estar configurada no telemóvel) e anexar o PDF.
+     ALTERNATIVA (envio garantido pela conta): abrir o webmail do domínio.
+     Se tiver o endereço do webmail (ex.: https://webmail.localizafugas.com),
+     defina-o em WEBMAIL_URL abaixo — passa a abrir aí a composição.
+     ══════════════════════════════════════════════════════════════ -->
+<script>
+window.abrirApresentacaoGrupo = function(){
+  var conta      = 'contacto@localizafugas.com';
+  var WEBMAIL_URL = ''; // ex.: 'https://webmail.localizafugas.com' (deixar vazio = usar a app de email)
+  var tel        = (window._empCfg && window._empCfg.tel) || '931 747 199';
+  var assunto    = 'Grupo Localiza Fugas — Apresentação';
+  var corpo      =
+    'Exmos. Senhores,\n\n' +
+    'Segue em anexo a apresentação do grupo Localiza Fugas — especializado em deteção de fugas e reabilitação de tubagem de água e esgoto sem obra (CIPP e spray epóxi), com cobertura nacional e frota própria.\n\n' +
+    'Ficamos ao dispor para colaborar.\n\n' +
+    'Com os melhores cumprimentos,\nGrupo Localiza Fugas\n' + tel + ' · ' + conta;
+
+  if(WEBMAIL_URL){
+    // Abre o webmail do domínio (composição). O anexo faz-se no webmail.
+    window.open(WEBMAIL_URL, '_blank');
+    if(typeof toast === 'function'){
+      toast('Webmail aberto — componha a mensagem e anexe o PDF da apresentação.', '📎');
+    }
+    return;
+  }
+
+  // Abre a app de email predefinida do dispositivo.
+  var url = 'mailto:?subject=' + encodeURIComponent(assunto) + '&body=' + encodeURIComponent(corpo);
+  window.location.href = url;
+  if(typeof toast === 'function'){
+    toast('Escolha "De: ' + conta + '" e anexe o PDF da apresentação.', '📎');
+  }
+};
 </script>
 
 </body>

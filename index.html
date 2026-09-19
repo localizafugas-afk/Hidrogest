@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.88<br>
+      HidroGest v15.89<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.88 · Set 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.89 · Set 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.88<br>
+      HidroGest v15.89<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -16753,31 +16753,35 @@ window.hgDarBaixaAte = async function(dataLimite){
   dataLimite = (dataLimite||'2026-07-31').slice(0,10);
   const _role=window.currentUser?.role;
   if(!['admin','gerente','supervisor'].includes(_role)){ toast('Sem permissão para dar baixa em massa.','🔒'); return; }
+  // Data do trabalho da OS (nunca a data de hoje)
+  const _dataTrab = (o)=> o.data || (o.concluidoEm?String(o.concluidoEm).slice(0,10):'') || dataLimite;
   const alvo = (window.DB.ordens||[]).filter(o=>{
-    const d=(o.data||(o.concluidoEm||'').slice(0,10)||'').slice(0,10);
+    const d=_dataTrab(o);
     if(!d || d>dataLimite) return false;
     if(o.estado==='cancelada') return false;
     if(!['concluida','os_fechada'].includes(o.estado)) return false;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return false;
-    if(o.pago===true) return false;
-    return true;
+    return true; // inclui já-pagas para corrigir a data, se estiver errada
   });
-  if(!alvo.length){ toast('Não há OS por dar baixa até '+dataLimite+' (ou já estão todas pagas).','ℹ️',6000); return; }
-  if(!(await hgConfirm('Dar baixa (marcar como FATURADA + PAGA) em '+alvo.length+' OS com data até '+dataLimite+'?\n\nOs recibos passam a pagos. Pode anular recibo a recibo depois, se precisar.'))) return;
-  let ok=0, err=0;
+  if(!alvo.length){ toast('Não há OS para dar baixa/corrigir até '+dataLimite+'.','ℹ️',6000); return; }
+  if(!(await hgConfirm('Dar baixa (marcar como FATURADA + PAGA, com a data do TRABALHO) em '+alvo.length+' OS com data até '+dataLimite+'?\n\nCorrige também a data das que já estavam pagas com data errada.'))) return;
+  let ok=0, corr=0, err=0;
   for(const o of alvo){
     try{
-      const now=new Date().toISOString();
-      await window.fsSetMerge('ordens', o.id, {pago:true, pagoEm:now, pagoPor:window.currentUser?.id, faturaEmitida:true, faturaEmitidaEm:(o.faturaEmitidaEm||now)});
-      const _i=(window.DB.ordens||[]).findIndex(x=>x.id===o.id); if(_i>=0) window.DB.ordens[_i]={...window.DB.ordens[_i], pago:true, pagoEm:now, faturaEmitida:true, faturaEmitidaEm:(o.faturaEmitidaEm||now)};
+      const dt=_dataTrab(o);                    // data do trabalho (YYYY-MM-DD)
+      const dtIso=dt+'T12:00:00.000Z';
+      const jaPago=o.pago===true;
+      o.pago=true; o.pagoEm=dt; o.faturaEmitida=true; o.faturaEmitidaEm=dtIso; if(!o.pagoPor) o.pagoPor=window.currentUser?.id;
+      await window.fsSetMerge('ordens', o.id, {pago:true, pagoEm:dt, pagoPor:o.pagoPor, faturaEmitida:true, faturaEmitidaEm:dtIso});
+      const _i=(window.DB.ordens||[]).findIndex(x=>x.id===o.id); if(_i>=0) window.DB.ordens[_i]=o;
       let rec=(window.DB.recibos||[]).find(r=>r.osId===o.id);
       if(!rec){ try{ rec=await osCriarReciboAutomatico(o,'paid'); }catch(_e){} }
-      else if(rec.status!=='paid'){ await window.fsSet('recibos',rec.id,{...rec,status:'paid',pagoEm:(rec.pagoEm||today())}); rec.status='paid'; }
-      ok++;
+      else { await window.fsSet('recibos',rec.id,{...rec,status:'paid',date:dt,pagoEm:dt}); rec.status='paid'; rec.date=dt; rec.pagoEm=dt; }
+      if(jaPago) corr++; else ok++;
     }catch(e){ console.warn('baixa em massa — OS '+o.id+':',e); err++; }
   }
-  if(typeof auditLog==='function') auditLog('baixa_massa','Baixa em massa até '+dataLimite+' — '+ok+' OS'+(err?(', '+err+' com erro'):''));
-  toast('✅ Baixa concluída: '+ok+' OS marcadas como pagas'+(err?(' · '+err+' com erro'):'')+'.','✅',9000);
+  if(typeof auditLog==='function') auditLog('baixa_massa','Baixa em massa até '+dataLimite+' — '+ok+' novas, '+corr+' corrigidas'+(err?(', '+err+' com erro'):''));
+  toast('✅ Concluído: '+ok+' OS marcadas como pagas, '+corr+' datas corrigidas'+(err?(' · '+err+' com erro'):'')+'.','✅',9000);
   if(typeof renderRecibos==='function') renderRecibos();
   if(typeof recRenderHomeCards==='function') recRenderHomeCards();
   if(typeof osRenderAgenda==='function') osRenderAgenda();

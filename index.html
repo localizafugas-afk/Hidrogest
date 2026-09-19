@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.82<br>
+      HidroGest v15.83<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.82 · Set 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.83 · Set 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.82<br>
+      HidroGest v15.83<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -23340,7 +23340,8 @@ function rpTesteRelevante(teste, anom){
   return mapa.includes(teste);
 }
 function rpFiltrarTestes(){
-  const anom = (document.getElementById('rp-tipo-anomalia')?.value)||'';
+  let anom = (document.getElementById('rp-tipo-anomalia')?.value)||'';
+  if(!anom){ const _os=(window.DB.ordens||[]).find(x=>x.id===window._rpEditOsId); if(_os && typeof _rpAnomDoServico==='function') anom=_rpAnomDoServico(_os); }
   const verTodos = window._rpVerTodosTestes===true;
   document.querySelectorAll('#rp-modal-body input[name="rp-met"]').forEach(inp=>{
     const lbl = inp.closest('label'); if(!lbl) return;
@@ -24149,6 +24150,22 @@ function _rpTecGrupoRelevante(grupo, anom){
   return gs.includes(grupo);
 }
 
+// Deduz a categoria de anomalia a partir do SERVIÇO/trabalho da OS, quando a
+// anomalia não foi escolhida. Assim, "deteção de fuga de água" e "deteção de
+// fuga de incêndio" já filtram os testes (sem nada de infiltração).
+function _rpAnomDoServico(os){
+  const srv=(window.DB.servicos||[]).find(s=>s.id===os?.servicoId)||{};
+  const n=((srv.nome||'')+' '+(os?.tipoAnomalia||'')).toLowerCase();
+  if(/inc[êe]ndio/.test(n)) return 'Fuga em rede de incêndio';
+  if(/piscina/.test(n)) return 'Fuga em piscina';
+  if(/infiltra/.test(n)) return 'Infiltração';
+  if(/humidade/.test(n)) return 'Humidade';
+  if(/entup|desentup/.test(n)) return 'Entupimento';
+  if(/rotura|rutura/.test(n)) return 'Rotura';
+  if(/[áa]gua/.test(n)) return 'Fuga de água';
+  return '';
+}
+
 function _rpTecInitEstado(c){
   const base=_rpTecListaBase();
   const saved={}; (Array.isArray(c.testes)?c.testes:[]).forEach(t=>{ if(t&&t.key) saved[t.key]=t; });
@@ -24160,7 +24177,7 @@ function _rpTecInitEstado(c){
 }
 
 window._rpTecFind=function(key){ return (window._rpTecTestes||[]).find(x=>x.key===key); };
-window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(t){ t.status=(t.status===st?'':st); rpTecFormAbrir(window._rpEditOsId,true); } };
+window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(t){ t.status=(t.status===st?'':st); window._rpTecScrollNext = t.status ? key : null; rpTecFormAbrir(window._rpEditOsId,true); } };
 window.rpTecMin=function(key,val){ const t=window._rpTecFind(key); if(t) t.min=parseInt(val)||0; };
 window._rpTecSetNome=function(key,val){ const t=window._rpTecFind(key); if(t) t.nome=val; };
 window._rpTecTesteObs=function(key,val){ const t=window._rpTecFind(key); if(t) t.obs=val; };
@@ -24259,7 +24276,7 @@ function rpTecFormAbrir(osId, preserveTemp){
 
   let grupoAtual='', testesHTML='';
   const _tecVerTodos = window._rpVerTodosTecTestes===true;
-  const _tecAnom = window._rpTecAnom||'';
+  const _tecAnom = window._rpTecAnom || _rpAnomDoServico(os);
   (window._rpTecTestes||[]).filter(t=>!t.custom && !t.dano).forEach(t=>{
     // Mostra o teste se: "ver todos", já tem resultado/observação, ou o grupo é relevante para a anomalia.
     const _mostra = _tecVerTodos || !!t.status || (t.obs&&t.obs.trim()) || _rpTecGrupoRelevante(t.grupo, _tecAnom);
@@ -24320,7 +24337,19 @@ function rpTecFormAbrir(osId, preserveTemp){
   openMo('mo-relat-pesquisa');
   const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]')||document.querySelector('#mo-relat-pesquisa [onclick="rpSalvarRelatorio()"]')||document.querySelector('#mo-relat-pesquisa .btn-primary');
   if(_sb){ _sb.removeAttribute('onclick'); _sb.onclick=function(){ rpTecSalvar(osId); }; _sb.textContent='📤 Enviar à gestão'; _sb.setAttribute('data-rptec-save','1'); }
-  if(preserveTemp){ const _md=document.querySelector('#mo-relat-pesquisa .md'); if(_md) setTimeout(()=>{ _md.scrollTop=_scrollKeep; }, 60); }
+  if(preserveTemp){
+    const _md=document.querySelector('#mo-relat-pesquisa .md');
+    if(window._rpTecScrollNext){
+      const _k=window._rpTecScrollNext; window._rpTecScrollNext=null;
+      setTimeout(()=>{
+        const cards=[...document.querySelectorAll('#rp-modal-body [data-tec-card]')];
+        const i=cards.findIndex(c=>c.getAttribute('data-tec-card')===_k);
+        const next=(i>=0 && i+1<cards.length)?cards[i+1]:null;
+        if(next) next.scrollIntoView({behavior:'smooth',block:'center'});
+        else if(_md) _md.scrollTop=_scrollKeep;
+      }, 70);
+    } else if(_md){ setTimeout(()=>{ _md.scrollTop=_scrollKeep; }, 60); }
+  }
 }
 
 async function rpTecSalvar(osId){

@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.83<br>
+      HidroGest v15.84<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1277,7 +1277,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 <aside class="sidebar" id="sidebar" style="display:none;">
   <div class="logo">
     <div class="logo-mark">💧</div>
-    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.83 · Set 2026</div></div>
+    <div><div class="logo-t">HidroGest</div><div class="logo-s">Gestão de Serviços</div><div style="font-size:9px;color:#94a3b8;margin-top:1px;letter-spacing:.3px;">v15.84 · Set 2026</div></div>
   </div>
   <nav class="nav" id="main-nav"></nav>
   <div class="search-wrap" style="padding:10px 12px;border-top:1px solid var(--border);">
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.83<br>
+      HidroGest v15.84<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -24166,8 +24166,48 @@ function _rpAnomDoServico(os){
   return '';
 }
 
-function _rpTecInitEstado(c){
-  const base=_rpTecListaBase();
+// Listas de testes específicas por anomalia (formulário do técnico).
+// As anomalias aqui listadas substituem a lista base; as restantes
+// (Infiltração, Humidade, etc.) continuam com a lista base atual.
+const RP_TEC_LISTA_ANOMALIA = {
+  'Fuga de água': [
+    {key:'agua_fria',      grupo:'Sistema de água sob pressão — teste de estanqueidade', nome:'Água fria',   tipo:'tempo', min:5},
+    {key:'agua_quente',    grupo:'Sistema de água sob pressão — teste de estanqueidade', nome:'Água quente', tipo:'tempo', min:5},
+    {key:'esg_ml',         grupo:'Ligações de máquinas', nome:'Máquina de lavar loiça (ligações)', tipo:'tempo', min:5},
+    {key:'esg_mr',         grupo:'Ligações de máquinas', nome:'Máquina de lavar roupa (ligações)', tipo:'tempo', min:5},
+    {key:'vis_autoclismo', grupo:'Testes visuais', nome:'Autoclismo', tipo:'visual'},
+  ],
+  'Fuga em rede de incêndio': [
+    {key:'inc_rede', grupo:'Rede de incêndio', nome:'Rede de incêndio', tipo:'simple'},
+  ],
+  'Fuga em piscina': [
+    {key:'psc_skimmer',    grupo:'Piscina', nome:'Skimmer',         tipo:'simple'},
+    {key:'psc_bicos',      grupo:'Piscina', nome:'Bicos injetores', tipo:'simple'},
+    {key:'psc_aspiracao',  grupo:'Piscina', nome:'Aspiração',       tipo:'simple'},
+    {key:'psc_ralo',       grupo:'Piscina', nome:'Ralo de fundo',   tipo:'simple'},
+    {key:'psc_luminarias', grupo:'Piscina', nome:'Luminárias',      tipo:'simple'},
+    {key:'psc_estrutura',  grupo:'Piscina', nome:'Estrutura',       tipo:'simple'},
+  ],
+};
+function _rpTecListaParaAnomalia(anom){
+  if(anom && RP_TEC_LISTA_ANOMALIA[anom]) return RP_TEC_LISTA_ANOMALIA[anom].map(t=>({...t}));
+  return _rpTecListaBase();
+}
+// Reconstrói a lista de testes para uma anomalia, preservando o que já foi marcado.
+function _rpTecRebuildTestes(anom){
+  const prev={}; (window._rpTecTestes||[]).forEach(t=>{ if(t&&t.key) prev[t.key]=t; });
+  const base=_rpTecListaParaAnomalia(anom);
+  const preds=base.map(t=>({...t,
+    status:(prev[t.key]&&prev[t.key].status)||'',
+    obs:(prev[t.key]&&prev[t.key].obs)||'',
+    min:(prev[t.key]&&prev[t.key].min!=null)?prev[t.key].min:(t.min!=null?t.min:null)
+  }));
+  const extras=(window._rpTecTestes||[]).filter(t=>t&&(t.custom||t.dano));
+  window._rpTecTestes=[...preds, ...extras];
+}
+
+function _rpTecInitEstado(c, anom){
+  const base=_rpTecListaParaAnomalia(anom||window._rpTecAnom||'');
   const saved={}; (Array.isArray(c.testes)?c.testes:[]).forEach(t=>{ if(t&&t.key) saved[t.key]=t; });
   const preds=base.map(t=>({...t, status:(saved[t.key]&&saved[t.key].status)||'', obs:(saved[t.key]&&saved[t.key].obs)||'', min:(saved[t.key]&&saved[t.key].min!=null)?saved[t.key].min:(t.min!=null?t.min:null)}));
   const extras=(Array.isArray(c.testes)?c.testes:[]).filter(t=>t&&(t.custom||t.dano)).map(t=>({key:t.key,grupo:t.dano?'__danos':'__outros',nome:t.nome||'',tipo:t.tipo||'tempo',min:(t.min!=null?t.min:5),status:t.status||'',obs:t.obs||'',custom:!!t.custom,dano:!!t.dano}));
@@ -24183,7 +24223,7 @@ window._rpTecSetNome=function(key,val){ const t=window._rpTecFind(key); if(t) t.
 window._rpTecTesteObs=function(key,val){ const t=window._rpTecFind(key); if(t) t.obs=val; };
 window.rpTecEquip=function(name,on){ if(!window._rpTecEquips) window._rpTecEquips=new Set(); if(on) window._rpTecEquips.add(name); else window._rpTecEquips.delete(name); };
 window.rpTecObsIn=function(val){ window._rpTecObs=val; };
-window.rpTecAnomIn=function(val){ window._rpTecAnom=val; };
+window.rpTecAnomIn=function(val){ window._rpTecAnom=val; if(typeof _rpTecRebuildTestes==='function') _rpTecRebuildTestes(val); };
 window.rpTecAddLocal=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'loc_'+Date.now(),grupo:'__outros',nome:'',tipo:'tempo',min:5,status:'',obs:'',custom:true}); rpTecFormAbrir(window._rpEditOsId,true); };
 window.rpTecAddDano=function(){ (window._rpTecTestes=window._rpTecTestes||[]).push({key:'dano_'+Date.now(),grupo:'__danos',nome:'',dano:true,obs:'',status:''}); rpTecFormAbrir(window._rpEditOsId,true); };
 window.rpTecRemLocal=function(key){ window._rpTecTestes=(window._rpTecTestes||[]).filter(t=>t.key!==key); rpTecFormAbrir(window._rpEditOsId,true); };
@@ -24268,8 +24308,8 @@ function rpTecFormAbrir(osId, preserveTemp){
     try{ window._rpFotosTemp=[...(typeof rpGetFotos==='function'?rpGetFotos(osId,c,rel):(c.fotos||rel.fotos||[]))]; }
     catch(e){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
   } else if(!Array.isArray(window._rpFotosTemp)){ window._rpFotosTemp=[...(c.fotos||rel.fotos||[])]; }
-  if(!preserveTemp || !Array.isArray(window._rpTecTestes)) _rpTecInitEstado(c);
-  if(!preserveTemp || typeof window._rpTecAnom!=='string') window._rpTecAnom=(c.tipoProblema||os.tipoAnomalia||'');
+  if(!preserveTemp || typeof window._rpTecAnom!=='string') window._rpTecAnom=(c.tipoProblema||os.tipoAnomalia||'')||(typeof _rpAnomDoServico==='function'?_rpAnomDoServico(os):'');
+  if(!preserveTemp || !Array.isArray(window._rpTecTestes)) _rpTecInitEstado(c, window._rpTecAnom);
 
   const EQUIPS_DEFAULT=['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
   const EQUIPS=(window.DB&&window.DB.empresaConfig&&window.DB.empresaConfig.equipamentosRelatorio&&window.DB.empresaConfig.equipamentosRelatorio.length)?window.DB.empresaConfig.equipamentosRelatorio:EQUIPS_DEFAULT;
@@ -24277,9 +24317,10 @@ function rpTecFormAbrir(osId, preserveTemp){
   let grupoAtual='', testesHTML='';
   const _tecVerTodos = window._rpVerTodosTecTestes===true;
   const _tecAnom = window._rpTecAnom || _rpAnomDoServico(os);
+  const _anomTemLista = !!(_tecAnom && RP_TEC_LISTA_ANOMALIA[_tecAnom]);
   (window._rpTecTestes||[]).filter(t=>!t.custom && !t.dano).forEach(t=>{
-    // Mostra o teste se: "ver todos", já tem resultado/observação, ou o grupo é relevante para a anomalia.
-    const _mostra = _tecVerTodos || !!t.status || (t.obs&&t.obs.trim()) || _rpTecGrupoRelevante(t.grupo, _tecAnom);
+    // Mostra o teste se: "ver todos", a anomalia tem lista própria, já tem resultado/observação, ou o grupo é relevante para a anomalia.
+    const _mostra = _tecVerTodos || _anomTemLista || !!t.status || (t.obs&&t.obs.trim()) || _rpTecGrupoRelevante(t.grupo, _tecAnom);
     if(!_mostra) return;
     if(t.grupo!==grupoAtual){ grupoAtual=t.grupo; testesHTML+='<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0e7490;margin:16px 4px 8px;">'+_rpTecEsc(t.grupo)+'</div>'; }
     testesHTML+=_rpTecCard(t);

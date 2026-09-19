@@ -27170,9 +27170,9 @@ function osAbrirConcluir(osId){
       opt.value=m.id; opt.textContent=m.nome; opt.dataset.extra='1'; opt.dataset.tipo=m.tipo;
       pagSel.appendChild(opt);
     });
-    pagSel.value=os.pagamento?.metodo||'';
+    pagSel.value=os.pagamento?.metodo||rel?.pagamento?.metodo||'';
   }
-  document.getElementById('os-conc-pag-ref').value=os.pagamento?.ref||'';
+  document.getElementById('os-conc-pag-ref').value=os.pagamento?.ref||rel?.pagamento?.ref||'';
 
   // Serviço não faturável (garantia / orçamento) — esconder pagamento
   const _naoFat = osServicoNaoFaturavel(os);
@@ -27188,6 +27188,16 @@ function osAbrirConcluir(osId){
   if(tecLabel) tecLabel.textContent=tecNome||'Técnico';
   const cliLabel=document.getElementById('os-cli-nome-label');
   if(cliLabel) cliLabel.textContent=cli.nome||'Cliente';
+
+  // Pré-preencher "quem assina" (cliente não presente), se já estava definido —
+  // para não perder este dado ao voltar/reabrir a conclusão.
+  const _assOutroChk=document.getElementById('os-ass-outro');
+  if(_assOutroChk){
+    _assOutroChk.checked=!!os.assinadoPorOutro;
+    const _nomeEl=document.getElementById('os-ass-nome'); if(_nomeEl) _nomeEl.value=os.assinanteNome||'';
+    const _nifEl=document.getElementById('os-ass-nif');  if(_nifEl)  _nifEl.value=os.assinanteNif||'';
+    if(typeof osToggleAssinante==='function') osToggleAssinante();
+  }
 
   osCalcHorasConc();
   openMo('mo-os-concluir');

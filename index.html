@@ -2,11 +2,25 @@
 <html lang="pt">
 <head>
 <script>
-// v16.02 — Notificações seguras no telemóvel: o Android não deixa usar "new Notification()";
+// v16.02 — Notificações seguras no telemóvel: o Android não deixa usar "window.hgNotificar()";
 // nesse caso a notificação é mostrada pelo service worker (showNotification), sem erro.
+// v16.03 — hgNotificar: nunca dá erro. No telemóvel usa o service worker; se falhar, ignora.
+window.hgNotificar = function(title, opts){
+  try{
+    if(!('Notification' in window) || Notification.permission!=='granted') return null;
+    try { return new (window.__NotifOrig||window.Notification)(title, opts); }
+    catch(e){
+      if(navigator.serviceWorker){
+        navigator.serviceWorker.getRegistration().then(function(r){ if(r) r.showNotification(title, opts||{}); }).catch(function(){});
+      }
+    }
+  }catch(_){}
+  return null;
+};
 (function(){
   if(!('Notification' in window)) return;
   var Orig = window.Notification;
+  window.__NotifOrig = Orig;
   function SafeNotif(title, opts){
     try { return new Orig(title, opts); }
     catch(e){
@@ -447,7 +461,9 @@ window.fsSet    = async (col, id, data) => {
     console.error('[fsSet] ID inválido:', col, id, data);
     return;
   }
-  try{ await setDoc(doc(db, col, id), data); }
+  // v16.04 — OS gravam sempre em modo JUNTAR: uma gravação nunca apaga o que outro ecrã/telemóvel já guardou
+  // (relatório do técnico, assinaturas, emails enviados, aceitação do cliente, etc.)
+  try{ await setDoc(doc(db, col, id), data, col==='ordens' ? {merge:true} : {}); }
   catch(e){ _fsErro('gravar', col, e); throw e; }
 };
 window.fsGetAll = async (col) => { const snap = await getDocs(collection(db, col)); return snap.docs.map(d=>d.data()); };
@@ -1292,7 +1308,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.02<br>
+      HidroGest v16.04<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1317,7 +1333,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.02<br>
+      HidroGest v16.04<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -4091,22 +4107,11 @@ function loginQuickById(uid){
   // Destacar o campo de senha
   document.getElementById('login-error').style.display = 'none';
 }
-function selectUser(){}
-function backToUsers(){}
+/* v16.04 removido: selectUser */
+/* v16.04 removido: backToUsers */
 
 // ══ DEBUG DE LOGIN ══
-function loginMostrarInfo(){
-  const el=document.getElementById('login-debug-info');
-  if(!el) return;
-  const n=window.DB.users.length;
-  const masters=['localizafugas@gmail.com','sergio@localizafugas.com','tania@localizafugas.com',
-                 'ricardo@localizafugas.com','higor@localizafugas.com','carlos@localizafugas.com'];
-  const temMasters=masters.every(m=>window.DB.users.some(u=>u.email===m));
-  el.style.display='block';
-  el.innerHTML=`Utilizadores carregados: ${n} ${n===0?'⚠ (aguardar Firebase)':'✓'}<br>
-    Contas master: ${temMasters?'✓ OK':'⚠ A repor...'}<br>
-    ${!temMasters&&n>0?'<button onclick="loginForcarSeed()" style="font-size:11px;padding:3px 8px;background:#1a73e8;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px;">🔄 Repor contas</button>':''}`;
-}
+/* v16.04 removido: loginMostrarInfo */
 
 async function loginForcarSeed(){
   const el=document.getElementById('login-debug-info');
@@ -4123,91 +4128,11 @@ async function loginForcarSeed(){
   }
   setTimeout(()=>{ if(el) el.style.display='none'; },4000);
 }
-async function loginDiagnostico(){
-  const panel = document.getElementById('login-diag-panel');
-  const content = document.getElementById('login-diag-content');
-  if(!panel || !content) return;
-  panel.style.display = 'block';
-  content.innerHTML = '<div style="color:#2563eb;">A verificar...</div>';
+/* v16.04 removido: loginDiagnostico */
 
-  const linhas = [];
-  const ok  = t => `<div style="color:#16a34a;">✅ ${t}</div>`;
-  const err = t => `<div style="color:#dc2626;">❌ ${t}</div>`;
-  const warn= t => `<div style="color:#d97706;">⚠️ ${t}</div>`;
-  const inf = t => `<div style="color:#475569;">${t}</div>`;
-
-  // 1. Firebase carregado?
-  const fbUsers = window.DB?.users || [];
-  linhas.push(fbUsers.length > 0
-    ? ok(`Firebase OK — ${fbUsers.length} utilizadores carregados`)
-    : err('Firebase NÃO carregou utilizadores (DB.users vazio)'));
-
-  // 2. Técnicos no Firebase?
-  const tecs = fbUsers.filter(u => u.role === 'tecnico');
-  if(tecs.length){
-    linhas.push(ok(`${tecs.length} técnico(s) no Firebase:`));
-    tecs.forEach(u => {
-      linhas.push(inf(`&nbsp;&nbsp;• ${u.name} | ${u.email} | senha:${u.password?'definida':'VAZIA'} | active:${u.active} | mustChange:${u.mustChangePassword||false}`));
-    });
-  } else {
-    linhas.push(err('Nenhum técnico no Firebase!'));
-    linhas.push(warn('Clica "ℹ Ver estado do sistema" e depois "Repor contas"'));
-  }
-
-  // 3. Técnicos no USERS_MASTER?
-  const masterTecs = (window.USERS_MASTER||[]).filter(u=>u.role==='tecnico');
-  linhas.push(inf(`USERS_MASTER: ${masterTecs.length} técnico(s)`));
-  masterTecs.forEach(u => {
-    linhas.push(inf(`&nbsp;&nbsp;• ${u.name} | ${u.email} | senha:${u.password}`));
-  });
-
-  // 4. Teste de escrita no Firebase
-  linhas.push(inf('A testar escrita no Firebase...'));
-  content.innerHTML = linhas.join('');
-  try {
-    await window.fsSetMerge('_diagnostico', 'teste', {ts: new Date().toISOString(), ok: true});
-    linhas.push(ok('Escrita no Firebase OK — regras permitem acesso'));
-  } catch(e) {
-    linhas.push(err('Escrita BLOQUEADA: ' + e.message));
-    linhas.push(warn('Vai ao Firebase Console → Firestore → Rules e muda para: allow read, write: if true;'));
-  }
-
-  // 5. Teste de leitura
-  try {
-    const {getDoc, doc, getFirestore} = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-    const db = window._db || getFirestore();
-    const snap = await getDoc(doc(db, 'users', 'u3'));
-    if(snap.exists()){
-      const d = snap.data();
-      linhas.push(ok(`Leitura OK — Ricardo no Firebase: senha="${d.password}" active=${d.active} role=${d.role}`));
-    } else {
-      linhas.push(warn('Documento users/u3 (Ricardo) NÃO existe no Firebase'));
-    }
-  } catch(e) {
-    linhas.push(err('Leitura BLOQUEADA: ' + e.message));
-  }
-
-  // 6. Input actual
-  const inputVal = document.getElementById('login-username')?.value || '';
-  const pwdVal   = document.getElementById('login-password')?.value || '';
-  if(inputVal) linhas.push(inf(`Campo utilizador: "${inputVal}"`));
-  if(pwdVal)   linhas.push(inf(`Campo senha: ${'*'.repeat(pwdVal.length)} (${pwdVal.length} chars)`));
-
-  content.innerHTML = linhas.join('');
-}
-
-function loginQuickNome(nome){
-  const el = document.getElementById('login-username');
-  if(el){ el.value = nome; }
-  const pw = document.getElementById('login-password');
-  if(pw){ pw.value = ''; pw.focus(); }
-}
+/* v16.04 removido: loginQuickNome */
 // Manter compatibilidade com chamadas antigas (não usadas na UI mas podem existir em outros sítios)
-function loginQuick(nome, senha){
-  document.getElementById('login-username').value = nome;
-  document.getElementById('login-password').value = '';
-  document.getElementById('login-password').focus();
-}
+/* v16.04 removido: loginQuick */
 // FIM DEBUG LOGIN
 
 // ══════════════════════════════════════════════════════════════
@@ -4993,83 +4918,7 @@ function rpDiasDesdeConc(os){
 }
 
 // Painel de relatórios para o ADMIN no dashboard
-function dashRenderPainelRelatorios(container){
-  if(!container) return;
-  const isTec = window.currentUser?.role === 'tecnico';
-  const ordens = (window.DB.ordens||[]).filter(o=>
-    (o.estado==='concluida') &&
-    !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) &&
-    (!isTec || (o.tecnicos||[]).includes(window.currentUser.id))
-  );
-  const rels = window.DB.relatorios_pesquisa||[];
-
-  // OS sem relatório enviado ou em rascunho, ordenadas por dias
-  const pendentes = ordens
-    .filter(o=>{
-      const r = rels.find(x=>x.id===o.id);
-      const est = r ? (r.estado||'rascunho') : 'a_realizar';
-      return est !== 'enviado';
-    })
-    .map(o=>{
-      const r = rels.find(x=>x.id===o.id);
-      const est = r ? (r.estado||'rascunho') : 'a_realizar';
-      const dias = rpDiasDesdeConc(o);
-      const cli = (window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
-      const srv = (window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
-      return {os:o, rel:r, est, dias, cli, srv};
-    })
-    .sort((a,b)=>(b.dias||0)-(a.dias||0)); // mais urgentes primeiro
-
-  if(!pendentes.length){
-    container.innerHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;"><span style="font-size:24px;">✅</span><div><div style="font-weight:700;color:#15803d;font-size:14px;">Todos os relatórios enviados!</div><div style="font-size:12px;color:#16a34a;">Não há relatórios pendentes de envio.</div></div></div>';
-    return;
-  }
-
-  const verm = pendentes.filter(p=>p.dias!==null && p.dias>=5).length;
-  const amar = pendentes.filter(p=>p.dias===4).length;
-  const verd = pendentes.filter(p=>p.dias!==null && p.dias<=3).length;
-
-  const estLabels = {a_realizar:'Por preencher', rascunho:'Rascunho', pendente:'Aguarda envio', atrasado:'Atrasado', enviado:'Enviado'};
-
-  container.innerHTML = `
-    <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.06);">
-      <!-- Cabeçalho -->
-      <div style="background:#1e3a5f;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:20px;">📋</span>
-          <div>
-            <div style="font-weight:800;color:#fff;font-size:15px;">Relatórios Pendentes</div>
-            <div style="font-size:11px;color:#93c5fd;">${pendentes.length} OS aguardam envio de relatório</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${verm?`<span style="background:#dc2626;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🔴 ${verm} crítico${verm>1?'s':''}</span>`:''}
-          ${amar?`<span style="background:#f59e0b;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🟡 ${amar} urgente${amar>1?'s':''}</span>`:''}
-          ${verd?`<span style="background:#16a34a;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;">🟢 ${verd} ok</span>`:''}
-          <button onclick="navigate('relat-pesquisa');setTimeout(()=>rpAbrirLista(''),200);" style="padding:5px 14px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Ver todos →</button>
-        </div>
-      </div>
-      <!-- Lista compacta -->
-      <div style="max-height:320px;overflow-y:auto;">
-        `+pendentes.slice(0,20).map(p=>{
-          const cor = rpDiasCor(p.dias);
-          const estLabel = estLabels[p.est]||p.est;
-          const q="'";
-          return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="rpAbrirLinhaRelatorio('+q+p.os.id+q+')" onmouseover="this.style.background='+q+'#f8fafc'+q+'" onmouseout="this.style.background='+q+q+'">'
-            +'<div style="background:'+cor.bg+';color:'+cor.cor+';font-size:11px;font-weight:800;padding:4px 8px;border-radius:8px;min-width:44px;text-align:center;flex-shrink:0;">'+cor.label+'</div>'
-            +'<div style="flex:1;min-width:0;">'
-            +'<div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(p.cli.nome||'—')+' <span style="font-weight:400;color:#94a3b8;font-size:11px;">· '+p.os.id+'</span></div>'
-            +'<div style="font-size:11px;color:#64748b;margin-top:1px;">'+(p.srv.nome||'—')+' · <span style="color:'+cor.cor+';font-weight:600;">'+estLabel+'</span></div>'
-            +'</div>'
-            +'<div style="font-size:11px;color:#94a3b8;flex-shrink:0;">'+(p.os.data?fmtDate(p.os.data):'')+'</div>'
-            +'<div style="font-size:16px;color:#cbd5e1;flex-shrink:0;">›</div>'
-            +'</div>';
-        }).join('')
-        +(pendentes.length>20?'<div style="padding:10px 16px;text-align:center;font-size:12px;color:#94a3b8;">+'+(pendentes.length-20)+' mais — <a href="#" onclick="navigate(&quot;relat-pesquisa&quot;);return false;" style="color:var(--accent)">ver todos</a></div>':'')
-        +`
-      </div>
-    </div>`;
-}
+/* v16.04 removido: dashRenderPainelRelatorios */
 
 // Briefing diário para o TÉCNICO (1ª abertura do dia)
 function tecRenderBriefingRelatorios(){
@@ -5777,11 +5626,7 @@ async function recAnularBaixa(id){
   }
 }
 // Mantido por compatibilidade (não usado directamente nos botões novos)
-async function markPaid(id){
-  const r=window.DB.recibos.find(x=>x.id===id);
-  await window.fsSet('recibos', id, {...r, status:'paid', pagoEm:(r?.pagoEm||today())});
-  toast('Marcado como pago! ✅');
-}
+/* v16.04 removido: markPaid */
 async function recSetDocType(id, val){
   const r=(window.DB.recibos||[]).find(x=>x.id===id); if(!r) return;
   // Atualização parcial: só altera o campo docType do recibo (não toca na OS nem no relatório)
@@ -7413,18 +7258,7 @@ function repMudarAba(aba, el){
   renderReports();
 }
 
-function repGetOrdens(de, ate){
-  return (window.DB.ordens||[]).filter(o=>{
-    if(['cancelada'].includes(o.estado)) return false;
-    const d = o.concluidoEm?.slice(0,10) || o.fechadoEm?.slice(0,10) || o.data;
-    if(!d) return false;
-    // Filtrar por dias específicos se definidos
-    if(_repDiasEspecificos && _repDiasEspecificos.length) return _repDiasEspecificos.includes(d);
-    if(de && d < de) return false;
-    if(ate && d > ate) return false;
-    return true;
-  });
-}
+/* v16.04 removido: repGetOrdens */
 
 function repRenderDia(recs, ordens, de, ate){
   // Agrupar recibos por dia
@@ -7970,11 +7804,7 @@ function repExportExcel(){
   toast('✅ Excel exportado!','📥');
 }
 
-function onRepPeriodChange(){
-  const period=document.getElementById('rep-period').value;
-  document.getElementById('rep-custom-range').style.display=(period==='custom')?'flex':'none';
-  renderReports();
-}
+/* v16.04 removido: onRepPeriodChange */
 // ── Relatório de Agendamentos & Previsão de Receita ───────────
 function _repFmtData(d){ if(!d) return '—'; const p=String(d).slice(0,10).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d; }
 function _repUserName(id){ return (window.DB.users||[]).find(u=>u.id===id)?.name || '—'; }
@@ -8746,8 +8576,8 @@ let osTimerStartTime = null;
 // ── Helpers ────────────────────────────────────────────────────
 function osFmt(v){ return (+(v)||0).toFixed(2); }
 function osToday(){ return new Date().toISOString().slice(0,10); }
-function osNow(){ const d=new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-function osAddDays(ds,n){ const d=new Date(ds); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+/* v16.04 removido: osNow */
+/* v16.04 removido: osAddDays */
 function osWeekDays(off=0){
   const t=new Date(); const dow=t.getDay();
   const mon=new Date(t); mon.setDate(t.getDate()-(dow===0?6:dow-1)+off*7);
@@ -9923,52 +9753,7 @@ function osLimparFormularioOS(){
 }
 
 // ── Busca inteligente de clientes no modal OS ─────────────────
-function osCliSearchInput(q){
-  const list = document.getElementById('os-cli-sr-list');
-  if(!list) return;
-  q = (q||'').trim().toLowerCase();
-  if(!q){ list.style.display='none'; return; }
-  // Só clientes activos (não eliminados nem arquivados)
-  const clientes = (window.DB.clientes||[]).filter(c=>
-    !c._eliminado && c.status!=='eliminado' && !c._arquivado
-  );
-  const matches = clientes.filter(c=>
-    (c.nome||'').toLowerCase().includes(q) ||
-    (c.nif||'').replace(/\s/g,'').includes(q.replace(/\s/g,'')) ||
-    (c.tel||'').replace(/\s/g,'').includes(q.replace(/\s/g,'')) ||
-    (c.email||'').toLowerCase().includes(q) ||
-    (c.localidade||'').toLowerCase().includes(q) ||
-    (c.cp||'').includes(q) ||
-    (c.condNome||'').toLowerCase().includes(q) ||
-    (c.admNome||'').toLowerCase().includes(q)
-  ).slice(0,8);
-  if(!matches.length){
-    list.innerHTML='<div style="padding:10px 14px;">'
-      +'<div style="color:#94a3b8;font-size:13px;margin-bottom:8px;">Nenhum cliente encontrado para <strong>'+q+'</strong></div>'
-      +'</div>';
-    // Add button via DOM to avoid quote issues
-    const btn=document.createElement('button');
-    btn.style.cssText='background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;width:100%;margin-top:6px;';
-    btn.textContent='+ Criar novo cliente';
-    btn.onclick=()=>{ list.style.display='none'; osCliCriarNovo(q); };
-    list.firstChild.appendChild(btn);
-    list.style.display='block'; return;
-  }
-  const tipoIcon={particular:'👤',empresa:'🏢',condominio:'🏛️'};
-  const tipoCor={particular:'#2563eb',empresa:'#7c3aed',condominio:'#ea580c'};
-  list.innerHTML = matches.map(c=>{
-    const sub=[c.nif?'NIF '+c.nif:'',c.tel||'',c.localidade||''].filter(Boolean).join(' · ');
-    const adm = c.admNome ? `<span style="font-size:10px;background:#fff7ed;color:#c2410c;padding:1px 6px;border-radius:8px;margin-left:6px;">⚙️ ${c.admNome}</span>` : '';
-    return `<div onclick="osCliSeleccionar('${c.id}')" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9;" onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
-      <div style="width:32px;height:32px;border-radius:8px;background:${tipoCor[c.tipo]||'#2563eb'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">${tipoIcon[c.tipo]||'👤'}</div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:700;color:#1e293b;">${c.nome}${adm}</div>
-        <div style="font-size:11px;color:#64748b;">${sub}</div>
-      </div>
-    </div>`;
-  }).join('');
-  list.style.display='block';
-}
+/* v16.04 removido: osCliSearchInput */
 
 function osCliCriarNovo(nomePrefill){
   // Hide search list
@@ -9986,16 +9771,7 @@ function osCliCriarNovo(nomePrefill){
   window._pendingCliFromOS=true;
 }
 
-function osCliSeleccionar(cliId){
-  const sel = document.getElementById('os-cli-sel');
-  if(sel) sel.value = cliId;
-  const searchEl = document.getElementById('os-cli-search');
-  const cli = (window.DB.clientes||[]).find(c=>c.id===cliId);
-  if(searchEl && cli) searchEl.value = cli.nome;
-  const list = document.getElementById('os-cli-sr-list');
-  if(list) list.style.display='none';
-  osAutoFillCliente();
-}
+/* v16.04 removido: osCliSeleccionar */
 
 function osOpenModal(preData={}){
   // ── Verificar bloqueio financeiro ao criar NOVA OS ─────────
@@ -11436,8 +11212,10 @@ async function osSalvar(){
 
   // Notificações — sempre via window. para garantir versão mais recente
   const tipoEmailSalvar = !isEdit ? 'nova' : os.estado==='cancelada' ? 'cancelamento' : 'alteracao';
-  await window.osNotificarTecnicos(os, tipoEmailSalvar==='cancelamento'?'cancelamento': (!isEdit?'nova':'alteracao'));
-  await window.osEnviarEmailCliente(os, cli, srv, tipoEmailSalvar);
+  try{ await window.osNotificarTecnicos(os, tipoEmailSalvar==='cancelamento'?'cancelamento': (!isEdit?'nova':'alteracao')); }
+  catch(e){ console.error('osNotificarTecnicos',e); toast('⚠️ Aviso aos técnicos falhou: '+(e.message||e),'⚠️'); }
+  try{ await window.osEnviarEmailCliente(os, cli, srv, tipoEmailSalvar); }
+  catch(e){ console.error('osEnviarEmailCliente',e); toast('⚠️ Email ao cliente falhou: '+(e.message||e),'⚠️'); }
 
   // ── Notificar técnicos removidos da OS ───────────────────
   if(isEdit && _tecAntes.length){
@@ -11608,7 +11386,7 @@ window.osNotificarTecnicos = async function osNotificarTecnicos(os, tipo){
   const currentIsAdmin = ['admin','gerente','comercial','supervisor'].includes(window.currentUser?.role);
   const currentIsTecAfectado = tecnicosFinais.includes(window.currentUser?.id);
   if('Notification' in window && Notification.permission==='granted' && (currentIsAdmin || currentIsTecAfectado || isCancelamento)){
-    new Notification(`🔧 ${tipoLabel}`, {
+    window.hgNotificar(`🔧 ${tipoLabel}`, {
       body:`OS ${os.id} — ${cli.nome||'—'} — ${dataFmt} ${horaIni}${moradaCli!=='—'?' — '+moradaCli:''}`,
     });
   }
@@ -11679,12 +11457,7 @@ window.osNotificarTecnicos = async function osNotificarTecnicos(os, tipo){
 }
 
 // Esta função é definida depois como window.osEnviarEmailCliente — esta stub é apenas placeholder
-function osEnviarEmailCliente(os, cli, srv, tipo, forcar=false){
-  // A versão real é definida mais abaixo como window.osEnviarEmailCliente
-  if(window.osEnviarEmailCliente && window.osEnviarEmailCliente !== osEnviarEmailCliente){
-    return window.osEnviarEmailCliente(os, cli, srv, tipo, forcar);
-  }
-}
+/* v16.04 removido: osEnviarEmailCliente */
 
 // ── Contagem de OS com alterações não vistas (partilhada) ────────
 // Lógica: conta se a OS foi modificada DEPOIS da última vez que o
@@ -12590,13 +12363,7 @@ function adminAbrirDetalheOS(osId){
   setTimeout(function(){osAbrirDetalhe(osId);}, 400);
 }
 
-async function adminMarcarMsgLida(id){
-  try{
-    await window.fsSetMerge('mensagens_internas', m._firebaseId||id, {lida:true, lidaEm:new Date().toISOString(), lidaPor:window.currentUser&&window.currentUser.id});
-    adminAbrirPainelMensagens();
-    toast('Marcado como lido','✓');
-  }catch(e){ toast('Erro: '+e.message,'❌'); }
-}
+/* v16.04 removido: adminMarcarMsgLida */
 
 async function adminDarBaixaDocumento(msgId){
   const m=(window.DB.mensagens_internas||[]).find(function(x){return x._firebaseId===msgId||(x.id||x.osId)===msgId;})||{};
@@ -13801,44 +13568,7 @@ if(typeof window!=='undefined'){
 }
 
 // ── Temporizador ────────────────────────────────────────────────
-function osTimerStart(id){
-  clearInterval(osTimerInterval);
-  osTimerStartTime=Date.now();
-  const now=new Date().toTimeString().slice(0,5);
-  // Preencher hora início real com a hora actual
-  const iniEl=document.getElementById('os-hora-ini-real')||document.getElementById('os-conc-hora-ini');
-  if(iniEl&&!iniEl.value) iniEl.value=now;
-  document.getElementById('os-btn-start').style.display='none';
-  document.getElementById('os-btn-stop').style.display='inline-flex';
-  const dispEl=document.getElementById('os-timer-disp');
-  if(dispEl){dispEl.style.display='block';dispEl.classList.add('os-timer-running');}
-  const o=(window.DB.ordens||[]).find(x=>x.id===id);
-  let estimadoSeg=0;
-  if(o?.horaIni&&o?.horaFim){
-    const [sh,sm]=o.horaIni.split(':').map(Number);
-    const [eh,em]=o.horaFim.split(':').map(Number);
-    estimadoSeg=((eh*60+em)-(sh*60+sm))*60;
-  }
-  let atrasoAvisado=false;
-  osTimerInterval=setInterval(()=>{
-    const s=Math.floor((Date.now()-osTimerStartTime)/1000);
-    const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
-    const el=document.getElementById('os-timer-disp');
-    if(el){
-      el.textContent=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
-      el.style.color=estimadoSeg>0&&s>estimadoSeg?'#ef4444':'inherit';
-    }
-    if(estimadoSeg>0&&s>estimadoSeg&&!atrasoAvisado){
-      atrasoAvisado=true;
-      osAvisarAtraso(o);
-    }
-  },1000);
-  if(o&&o.estado==='agendada'){
-    window.fsSetMerge('ordens',id,{...o,estado:'em_curso',iniciadoEm:new Date().toISOString(),horaIniReal:now});
-    if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(id);
-  }
-  toast('Temporizador iniciado!','⏱');
-}
+/* v16.04 removido: osTimerStart */
 
 async function osAvisarAtraso(o){
   if(!o) return;
@@ -13854,28 +13584,11 @@ async function osAvisarAtraso(o){
   auditLog('atraso_detectado',`OS ${o.id} ultrapassou tempo estimado. Técnico: ${tec}. Próxima OS: ${proximaOS?.id||'—'}`);
   // Notificar via push se disponível
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('⚠ Trabalho em atraso',{body:`OS ${o.id} ultrapassou o tempo estimado. Próxima OS pode atrasar.`});
+    window.hgNotificar('⚠ Trabalho em atraso',{body:`OS ${o.id} ultrapassou o tempo estimado. Próxima OS pode atrasar.`});
   }
 }
-function osTimerStop(id){
-  clearInterval(osTimerInterval);
-  const now=new Date().toTimeString().slice(0,5);
-  // Preencher hora fim real
-  const fimEl=document.getElementById('os-hora-fim-real')||document.getElementById('os-conc-hora-fim');
-  if(fimEl) fimEl.value=now;
-  const dispEl=document.getElementById('os-timer-disp');
-  if(dispEl) dispEl.classList.remove('os-timer-running');
-  document.getElementById('os-btn-start').style.display='inline-flex';
-  document.getElementById('os-btn-stop').style.display='none';
-  // Calcular e mostrar resultado
-  if(typeof osCalcularHoras==='function') osCalcularHoras(id||window._osConcluirId);
-  if(typeof osCalcHorasConc==='function') osCalcHorasConc();
-  toast(`Temporizador parado — ${now}. Verifique as horas e conclua a OS.`,'⏹');
-}
-async function osMarcarConcluida(id){
-  // Redirecionar para o modal de conclusão com assinaturas
-  osAbrirConcluir(id);
-}
+/* v16.04 removido: osTimerStop */
+/* v16.04 removido: osMarcarConcluida */
 
 // ── EDITAR OS ─────────────────────────────────────────────────
 function oseCalcValor(){
@@ -16669,7 +16382,7 @@ async function tecReabrirParaRelatorio(osId){
       }
     }catch(_){}
     if('Notification' in window && Notification.permission==='granted'){
-      try{ new Notification('🔓 OS reaberta para relatório',{body:`OS ${osId} — por ${window.currentUser?.name||''}`}); }catch(_){}
+      try{ window.hgNotificar('🔓 OS reaberta para relatório',{body:`OS ${osId} — por ${window.currentUser?.name||''}`}); }catch(_){}
     }
 
     toast('🔓 OS reaberta. Faça o relatório — as horas não foram alteradas.','✅',5000);
@@ -17004,7 +16717,7 @@ async function osAgendaMudarEstado(osId,estado){
 
   // Push notification para o utilizador logado (e para os técnicos via osNotificarTecnicos)
   if(isCancelar && 'Notification' in window && Notification.permission==='granted'){
-    new Notification(`❌ OS ${osId} Cancelada`, {
+    window.hgNotificar(`❌ OS ${osId} Cancelada`, {
       body: `${cli?.nome||'—'} · ${o.data||'—'} ${(o.horaIni||'').slice(0,5)} — Técnicos notificados por email`
     });
   }
@@ -17151,7 +16864,7 @@ async function osCtxAlterarGuardar(osId){
   // Notificação push (browser)
   if('Notification' in window && Notification.permission === 'granted'){
     const resumo = mudancas.length ? mudancas.join(' | ') : 'Agendamento actualizado';
-    new Notification(`📅 Alteração — OS ${osId}`, { body: resumo });
+    window.hgNotificar(`📅 Alteração — OS ${osId}`, { body: resumo });
   }
 
   const cli = (window.DB.clientes||[]).find(x=>x.id===updated.clienteId)||{};
@@ -17404,7 +17117,7 @@ async function osCtxMudarEstado(osId, estado){
   const srv = (window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
 
   if(isCancelar && 'Notification' in window && Notification.permission==='granted'){
-    new Notification(`❌ OS ${osId} Cancelada`, {
+    window.hgNotificar(`❌ OS ${osId} Cancelada`, {
       body: `${cli?.nome||'—'} · ${o.data||'—'} ${(o.horaIni||'').slice(0,5)} — Técnicos notificados`
     });
   }
@@ -17789,7 +17502,7 @@ async function admEliminar(id){
 
 // Compatibilidade: osToggleNovoCliente ainda pode ser chamado noutros sítios
 function osToggleNovoCliente(){ ncToggle(); }
-function osCancelarNovoCliente(){ ncFechar(); }
+/* v16.04 removido: osCancelarNovoCliente */
 
 // Abrir/fechar formulário de novo cliente
 function ncToggle(){
@@ -17984,7 +17697,7 @@ async function ncGuardar(){
 }
 
 // Compatibilidade com código antigo
-async function osGuardarNovoCliente(){ return ncGuardar(); }
+/* v16.04 removido: osGuardarNovoCliente */
 
 // ── Busca inteligente de clientes ─────────────────────────────
 function ncSearch(q){
@@ -18804,27 +18517,7 @@ async function rotGeocode(morada){
 }
 
 // ── Algoritmo Nearest Neighbour (TSP aproximado) ─────────────
-function rotNearestNeighbour(pontos){
-  if(!pontos.length) return [];
-  const visitados=new Set();
-  const rota=[];
-  let atual=pontos[0];
-  visitados.add(0);
-  rota.push(atual);
-  while(rota.length<pontos.length){
-    let melhorDist=Infinity, melhorIdx=-1;
-    pontos.forEach((p,i)=>{
-      if(visitados.has(i)) return;
-      const d=rotDistKm(atual.lat,atual.lng,p.lat,p.lng);
-      if(d<melhorDist){melhorDist=d;melhorIdx=i;}
-    });
-    if(melhorIdx<0) break;
-    visitados.add(melhorIdx);
-    atual=pontos[melhorIdx];
-    rota.push(atual);
-  }
-  return rota;
-}
+/* v16.04 removido: rotNearestNeighbour */
 
 // ── Calcular carga de trabalho por técnico ────────────────────
 function rotCargaTecnico(tecId, data){
@@ -18964,18 +18657,7 @@ async function rotTecnicoMaisProximoAsync(lat, lng, data, excluir=[]){
   return melhor;
 }
 // Manter versão síncrona como fallback (usa apenas GPS)
-function rotTecnicoMaisProximo(lat,lng,excluir=[]){
-  const locs=window.DB.localizacoes||[];
-  const tecs=(window.DB.users||[]).filter(u=>u.role==='tecnico'&&u.active&&!excluir.includes(u.id));
-  let melhor=null, melhorDist=Infinity;
-  tecs.forEach(u=>{
-    const loc=locs.find(l=>l.userId===u.id);
-    if(!loc?.lat) return;
-    const d=rotDistKm(lat,lng,loc.lat,loc.lng);
-    if(d<melhorDist){melhorDist=d;melhor={...u,distKm:Math.round(d*10)/10,loc};}
-  });
-  return melhor;
-}
+/* v16.04 removido: rotTecnicoMaisProximo */
 
 // ── Técnico com menos trabalho ────────────────────────────────
 function rotTecnicoMenosOcupado(data){
@@ -20400,21 +20082,7 @@ async function cfgSalvarEmail(){
   auditLog('email_config','Configurações de email actualizadas por '+window.currentUser?.name);
 }
 
-function cfgEmailPreview(tipo){
-  const cfg = window._emailCfg || {};
-  const empresa  = cfg.empresa   || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
-  const tel      = cfg.tel       || '253 000 000';
-  const emailCfg = cfg.remetente || 'localizafugas@gmail.com';
-  const assin    = cfg.assinatura|| `Com os melhores cumprimentos,\n${empresa}\nTel: ${tel}\n${emailCfg}`;
-  const exemplos = {
-    nova:`Para: cliente@email.pt\nAssunto: Confirmação de agendamento — ${empresa} — 15/Jan/2025\n\nExmo(a) Sr(a) João Silva,\n\nO seu serviço de Pesquisa de Fugas foi confirmado.\n\n────────────────────────\n📅 Data: 15 de Janeiro de 2025\n🕐 Horário: 09:00 – 10:00\n🔧 Serviço: Pesquisa de Fugas\n👷 Técnico(s): Ricardo Costa\n💶 Valor estimado: €120,00 (c/ IVA)\n────────────────────────\n\nNota: O horário é indicativo. Poderão ocorrer pequenos atrasos.\n\nPara qualquer questão contacte-nos:\n📞 ${tel}\n✉️ ${emailCfg}\n\n${assin}`,
-    alteracao:`Para: cliente@email.pt\nAssunto: Actualização do seu agendamento — ${empresa} — 15/Jan/2025\n\nExmo(a) Sr(a) João Silva,\n\nInformamos que o seu agendamento foi actualizado.\n\n────────────────────────\n📅 Nova data: 16 de Janeiro de 2025\n🕐 Novo horário: 10:00 – 11:00\n🔧 Serviço: Pesquisa de Fugas\n👷 Técnico(s): Ricardo Costa\n────────────────────────\n\n${assin}`,
-    lembrete:`Para: cliente@email.pt\nAssunto: Lembrete de agendamento — amanhã\n\nExmo(a) Sr(a) João Silva,\n\nEste é um lembrete do seu agendamento de amanhã.\n\n────────────────────────\n📅 Data: amanhã, 15 de Janeiro de 2025\n🕐 Horário: 09:00 – 10:00\n🔧 Serviço: Pesquisa de Fugas\n👷 Técnico(s): Ricardo Costa\n────────────────────────\n\n${assin}`,
-    cancelamento:`Para: cliente@email.pt\nAssunto: Cancelamento de agendamento — ${empresa}\n\nExmo(a) Sr(a) João Silva,\n\nInformamos que o seu agendamento foi cancelado.\nPor favor contacte-nos para reagendar.\n\nPedimos desculpa pelo inconveniente.\n\n${assin}`,
-  };
-  const el = document.getElementById('cfg-email-preview');
-  if(el) el.textContent = exemplos[tipo]||'—';
-}
+/* v16.04 removido: cfgEmailPreview */
 
 // Carregar empresa ao arrancar — DB.empresaConfig (não DB.meta.empresaConfig)
 
@@ -20582,7 +20250,7 @@ function cfsSrv_updateLabels(){
 }
 
 // ── cfgOpenSrv actualizada com unidades ──────────────────────
-const _origCfgOpenSrv = window.cfgOpenSrv;
+/* v16.04 removido: captura */
 window.cfgOpenSrv = function(sid=null){
   window._cfgEditSrvId = sid;
   const s = sid?(window.DB.servicos||[]).find(x=>x.id===sid):null;
@@ -20602,7 +20270,7 @@ window.cfgOpenSrv = function(sid=null){
 };
 
 // ── cfgSaveSrv actualizada com unidades e refresh imediato ───
-const _origCfgSaveSrv = window.cfgSaveSrv;
+/* v16.04 removido: captura */
 window.cfgSaveSrv = async function(){
   const nome = document.getElementById('cfs-nome').value.trim();
   if(!nome){ toast('Nome do serviço obrigatório','⚠️'); return; }
@@ -20630,7 +20298,7 @@ window.cfgSaveSrv = async function(){
 };
 
 // ── cfgDelSrv com refresh imediato ───────────────────────────
-const _origCfgDelSrv = window.cfgDelSrv;
+/* v16.04 removido: captura */
 window.cfgDelSrv = async function(sid){
   if(!confirm('Eliminar este serviço?')) return;
   await window.fsDel('servicos',sid);
@@ -20650,7 +20318,7 @@ async function rpNotificarSupervisoresRelatorio(os, rel){
   // Notificar supervisores/admin/comercial via push
   const sups = (window.DB.users||[]).filter(u=>['admin','gerente','supervisor','comercial'].includes(u.role)&&u.active);
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('📄 Relatório em elaboração',{
+    window.hgNotificar('📄 Relatório em elaboração',{
       body:`OS ${os.id} — ${cli.nome||'—'} — Técnico: ${tecs} — Prazo: ${prazo}`,
       icon:'/favicon.ico'
     });
@@ -20678,7 +20346,7 @@ async function rpNotificarAlteracaoTecnico(os, rel){
 
     // Notificação no browser (gestão que tenha a app aberta)
     if('Notification' in window && Notification.permission==='granted'){
-      try{ new Notification('✏️ Relatório alterado pelo técnico', {
+      try{ window.hgNotificar('✏️ Relatório alterado pelo técnico', {
         body:`OS ${os.id} — ${cli.nome||'—'} — por ${tec}. Requer revisão da gestão.`, icon:'/favicon.ico'
       }); }catch(_){}
     }
@@ -20724,40 +20392,7 @@ async function rpMarcarRevisto(osId){
 }
 
 // ── Email diário com relatórios pendentes ────────────────────
-function rpEnviarEmailDiarioPendentes(){
-  const role = window.currentUser?.role||'';
-  const isTec = role==='tecnico';
-  const isSup = ['admin','gerente','comercial','supervisor'].includes(role);
-  if(!isTec && !isSup) return;
-
-  const concluidas = (window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
-  const pendentes  = concluidas.filter(o=>{
-    if(isTec && !(o.tecnicos||[]).includes(window.currentUser.id)) return false;
-    const rel = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    return typeof relatorioFeito==='function' ? !relatorioFeito(rel) : rel?.estado!=='enviado'; // v15.72
-  });
-
-  if(!pendentes.length) return;
-
-  const linhas = pendentes.map(o=>{
-    const cli   = (window.DB.clientes||[]).find(x=>x.id===o.clienteId)||{};
-    const dias  = rpDiasParaEnvio(o);
-    const prazo = dias!==null?(dias<0?`🔴 ATRASADO ${Math.abs(dias)}d`:dias===0?'⚠️ Hoje!':dias<=2?`⏰ ${dias}d`:`📅 ${dias}d`):'—';
-    const rel   = (window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id);
-    const est   = rel?.campos?'Rascunho':'Por preencher';
-    return `  • OS ${o.id} | ${cli.nome||'—'} | ${fmtDate(o.data)} | Estado: ${est} | Prazo: ${prazo}`;
-  }).join('\n');
-
-  const nomeUser = window.currentUser?.name||'';
-  const email    = window.currentUser?.email||window._emailCfg?.remetente||'localizafugas@gmail.com';
-  const assunto  = `📋 Relatórios pendentes — ${pendentes.length} em falta — ${new Date().toLocaleDateString('pt-PT')}`;
-  const corpo    = `Olá ${nomeUser},\n\nA sua lista de relatórios pendentes:\n\n${linhas}\n\nAceda ao sistema para preencher e enviar.\n\n${window._emailCfg?.assinatura||'Localiza Fugas'}`;
-
-  console.log(`📧 EMAIL DIÁRIO → ${email}\nAssunto: ${assunto}\n\n${corpo}`);
-  const mailto = `mailto:${email}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
-  window.open(mailto,'_blank');
-  toast(`📧 Email de relatórios pendentes aberto (${pendentes.length} pendentes)`,'📋');
-}
+/* v16.04 removido: rpEnviarEmailDiarioPendentes */
 
 // ── Validação de sobreposição em osSalvar ────────────────────
 const _origOsSalvar = window.osSalvar;
@@ -20823,7 +20458,7 @@ function mostrarAvisoEmailManual(para, assunto, corpo){
 }
 
 // ── Patch osEnviarEmailCliente para usar Gmail ────────────────
-const _origOsEnviarEmailCliente = osEnviarEmailCliente;
+/* v16.04 removido: captura */
 function osEnviarEmailClienteGmail(os, cli, srv, tipo, forcar=false){
   if(!cli?.email){ if(forcar) toast('❌ Cliente sem email.','⚠️'); return; }
   const tecNomes=(os.tecnicos||[]).map(id=>window.DB.users.find(u=>u.id===id)?.name||'').filter(Boolean).join(', ');
@@ -21021,24 +20656,7 @@ async function ejsEnviar(tipoTemplate, params){
   }
 }
 
-async function cfgEjsTestar(mostrarToast){
-  const pk = document.getElementById('ejs-public-key')?.value?.trim();
-  const sid = document.getElementById('ejs-service-id')?.value?.trim();
-  const statusEl = document.getElementById('ejs-status');
-  if(!pk||!sid){ if(statusEl) statusEl.innerHTML='<span style="color:var(--red);">⚠️ Preencha a Public Key e o Service ID</span>'; return; }
-  if(statusEl) statusEl.innerHTML='<span style="color:var(--text3);">⏳ A verificar...</span>';
-  const load = ()=>{
-    emailjs.init({publicKey:pk}); window._ejsReady=true;
-    if(statusEl) statusEl.innerHTML='<span style="color:var(--green);">✅ EmailJS activo! Guarde as configurações.</span>';
-    if(mostrarToast) toast('✅ EmailJS configurado com sucesso!','📧');
-  };
-  if(typeof emailjs==='undefined'){
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
-    s.onload=load; s.onerror=()=>{ if(statusEl) statusEl.innerHTML='<span style="color:var(--red);">❌ Erro a carregar EmailJS. Verifique a internet.</span>'; };
-    document.head.appendChild(s);
-  } else { load(); }
-}
+/* v16.04 removido: cfgEjsTestar */
 
 // ── Templates de email editáveis ──────────────────────────────
 const EMAIL_TPL_DEFAULTS = {
@@ -21767,50 +21385,11 @@ function cfgRenderSrvs(){
   }).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:2rem;">Nenhum serviço. Clique em "+ Novo Serviço".</td></tr>';
 }
 
-function cfgOpenSrv(sid=null){
-  _cfgEditSrvId=sid;
-  const s=sid?(window.DB.servicos||[]).find(x=>x.id===sid):null;
-  document.getElementById('mo-cfg-srv-title').textContent=sid?'Editar Serviço':'Novo Serviço';
-  document.getElementById('cfs-nome').value=s?.nome||'';
-  document.getElementById('cfs-h1').value=s?.h1||'';
-  document.getElementById('cfs-hadd').value=s?.hadd||'';
-  document.getElementById('cfs-iva').value=String(s?.iva||23);
-  document.getElementById('cfs-desc').value=s?.desc||'';
-  if(document.getElementById('cfs-tempo')) document.getElementById('cfs-tempo').value=s?.tempo||'';
-  openMo('mo-cfg-srv');
-}
+/* v16.04 removido: cfgOpenSrv */
 
-async function cfgSaveSrv(){
-  const nome=document.getElementById('cfs-nome').value.trim();
-  if(!nome){ toast('Nome do serviço obrigatório','⚠️'); return; }
-  const sid=_cfgEditSrvId||`sv${Date.now()}`;
-  const s={
-    id:sid, nome,
-    h1:parseFloat(document.getElementById('cfs-h1').value)||0,
-    hadd:parseFloat(document.getElementById('cfs-hadd').value)||0,
-    iva:parseInt(document.getElementById('cfs-iva').value)||23,
-    desc:document.getElementById('cfs-desc').value.trim(),
-    tempo:parseInt(document.getElementById('cfs-tempo')?.value)||0,
-  };
-  await window.fsSet('servicos',sid,s);
-  closeMo('mo-cfg-srv');
-  toast(_cfgEditSrvId?'Serviço actualizado!':'Serviço criado!','✅');
-  // Actualizar selects de serviço nos modais OS
-  const srvSel=document.getElementById('os-srv-sel');
-  if(srvSel && document.getElementById('mo-os')?.classList.contains('open')){
-    srvSel.innerHTML='<option value="">Seleccionar serviço...</option>'+(window.DB.servicos||[]).map(sv=>`<option value="${sv.id}">${sv.nome}</option>`).join('');
-  }
-  cfgRenderSrvs();
-  osRenderServicos();
-}
+/* v16.04 removido: cfgSaveSrv */
 
-async function cfgDelSrv(sid){
-  if(!confirm('Eliminar este serviço?')) return;
-  await window.fsDel('servicos',sid);
-  toast('Serviço eliminado.','🗑');
-  cfgRenderSrvs();
-  osRenderServicos();
-}
+/* v16.04 removido: cfgDelSrv */
 // FIM CONFIGURAÇÕES
 
 
@@ -22060,28 +21639,7 @@ async function agRecMarcarPago(id){
   toast('Marcado como pago!','✅');
 }
 
-function agRecEditarSimples(id){
-  // Técnico pode editar apenas nome e NIF
-  const r=window.DB.recibos.find(x=>x.id===id); if(!r) return;
-  const osSel=document.getElementById('ag-rec-os');
-  osSel.innerHTML=`<option value="${r.osId||''}">${r.id} · ${r.client}</option>`;
-  osSel.disabled=true;
-  document.getElementById('mo-ag-rec-title').textContent='Editar Recebimento '+id;
-  document.getElementById('ag-rec-client').value=r.client||'';
-  document.getElementById('ag-rec-nif').value=r.nif||'';
-  document.getElementById('ag-rec-date').value=r.date||'';
-  document.getElementById('ag-rec-pay').value=r.pay||'';
-  document.getElementById('ag-rec-net').textContent=`€${fmt(r.net)}`;
-  document.getElementById('ag-rec-iva').textContent=`€${fmt(r.iva)}`;
-  document.getElementById('ag-rec-total-val').textContent=`€${fmt(r.total)}`;
-  document.getElementById('ag-rec-net').dataset.val=r.net;
-  document.getElementById('ag-rec-iva').dataset.val=r.iva;
-  document.getElementById('ag-rec-total-val').dataset.val=r.total;
-  agRecPayChange();
-  window._agRecEditId=id;
-  openMo('mo-ag-rec');
-  setTimeout(()=>{ osSel.disabled=false; },100);
-}
+/* v16.04 removido: agRecEditarSimples */
 // FIM RECEBIMENTOS AGENDA (2)
 </script>
 
@@ -22395,18 +21953,10 @@ window._rpEditOsId = null;
 window._rpVerOsId  = null;
 
 // ── Acesso ao Firestore ─────────────────────────────────────
-function rpCol(){ return window._db ? window._db : null; }
+/* v16.04 removido: rpCol */
 
 // Listener em tempo real para relatórios
-function rpAttachListener(){
-  if(!window._db) return;
-  const { collection, onSnapshot } = window._firestoreOps||{};
-  // Usar o padrão do sistema (onSnapshot via COLS)
-  if(window._rpListenerAttached) return;
-  window._rpListenerAttached = true;
-  // Adicionar coleção ao listener do sistema
-  // (O sistema já usa onSnapshot em attachListeners; vamos usar o mesmo padrão via COLS extra)
-}
+/* v16.04 removido: rpAttachListener */
 
 // Guardar relatório no Firestore
 function rpTemRastreadorQuimico(osId){
@@ -22494,9 +22044,7 @@ async function rpUploadFotosPendentes(osId, onProgress){
   try{ await window._rpUploadEmCurso; }
   finally{ window._rpUploadEmCurso = null; }
 }
-async function rpGetDoc(id){
-  return (window.DB.relatorios_pesquisa||[]).find(x=>x.id===id)||null;
-}
+/* v16.04 removido: rpGetDoc */
 
 // [CORRIGIDO v15.5] Listener duplicado de relatorios_pesquisa removido — já registado em attachListeners() no módulo principal.
 
@@ -24094,21 +23642,7 @@ function rpRecolherCampos(){
 }
 
 // ── Auto-ajustar hora fim a partir da hora ini no formulário de relatório ──
-function rpAtualizarHoraFim(){
-  const ini = document.getElementById('rp-hora-ini')?.value;
-  const fim = document.getElementById('rp-hora-fim')?.value;
-  if(!ini || fim) return; // só preenche se fim estiver vazio
-  const osId = window._rpEditOsId;
-  const os   = osId ? (window.DB.ordens||[]).find(x=>x.id===osId) : null;
-  const srv  = os   ? (window.DB.servicos||[]).find(x=>x.id===os.servicoId) : null;
-  const mins = srv?.tempo || 60;
-  const [h,m] = ini.split(':').map(Number);
-  const total = h*60 + m + mins;
-  const fh = Math.floor(total/60)%24, fm = total%60;
-  const fimCalc = `${String(fh).padStart(2,'0')}:${String(fm).padStart(2,'0')}`;
-  const fimEl = document.getElementById('rp-hora-fim');
-  if(fimEl) fimEl.value = fimCalc;
-}
+/* v16.04 removido: rpAtualizarHoraFim */
 
 // ── Pré-visualizar relatório com dados actuais do formulário ─
 function rpPreviewFormulario(){
@@ -24867,7 +24401,7 @@ async function rpCriarRecibimentoAutomatico(os, rel){
   const docLabel = {mb:'Fatura-Recibo (MB)',mbway:'Fatura-Recibo (MBWay)',dinheiro:'Fatura-Recibo (Numerário)'}[pagMet]||'Documento';
   toast(`💰 Recibo ${recibo.id} criado! Emitir ${docLabel}.`,'🧾');
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification('🧾 Recibo criado',{body:`Recibo ${recibo.id} — ${recibo.client} — €${recibo.total} — Emitir ${docLabel}`});
+    window.hgNotificar('🧾 Recibo criado',{body:`Recibo ${recibo.id} — ${recibo.client} — €${recibo.total} — Emitir ${docLabel}`});
   }
 }
 
@@ -24885,15 +24419,15 @@ function rpNotificarEquipa(os, rel){
   // Push para técnicos da OS
   if('Notification' in window && Notification.permission==='granted'){
     (os.tecnicos||[]).forEach(()=>{
-      new Notification('📄 Relatório preenchido',{body:msgTec,icon:'/favicon.ico'});
+      window.hgNotificar('📄 Relatório preenchido',{body:msgTec,icon:'/favicon.ico'});
     });
-    new Notification('📄 Relatório OS '+os.id,{body:msgSup,icon:'/favicon.ico'});
+    window.hgNotificar('📄 Relatório OS '+os.id,{body:msgSup,icon:'/favicon.ico'});
   }
 
   // Solicitar permissão push se ainda não foi concedida
   if('Notification' in window && Notification.permission==='default'){
     Notification.requestPermission().then(p=>{
-      if(p==='granted') new Notification('🔔 HidroGest',{body:'Notificações activadas! Receberá alertas de relatórios.'});
+      if(p==='granted') window.hgNotificar('🔔 HidroGest',{body:'Notificações activadas! Receberá alertas de relatórios.'});
     });
   }
 
@@ -25821,11 +25355,7 @@ function rpEditarRelatorio(osId){
 // ── Imprimir / PDF ───────────────────────────────────────────
 
 // ── Imprimir relatório directamente da tabela ────────────────
-function rpImprimirDeTabela(osId){
-  // Guardar o osId actual e chamar a função de impressão existente
-  window._rpVerOsId = osId;
-  rpImprimirRelatorio();
-}
+/* v16.04 removido: rpImprimirDeTabela */
 
 function rpImprimirRelatorio(){
   const osId = window._rpVerOsId||window._rpEditOsId;
@@ -26720,7 +26250,7 @@ async function rpEnviarEmailDireto(osId){
     auditLog('relatorio_enviado',`OS ${osId} → ${cli.email} — ${pagLabel} — €${total} — por ${window.currentUser?.name}`);
 
     if('Notification' in window && Notification.permission==='granted'){
-      new Notification('✅ Relatório enviado',{body:`OS ${osId} — ${cli.nome||'—'} — €${total}`});
+      window.hgNotificar('✅ Relatório enviado',{body:`OS ${osId} — ${cli.nome||'—'} — €${total}`});
     }
 
     rpRender();
@@ -27012,11 +26542,7 @@ async function osCriarReciboAutomatico(os, statusArg){
   }
 }
 
-async function osCriarReciboManual(osId){
-  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
-  const r = await osCriarReciboAutomatico(os);
-  if(r) toast(`🧾 Recibo ${r.id} criado! Emita a Fatura-Recibo.`,'✅');
-}
+/* v16.04 removido: osCriarReciboManual */
 
 function osNotifPagamento(osId, cor, metLabel, total){
   // Criar overlay de notificação visual piscante
@@ -27039,7 +26565,7 @@ function osNotifPagamento(osId, cor, metLabel, total){
   setTimeout(()=>notif.remove(), 8000);
   // Push
   if('Notification' in window && Notification.permission==='granted'){
-    new Notification(`${c.icon} OS ${osId} — ${c.titulo}`,{body:`${metLabel} · €${osFmt(total||0)}. ${c.sub}`});
+    window.hgNotificar(`${c.icon} OS ${osId} — ${c.titulo}`,{body:`${metLabel} · €${osFmt(total||0)}. ${c.sub}`});
   }
 }
 
@@ -27124,7 +26650,7 @@ function osVerificar72hSemPagamento(){
       const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
       console.log(`📧 EMAIL → localizafugas@gmail.com\nAssunto: 🔴 Sem pagamento 72h — OS ${o.id}\nOS ${o.id} — ${cli?.nome||'—'} — concluída há ${Math.floor(h)}h sem pagamento registado!`);
       if('Notification' in window && Notification.permission==='granted'){
-        new Notification('🔴 Sem pagamento',{body:`OS ${o.id} — ${cli?.nome||'—'} — sem pagamento há ${Math.floor(h)}h`});
+        window.hgNotificar('🔴 Sem pagamento',{body:`OS ${o.id} — ${cli?.nome||'—'} — sem pagamento há ${Math.floor(h)}h`});
       }
       // Marcar para não repetir nesta sessão
       o._pag72hNotificado=true;
@@ -27159,26 +26685,7 @@ function osCalcularHoras(osId){
   el.innerHTML=`<strong>⏱ ${h}h${m>0?' '+String(m).padStart(2,'0')+'min':''} trabalhadas</strong>${minPausaCH>0?` <span style="color:#94a3b8;font-size:11px;">(descontados ${minPausaCH} min de pausa)</span>`:''} &nbsp;·&nbsp; 1ª hora €${osFmt(h1Val)}${hAdd>0?` + ${Math.round(hAdd*10)/10}h × €${osFmt(haddV)}`:''}  &nbsp;·&nbsp; Total c/IVA: <strong style="color:var(--accent);">€${osFmt(total)}</strong>`+aviso16;
 }
 
-async function osGuardarHoras(osId){
-  if(window.currentUser?.role==='tecnico'){ toast('Só o admin pode editar ou corrigir as horas.','🔒'); return; }
-  const ini = document.getElementById('os-hora-ini-real')?.value||'';
-  const fim = document.getElementById('os-hora-fim-real')?.value||'';
-  if(!ini){ toast('Preencha a hora de início!','⚠️'); return; }
-  const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
-  let min = fim ? (_minutosEntreHoras(ini,fim) ?? 60) : 60;
-  const minPausaGH=osCalcMinPausados(os);
-  if(minPausaGH>0) min=Math.max(0,min-minPausaGH);
-  const horas=min/60;
-  const h1Val=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, iva=parseInt(os.iva)||23;
-  const net=parseFloat(calcNetOS(horas,h1Val,haddV).toFixed(2));
-  const ivaVal=parseFloat((net*iva/100).toFixed(2));
-  const total=parseFloat((net+ivaVal).toFixed(2));
-  const updated={...os, horaIniReal:ini, horaFimReal:fim||'', haddN:calcHorasAddQuartos(horas)||0, net, ivaVal, total};
-  await window.fsSet('ordens',osId,updated);
-  toast('Horas guardadas e valores recalculados!','✅');
-  auditLog('horas_registadas',`OS ${osId} — ${ini}–${fim||'?'} — Total €${total}`);
-  osAbrirDetalhe(osId);
-}
+/* v16.04 removido: osGuardarHoras */
 
 // ── Abrir modal concluir OS ──────────────────────────────────
 // Fechar OS sem fechar o relatório — fica cinza na agenda, relatório pode ser completado depois
@@ -27610,7 +27117,9 @@ async function osConcluirComAssinaturas(){
   // Exige: relatório com mínimos preenchidos, localização específica,
   // pelo menos 4 fotos do problema, e (mais abaixo) assinaturas de cliente e técnico.
   // No fecho PRELIMINAR dispensa-se apenas o diagnóstico/conclusão escrito.
-  const _estadoFecho = (window._rpEstadoFecho==='preliminar') ? 'preliminar' : 'definitivo';
+  // v16.04 — regra: o técnico NUNCA fecha definitivo; fica preliminar e à espera de validação da gestão
+  const _fechoPorTecnico = window.currentUser?.role==='tecnico';
+  const _estadoFecho = (window._rpEstadoFecho==='preliminar' || _fechoPorTecnico) ? 'preliminar' : 'definitivo';
   // v15.77 — "relatório depois": o fecho NÃO exige o conteúdo do relatório (fração,
   // anomalia, local, fotos, conclusão) — só assinaturas + forma de pagamento (validados acima).
   // Os requisitos do relatório passam a ser exigidos quando o relatório for PREENCHIDO mais tarde.
@@ -27728,6 +27237,7 @@ async function osConcluirComAssinaturas(){
     // Marcar o estado do relatório (definitivo / preliminar) e quem fechou
     await window.fsSetMerge('relatorios_pesquisa',osId,{
       relatorioEstado: _estadoFecho,
+      ...(_fechoPorTecnico ? {aguardaValidacao:true} : {}),
       fechadoPor: window.currentUser?.name||window.currentUser?.id||'',
       fechadoPorId: window.currentUser?.id||'',
       fechadoEm: new Date().toISOString(),
@@ -28257,122 +27767,7 @@ function agMapaBadges(locs){
 <script>
 // ══ ORDENS DE COMPRA — FUNÇÕES ADMIN ══════════════════════════
 
-async function adminVerOrdemCompra(ocId){
-  const oc = (window.DB.ordens_compra||[]).find(x=>x.id===ocId);
-  if(!oc){ toast('Ordem não encontrada','⚠️'); return; }
-
-  const ex = document.getElementById('oc-ver-modal'); if(ex) ex.remove();
-  const mo = document.createElement('div'); mo.id='oc-ver-modal';
-  mo.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px;';
-
-  const total = (oc.itens||[]).reduce((s,it)=>s+(it.valorUnit!=null?it.valorUnit*it.quantidade:0),0);
-  const temValores = (oc.itens||[]).some(it=>it.valorUnit!=null);
-  const est = {pendente:'⏳ A aguardar fatura',fatura_recebida:'📄 Fatura recebida',valores_preenchidos:'✏️ Valores preenchidos',concluida:'✅ Concluída'}[oc.estado||'pendente']||oc.estado;
-  const dt = oc.date?fmtDate(oc.date):(oc.criadoEm?new Date(oc.criadoEm).toLocaleDateString('pt-PT'):'—');
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText='background:var(--s1);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border);';
-
-  // Header
-  const head = document.createElement('div');
-  head.style.cssText='background:linear-gradient(135deg,#7c3aed,#a855f7);padding:16px 20px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center;';
-  head.innerHTML='<div><div style="font-size:15px;font-weight:800;color:#fff;">📦 Ordem de Compra</div>'
-    +'<div style="font-size:11px;color:rgba(255,255,255,.75);">'+oc.id+' · '+est+'</div></div>';
-  const bClose = document.createElement('button');
-  bClose.style.cssText='background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;';
-  bClose.textContent='×'; bClose.onclick=()=>mo.remove(); head.appendChild(bClose);
-  wrap.appendChild(head);
-
-  // Body
-  const body = document.createElement('div');
-  body.style.cssText='padding:18px;display:flex;flex-direction:column;gap:14px;';
-
-  // Info geral
-  const info = document.createElement('div');
-  info.style.cssText='background:var(--s2);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;';
-  const addInfo=(lbl,val)=>{ const d=document.createElement('div'); d.innerHTML='<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;">'+lbl+'</div><div style="font-weight:700;">'+val+'</div>'; info.appendChild(d); };
-  addInfo('TÉCNICO', oc.tecnicoNome||'—');
-  addInfo('DATA', dt);
-  addInfo('FORNECEDOR', oc.fornecedor||'—');
-  addInfo('NIF', oc.nif||'—');
-  if(oc.obs){ const d=document.createElement('div'); d.style.gridColumn='span 2'; d.innerHTML='<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;">OBSERVAÇÕES</div><div>'+oc.obs+'</div>'; info.appendChild(d); }
-  body.appendChild(info);
-
-  // Tabela de itens
-  const tDiv = document.createElement('div');
-  tDiv.style.cssText='border:1px solid var(--border);border-radius:10px;overflow:hidden;';
-  const table = document.createElement('table');
-  table.style.cssText='width:100%;border-collapse:collapse;font-size:12px;';
-  table.innerHTML='<thead><tr style="background:var(--s2);">'
-    +'<th style="padding:8px 10px;text-align:left;color:var(--text3);font-weight:700;">Material</th>'
-    +'<th style="padding:8px 10px;text-align:center;color:var(--text3);font-weight:700;">Qtd</th>'
-    +'<th style="padding:8px 10px;text-align:right;color:var(--text3);font-weight:700;">Val.Unit.</th>'
-    +'<th style="padding:8px 10px;text-align:right;color:var(--text3);font-weight:700;">Subtotal</th>'
-    +'</tr></thead>';
-  const tbody = document.createElement('tbody');
-  (oc.itens||[]).forEach((it,i)=>{
-    const tr = document.createElement('tr');
-    if(i%2) tr.style.background='var(--s2)';
-    tr.innerHTML='<td style="padding:8px 10px;">'+it.material+'</td>'
-      +'<td style="padding:8px 10px;text-align:center;">'+it.quantidade+' '+(it.unidade||'un')+'</td>'
-      +'<td style="padding:8px 10px;text-align:right;">'+(it.valorUnit!=null?'€'+fmt(it.valorUnit):'<span style="color:var(--text3);">—</span>')+'</td>'
-      +'<td style="padding:8px 10px;text-align:right;font-weight:700;">'+(it.valorUnit!=null?'€'+fmt(it.valorUnit*it.quantidade):'<span style="color:var(--text3);">—</span>')+'</td>';
-    tbody.appendChild(tr);
-  });
-  // Total row
-  const tTot = document.createElement('tr');
-  tTot.style.cssText='background:var(--s2);border-top:2px solid var(--border);';
-  tTot.innerHTML='<td colspan="3" style="padding:8px 10px;font-weight:800;text-align:right;">TOTAL</td>'
-    +'<td style="padding:8px 10px;text-align:right;font-weight:800;color:var(--accent);">'+(temValores?'€'+fmt(total):(oc.totalEstimado?'~€'+fmt(oc.totalEstimado):'—'))+'</td>';
-  tbody.appendChild(tTot);
-  table.appendChild(tbody); tDiv.appendChild(table); body.appendChild(tDiv);
-
-  // Assinaturas
-  if(oc.assinaturaTecnico||oc.assinaturaFornecedor){
-    const sigDiv = document.createElement('div');
-    sigDiv.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;';
-    if(oc.assinaturaTecnico){
-      const d=document.createElement('div'); d.style.cssText='text-align:center;';
-      d.innerHTML='<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:4px;">TÉCNICO</div>'
-        +'<img src="'+oc.assinaturaTecnico+'" style="max-width:100%;max-height:80px;object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#fff;">';
-      sigDiv.appendChild(d);
-    }
-    if(oc.assinaturaFornecedor){
-      const d=document.createElement('div'); d.style.cssText='text-align:center;';
-      d.innerHTML='<div style="font-size:10px;font-weight:700;color:var(--text3);margin-bottom:4px;">FORNECEDOR</div>'
-        +'<img src="'+oc.assinaturaFornecedor+'" style="max-width:100%;max-height:80px;object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#fff;">';
-      sigDiv.appendChild(d);
-    }
-    body.appendChild(sigDiv);
-  }
-
-  // Botões de ação
-  const actDiv = document.createElement('div');
-  actDiv.style.cssText='display:flex;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--border);';
-
-  const bPrint = document.createElement('button');
-  bPrint.style.cssText='background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1;';
-  bPrint.textContent='🖨️ Gerar Ordem PDF'; bPrint.onclick=()=>ocGerarPDF(ocId);
-  actDiv.appendChild(bPrint);
-
-  if(oc.estado==='pendente'||!oc.estado){
-    const bF=document.createElement('button');
-    bF.style.cssText='background:#1d4ed8;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1;';
-    bF.textContent='📄 Fatura recebida'; bF.onclick=()=>adminMarcarFaturaRecebida(ocId);
-    actDiv.appendChild(bF);
-  }
-  if(oc.estado==='fatura_recebida'){
-    const bP=document.createElement('button');
-    bP.style.cssText='background:#059669;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;flex:1;';
-    bP.textContent='✏️ Preencher valores'; bP.onclick=()=>adminPreencherValores(ocId);
-    actDiv.appendChild(bP);
-  }
-
-  body.appendChild(actDiv);
-  wrap.appendChild(body); mo.appendChild(wrap);
-  mo.addEventListener('click',e=>{if(e.target===mo)mo.remove();});
-  document.body.appendChild(mo);
-}
+/* v16.04 removido: adminVerOrdemCompra */
 
 async function adminMarcarFaturaRecebida(id){
   const ocId = id.startsWith('msg_')?id.replace('msg_',''):id;
@@ -29885,15 +29280,7 @@ function arqIniciarSnapshot(){
 // ── Filtros de despesas excluem arquivados ────────────────────
 // Já aplicado no renderDespesas com .filter(d=>!d._arquivado)
 // Aplicar também ao badge e outros renders
-(function patchRenderers(){
-  // Patch renderDespesas para excluir arquivados
-  const _origRenderDespesas = window.renderDespesas;
-  if(typeof _origRenderDespesas === 'function'){
-    window.renderDespesas = function(){
-      _origRenderDespesas.call(this);
-    };
-  }
-})();
+/* v16.04 removido: renderDespesas */
 
 // ── Navigate hook ─────────────────────────────────────────────
 (function(){
@@ -30148,54 +29535,10 @@ function feriasVerificarTecnicosOS(data){
 }
 
 // ── Render de férias na agenda (bloco visual) ──────────────────
-function feriasRenderAgenda(semanaStr){
-  // Remove blocos anteriores
-  document.querySelectorAll('.ferias-bloco').forEach(el=>el.remove());
-
-  const hoje=new Date().toISOString().slice(0,10);
-  const [ano,sem]=semanaStr.split('-W');
-
-  // Calcular dias da semana
-  const jan4=new Date(parseInt(ano),0,4);
-  const semIni=new Date(jan4); semIni.setDate(jan4.getDate()-(jan4.getDay()||7)+1+(parseInt(sem)-1)*7);
-
-  const dias=Array.from({length:6},(_,i)=>{
-    const d=new Date(semIni); d.setDate(semIni.getDate()+i);
-    return d.toISOString().slice(0,10);
-  });
-
-  // Para cada técnico com férias nesta semana, marcar na agenda
-  (window.DB.ferias||[]).forEach(f=>{
-    dias.forEach((dia,col)=>{
-      if(dia>=f.dataInicio&&dia<=f.dataFim){
-        const cell=document.querySelector(`[data-tec="${f.tecnicoId}"][data-dia="${dia}"]`);
-        if(cell&&!cell.querySelector('.ferias-bloco')){
-          const bloco=document.createElement('div');
-          bloco.className='ferias-bloco';
-          bloco.style.cssText='position:absolute;inset:0;background:rgba(14,165,233,.15);border:2px dashed #0ea5e9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0369a1;z-index:2;cursor:default;';
-          bloco.textContent='🏖️ Ausente';
-          bloco.title=f.motivo+(f.obs?' — '+f.obs:'');
-          cell.style.position='relative';
-          cell.appendChild(bloco);
-        }
-      }
-    });
-  });
-}
+/* v16.04 removido: feriasRenderAgenda */
 
 // ── Botão de férias nos técnicos (renderizado dinamicamente) ──
-function feriasAdicionarBotoesUtilizadores(){
-  // Adicionar botão 🏖️ na lista de utilizadores/técnicos
-  (window.DB.users||[]).filter(u=>u.role==='tecnico'||u.role==='supervisor').forEach(u=>{
-    const btn=document.createElement('button');
-    btn.style.cssText='background:rgba(14,165,233,.1);color:#0369a1;border:1px solid rgba(14,165,233,.3);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;';
-    btn.textContent='🏖️ Férias';
-    btn.onclick=()=>feriasAbrirModal(u.id);
-    btn.id='fer-btn-'+u.id;
-    const row=document.getElementById('fer-row-'+u.id);
-    if(row&&!row.querySelector('#fer-btn-'+u.id)) row.appendChild(btn);
-  });
-}
+/* v16.04 removido: feriasAdicionarBotoesUtilizadores */
 
 // ── Verificar disponibilidade ao mudar data na OS ─────────────
 (function(){
@@ -30619,49 +29962,7 @@ function propostasAbrirArquivo(){
 }
 
 // Verificar alertas de follow-up ao carregar
-function propostasVerificarFollowUp(){
-  const propostas = window.DB.propostas||[];
-  const hoje = new Date();
-  const diasAlerta = [3,7,15,30];
-  const userId = window.currentUser?.id;
-
-  propostas
-    .filter(p=>p.estado==='perdida'&&!p.arquivada&&p.perdidaEm&&
-      (p.criadoPor===userId||['admin','gerente'].includes(window.currentUser?.role)))
-    .forEach(p=>{
-      const diasDecorridos = Math.floor((hoje - new Date(p.perdidaEm))/(1000*60*60*24));
-      const alertasJaFeitos = p.followUpAlertas||[];
-
-      // ── Alertas de follow-up (3, 7, 15, 30 dias) ──────────────
-      diasAlerta.forEach(d=>{
-        if(diasDecorridos>=d && !alertasJaFeitos.includes(d)){
-          const msgs = {
-            3:  `📋 Follow-up 3 dias — Liga para ${p.nome||'cliente'} sobre proposta ${p.numero||p.id}.`,
-            7:  `📋 Follow-up 7 dias — Envia email a ${p.nome||'cliente'}: proposta ${p.numero||p.id} ainda em aberto.`,
-            15: `📋 Follow-up 15 dias — Última tentativa antes de fechar: ${p.nome||'cliente'}, proposta ${p.numero||p.id}.`,
-            30: `📋 Follow-up 30 dias — Negócio não fechou. A arquivar proposta ${p.numero||p.id} de ${p.nome||'cliente'}.`
-          };
-          const atualizados = [...alertasJaFeitos, d];
-          window.fsSetMerge('propostas', p.id, {followUpAlertas: atualizados}).catch(()=>{});
-          toast(msgs[d]||`📋 Follow-up ${d}d — ${p.nome||'Proposta'} ${p.numero||p.id}`, '📋');
-        }
-      });
-
-      // ── Após 30 dias: arquivar automaticamente ─────────────────
-      if(diasDecorridos>=30 && !p.arquivada && !p.arquivadaAuto){
-        // Marcar como arquivada automaticamente
-        window.fsSetMerge('propostas', p.id, {
-          arquivada: true,
-          arquivadaAuto: true,
-          arquivadaEm: new Date().toISOString(),
-          motivoArquivo: 'Follow-up 30 dias sem resposta — negócio não fechou'
-        }).then(()=>{
-          // Notificar utilizador com modal de confirmação
-          propostasNotificarArquivoAuto(p);
-        }).catch(()=>{});
-      }
-    });
-}
+/* v16.04 removido: propostasVerificarFollowUp */
 
 function propostasNotificarArquivoAuto(p){
   // Criar toast persistente com opção de reverter
@@ -32475,9 +31776,7 @@ async function propostaEnviarLivre(){
 }
 
 // ── Enviar proposta (versão com clienteId — mantida para compatibilidade) ──
-async function propostaEnviar(clienteId){
-  await propostaEnviarLivre();
-}
+/* v16.04 removido: propostaEnviar */
 
 // ── Gravar proposta como rascunho (sem enviar) ────────────────
 async function propostaGuardar(){
@@ -33501,46 +32800,7 @@ window.addEventListener('load', function(){
 
 
 // ══ APAGAR POR INTERVALO — PROPOSTAS ══════════════════════════
-function propostasApagarIntervalo(){
-  const mo=document.createElement('div');
-  mo.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px;';
-  mo.innerHTML=`
-  <div style="background:var(--s1);border-radius:16px;max-width:420px;width:100%;border:1px solid var(--border);padding:24px;display:flex;flex-direction:column;gap:16px;">
-    <div style="font-size:15px;font-weight:800;color:var(--text1);">🗑️ Apagar Propostas por Período</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div class="fg" style="margin:0;"><label>Data início</label><input class="fi" type="date" id="ap-prop-de"></div>
-      <div class="fg" style="margin:0;"><label>Data fim</label><input class="fi" type="date" id="ap-prop-ate"></div>
-    </div>
-    <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 12px;font-size:12px;color:#dc2626;">
-      ⚠️ Esta ação é irreversível. Todas as propostas no período serão eliminadas permanentemente.
-    </div>
-    <div id="ap-prop-preview" style="font-size:13px;color:var(--text2);min-height:20px;"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-ghost" onclick="this.closest('[style*=fixed]').remove()">Cancelar</button>
-      <button class="btn" style="background:rgba(239,68,68,.1);color:#dc2626;border:1px solid rgba(239,68,68,.3);" onclick="propostasApagarConfirmar()">🗑️ Apagar</button>
-    </div>
-  </div>`;
-  // Preview ao mudar datas
-  mo.querySelectorAll('input[type=date]').forEach(inp=>inp.addEventListener('change', ()=>{
-    const de=document.getElementById('ap-prop-de')?.value;
-    const ate=document.getElementById('ap-prop-ate')?.value;
-    if(de&&ate){
-      const count=(window.DB.propostas||[]).filter(p=>{
-        const d=(p.criadoEm||p.dataDoc||'').slice(0,10);
-        return d>=de&&d<=ate;
-      }).length;
-      document.getElementById('ap-prop-preview').textContent=`${count} proposta(s) encontrada(s) neste período.`;
-    }
-  }));
-  mo.addEventListener('click',e=>{if(e.target===mo)mo.remove();});
-  document.body.appendChild(mo);
-  // Preencher datas padrão (início do ano até hoje)
-  const hoje=new Date().toISOString().slice(0,10);
-  const anoIni=hoje.slice(0,4)+'-01-01';
-  document.getElementById('ap-prop-de').value=anoIni;
-  document.getElementById('ap-prop-ate').value=hoje;
-  document.getElementById('ap-prop-de').dispatchEvent(new Event('change'));
-}
+/* v16.04 removido: propostasApagarIntervalo */
 
 async function propostasApagarConfirmar(){
   const de=document.getElementById('ap-prop-de')?.value;
@@ -38164,7 +37424,7 @@ window.abrirApresentacaoGrupo = function(){
       if(!vistos.has(k)){
         if(vistos.size || window._valArranque){
           try{ toast('📋 Relatório da OS '+m.osId+' ('+(m.clienteNome||'')+') aguarda validação para ser enviado ao cliente.','📋'); }catch(e){}
-          try{ if('Notification' in window && Notification.permission==='granted') new Notification('📋 Relatório a validar',{body:'OS '+m.osId+' — '+(m.clienteNome||'')}); }catch(e){}
+          try{ if('Notification' in window && Notification.permission==='granted') window.hgNotificar('📋 Relatório a validar',{body:'OS '+m.osId+' — '+(m.clienteNome||'')}); }catch(e){}
         }
         vistos.add(k);
       }

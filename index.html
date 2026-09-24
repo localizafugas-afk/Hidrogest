@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.99<br>
+      HidroGest v16.00<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.99<br>
+      HidroGest v16.00<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -34517,7 +34517,8 @@ window.cliHistoricoImprimir = function(cliId){
   const LIMITE_ANEXOS = 8 * 1024 * 1024;   // margem para o limite do Brevo
   const _toast = (m,i,t)=>{ try{ toast(m,i,t); }catch(_){ console.log(m); } };
 
-  window.brevoEnviarRelatorio = async function(osId){
+  // v16.00 — DESLIGADO: enviava o relatório no corpo do email e anulava o envio por LINK (v15.98).
+  window._brevoEnviarRelatorio_HTML_antigo = async function(osId){
     const cfg = window._emailCfg || window.DB?.emailConfig || {};
     const apiKey = cfg.brevoApiKey || '';
     if(!apiKey){
@@ -36561,7 +36562,8 @@ Se o ano não estiver na linha, infere-o do período do extrato.`;
   };
 
   // ── 4. Enviar ao cliente: PDF em anexo + corpo curto ────────────────
-  window.brevoEnviarRelatorio = async function(osId){
+  // v16.00 — DESLIGADO: enviava o relatório em PDF anexo e anulava o envio por LINK (v15.98).
+  window._brevoEnviarRelatorio_PDF_antigo = async function(osId){
     const cfg = window._emailCfg || window.DB?.emailConfig || {};
     const apiKey = cfg.brevoApiKey || '';
     if(!apiKey){ _toast('⚠️ Configure a API Key Brevo em Configurações → Email','⚠️'); return {ok:false,motivo:'sem-api-key'}; }

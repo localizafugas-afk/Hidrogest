@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
+<script>
+// v16.02 — Notificações seguras no telemóvel: o Android não deixa usar "new Notification()";
+// nesse caso a notificação é mostrada pelo service worker (showNotification), sem erro.
+(function(){
+  if(!('Notification' in window)) return;
+  var Orig = window.Notification;
+  function SafeNotif(title, opts){
+    try { return new Orig(title, opts); }
+    catch(e){
+      try {
+        if(navigator.serviceWorker && Orig.permission==='granted'){
+          navigator.serviceWorker.getRegistration().then(function(r){
+            if(r) r.showNotification(title, opts||{});
+          }).catch(function(){});
+        }
+      } catch(_){}
+      return { close:function(){}, onclick:null, addEventListener:function(){} };
+    }
+  }
+  SafeNotif.requestPermission = function(){ return Orig.requestPermission.apply(Orig, arguments); };
+  Object.defineProperty(SafeNotif, 'permission', { get:function(){ return Orig.permission; } });
+  SafeNotif.prototype = Orig.prototype;
+  try { window.Notification = SafeNotif; } catch(_){}
+})();
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1266,7 +1292,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.01<br>
+      HidroGest v16.02<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1291,7 +1317,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.01<br>
+      HidroGest v16.02<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>

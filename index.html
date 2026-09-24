@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.89<br>
+      HidroGest v15.98<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.89<br>
+      HidroGest v15.98<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -3276,7 +3276,7 @@ Localiza Fugas
       <!-- ── TIPO DE ANOMALIA + TIPOLOGIA ── -->
       <div class="fgrid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <div class="fg">
-          <label>Tipo de Anomalia <span style="font-size:10px;color:var(--text3);font-weight:400;">(aparece no relatório)</span></label>
+          <label>Problema reportado pelo cliente <span style="font-size:10px;color:var(--text3);font-weight:400;">(escolher da lista — o técnico confirma no local)</span></label>
           <select class="fs" id="os-tipo-anomalia">
             <option value="">— Não especificado —</option>
             <option value="Fuga de água">Fuga de água</option>
@@ -3306,8 +3306,8 @@ Localiza Fugas
 
       <!-- ── OBSERVAÇÕES ── -->
       <div class="fg">
-        <label>Observações / Instruções para o técnico</label>
-        <textarea class="fta" id="os-obs" rows="2" placeholder="Notas internas, detalhes do serviço..."></textarea>
+        <label>Observação do comercial <span style="font-size:10px;color:var(--text3);font-weight:400;">(o técnico vê na OS)</span></label>
+        <textarea class="fta" id="os-obs" rows="3" placeholder="Informação útil para o técnico: o que o cliente contou, acessos, historial, pedidos especiais..."></textarea>
       </div>
 
       <!-- ── NOTA INTERNA (só comercial/admin escreve; técnico só lê) ── -->
@@ -15315,14 +15315,14 @@ async function rpMelhorarTexto(fieldId){
       'rp-conclusao':  'a conclusão técnica do diagnóstico',
     }[fieldId] || 'um excerto de um relatório técnico';
 
-    const prompt = `És um engenheiro responsável pela elaboração de relatórios técnicos de peritagem não destrutiva, nas áreas de deteção de fugas de água, infiltrações e patologias da construção.
-Reescreve o texto seguinte, que corresponde a ${_seccao}, num registo técnico de engenharia: objetivo, impessoal, rigoroso e conciso.
+    const prompt = `Reescreve o texto seguinte, que corresponde a ${_seccao}, para que QUALQUER pessoa o perceba à primeira leitura — um cliente, um administrador de condomínio ou uma seguradora, sem conhecimentos técnicos.
 
-Diretrizes:
-- Usa terminologia técnica adequada às áreas de hidráulica predial, impermeabilização, patologia da construção e ensaios não destrutivos, conforme o que for aplicável ao texto (ex.: "rede predial de distribuição", "escoamento gravítico", "coletor pluvial/residual", "perda de carga", "estanqueidade", "capilaridade", "anomalia térmica / ponte térmica", "termografia de infravermelhos", "gás traçador", "rastreador químico com leitura UV", "vídeo-inspeção CCTV", "reabilitação por CIPP / resina epóxi").
-- Não forces vocabulário de canalização quando o caso for de infiltração, cobertura ou impermeabilização — ajusta a terminologia ao tipo de patologia descrita.
-- Mantém rigorosamente os factos; não acrescentes nem inventes informação, valores, causas ou conclusões que não estejam no texto original.
-- Escreve em português europeu, na 3.ª pessoa / forma impessoal, sem linguagem comercial ou subjetiva.
+Regras:
+- Frases curtas e claras, em português europeu correto (ortografia, pontuação, acentos).
+- Usa palavras do dia a dia. Se precisares de um termo técnico, explica-o em poucas palavras entre parênteses.
+- Diz de forma direta o que se verificou, onde, e o que isso significa.
+- Mantém rigorosamente os factos: não acrescentes, não inventes nem exageres causas, valores ou conclusões.
+- Tom profissional e neutro, sem linguagem comercial.
 - Responde APENAS com o texto reescrito, sem introdução, títulos nem comentários.
 
 Texto original:
@@ -15367,13 +15367,13 @@ ${texto}`;
         if(fieldId==='rp-conclusao'){ el.dataset.ia = el.dataset.iaAntes||''; } // repor marca anterior
         el.style.borderColor = '';
         el.style.background = '';
-        btn.textContent = '🤖 Melhorar para técnico';
+        btn.textContent = '✨ Melhorar texto';
         btn.style.background = '#faf5ff';
         btn.style.borderColor = '#7c3aed';
         btn.onclick = ()=>rpMelhorarTexto(fieldId);
       };
     }
-    toast('✅ Texto melhorado para linguagem técnica!','🤖');
+    toast('✅ Texto reescrito em linguagem simples.','✨');
   }catch(e){
     el.style.opacity = '1';
     if(btn){ btn.textContent = textoOriginal; btn.disabled = false; }
@@ -23736,7 +23736,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-reclamacao')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">🤖 Melhorar para técnico</button>
+        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
     </div>
     <textarea class="fta" id="rp-reclamacao" rows="6"
       placeholder="Descreva a reclamação / problema reportado pelo cliente..."
@@ -23748,7 +23748,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-trabalho')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">🤖 Melhorar para técnico</button>
+        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
     </div>
     <textarea class="fta" id="rp-trabalho" rows="9"
       placeholder="Descreva o trabalho efectuado, metodologia aplicada e o que foi inspeccionado..."
@@ -23809,7 +23809,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-conclusao')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">🤖 Melhorar para técnico</button>
+        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
       <button type="button" onclick="rpGerarConclusao('${osId}')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #15803d;
         border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
@@ -25163,6 +25163,11 @@ async function rpMarcarRecebido(osId){
 }
 // depois relatorios_assinaturas (doc separado quando assinaturas eram grandes)
 function rpGetAssinaturas(osId, campos, rel, os){
+  // v15.91 — o relatório usa a assinatura do técnico feita na OS; o cliente não assina o relatório.
+  os = os || (window.DB.ordens||[]).find(x=>x.id===osId) || null;
+  const _docSig = (window.DB.relatorios_assinaturas||[]).find(x=>x.osId===osId||x._firebaseId===osId);
+  const _sigTecOS = os?.assinaturaTecnico || _docSig?.assinaturaTecnico || campos?.assinaturaTecnico || rel?.assinaturaTecnico || '';
+  return {sigTec:_sigTecOS, sigCli:''};
   const sigTec = campos?.assinaturaTecnico || rel?.assinaturaTecnico || os?.assinaturaTecnico || '';
   const sigCli = campos?.assinaturaCliente || rel?.assinaturaCliente || os?.assinaturaCliente || '';
   if(sigTec || sigCli) return {sigTec, sigCli};
@@ -25466,7 +25471,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
     const plantaObs = c.obsPlanta ? ` Nota sobre a planta: ${tecToEng(c.obsPlanta)}.` : '';
 
     const plantaTxt = c.planta==='sim'
-      ? `Foi disponibilizada pelo cliente a planta da instalação de tubagens, tendo sido efectuada a correlação entre os resultados dos ensaios e o traçado representado. Ressalva-se, contudo, que a empresa não pode atestar a fidedignidade da planta fornecida face a eventuais alterações realizadas posteriormente à sua elaboração, pelo que não assume responsabilidade por imprecisões decorrentes de divergências entre o traçado representado e a instalação real.${plantaObs}`
+      ? `O cliente declarou ter entregue a planta da tubagem, que foi usada apenas como referência. Não é possível confirmar se o traçado foi alterado nem se foi respeitado na instalação, pelo que a planta não garante a localização da fuga.`
       : `Não foi disponibilizada planta das tubagens por parte do cliente, pelo que foi necessário proceder ao mapeamento empírico da rede através de rastreamento directo e correlação com elementos construtivos visíveis.${plantaObs}`;
 
     const periodo = ini && fim
@@ -25745,7 +25750,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
           <p style="font-size:11px;color:#64748b;margin-bottom:16px;line-height:1.6;">
             O presente relatório foi elaborado com base nos ensaios e observações realizados no local e reflecte os resultados obtidos com os meios técnicos disponíveis e as condições de acesso verificadas no momento da intervenção. As conclusões têm carácter técnico e não substituem eventuais análises complementares que venham a ser determinadas.
           </p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+          <div style="display:grid;grid-template-columns:minmax(0,320px);gap:30px;">
             ${(()=>{const {sigTec,sigCli}=rpGetAssinaturas(os.id,c,rel,os); return `
             <div style="text-align:center;">
               ${sigTec
@@ -25754,13 +25759,7 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
               <div style="font-size:11px;font-weight:700;color:#1e293b;">${c.tecnico||tecs||'Técnico'}</div>
               <div style="font-size:9px;color:#94a3b8;">Responsável pela peritagem · ${dataServico}</div>
             </div>
-            <div style="text-align:center;">
-              ${sigCli
-                ?`<div style="border:1px solid #e2e8f0;border-radius:6px;padding:6px;margin-bottom:8px;background:#f8fafc;"><img src="${sigCli}" style="max-height:80px;max-width:100%;object-fit:contain;display:block;margin:0 auto;-webkit-print-color-adjust:exact;"></div>`
-                :`<div style="height:70px;border-bottom:1.5px solid #94a3b8;margin-bottom:8px;"></div>`}
-              <div style="font-size:11px;font-weight:700;color:#1e293b;">${(os&&os.assinadoPorOutro&&os.assinanteNome) ? os.assinanteNome : (c.cliNome||cli.nome||'Cliente')}</div>
-              <div style="font-size:9px;color:#94a3b8;">${(os&&os.assinadoPorOutro) ? ('Assinou no local'+(os.assinanteNif?' · NIF '+os.assinanteNif:'')+' — cliente não presente') : 'Tomador do serviço'} · Data: ___/___/______</div>
-            </div>`})()}
+            `})()}
           </div>
         </div>
       </div>
@@ -25924,7 +25923,7 @@ async function rpGerarDocxBase64(osId){
         const {
           Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
           WidthType, AlignmentType, BorderStyle, ShadingType,
-          HeadingLevel, UnderlineType,
+          HeadingLevel, UnderlineType, ImageRun,
         } = window.docx;
 
         // ── Dados ─────────────────────────────────────────────────────────
@@ -26338,19 +26337,19 @@ async function rpGerarDocxBase64(osId){
               children:[
                 cell([
                   paragrafo(bold('Responsável Técnico',{color:'1F3864',size:22}),{align:AlignmentType.CENTER,before:100,after:80}),
-                  paragrafo(normal(' ',{size:36}),{before:0,after:40}),
+                  (()=>{ try{
+                    const _sg=(typeof rpGetAssinaturas==='function')?rpGetAssinaturas(osId,c,rel,os).sigTec:'';
+                    if(_sg && ImageRun && /^data:image\/png;base64,/.test(_sg)){
+                      const _b=atob(_sg.split(',')[1]); const _u=new Uint8Array(_b.length); for(let _i=0;_i<_b.length;_i++) _u[_i]=_b.charCodeAt(_i);
+                      return new Paragraph({alignment:AlignmentType.CENTER, children:[new ImageRun({type:'png', data:_u, transformation:{width:220,height:80}})]});
+                    }
+                  }catch(_e){ console.warn('assinatura no Word:', _e); }
+                  return paragrafo(normal(' ',{size:36}),{before:0,after:40}); })(),
                   paragrafo(new TextRun({text:'_'.repeat(42),size:20,color:'888888',font:'Calibri'}),{align:AlignmentType.CENTER,before:0,after:60}),
                   paragrafo(bold(tecs,{color:'1F3864'}),{align:AlignmentType.CENTER,before:0,after:20}),
                   paragrafo(normal(empNome,{size:18,color:'555555'}),{align:AlignmentType.CENTER,before:0,after:20}),
                   paragrafo(normal(`Cert. ITC Nº ${empItc}`,{size:17,color:'888888'}),{align:AlignmentType.CENTER,before:0,after:80}),
-                ],{width:50, bg:'F8FAFC'}),
-                cell([
-                  paragrafo(bold('Cliente / Responsável pelo Imóvel',{color:'1F3864',size:22}),{align:AlignmentType.CENTER,before:100,after:80}),
-                  paragrafo(normal(' ',{size:36}),{before:0,after:40}),
-                  paragrafo(new TextRun({text:'_'.repeat(42),size:20,color:'888888',font:'Calibri'}),{align:AlignmentType.CENTER,before:0,after:60}),
-                  paragrafo(bold(nomeCli,{color:'1F3864'}),{align:AlignmentType.CENTER,before:0,after:20}),
-                  paragrafo(normal(`NIF: ${c.cliNif||cli.nif||'___________________'}`,{size:18,color:'555555'}),{align:AlignmentType.CENTER,before:0,after:80}),
-                ],{width:50, bg:'F8FAFC'}),
+                ],{width:100, bg:'F8FAFC'}),
               ],
             }),
           ],
@@ -26417,6 +26416,8 @@ async function brevoEnviarRelatorio(osId){
   const dataFmt  = os.data ? `${d}/${m}/${a}` : '—';
 
   const assunto = `Relatório de Peritagem — OS ${osId} — ${cli.nome||''}`;
+  // Link seguro para a página pública do relatório (relatorio.html usa o mesmo token do tracking)
+  const linkRelatorio = (await gerarLinkTracking(osId)).replace('track.html','relatorio.html');
   const corpoHtml = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1e293b;">
       <div style="background:#1e3a5f;padding:20px 24px;border-radius:8px 8px 0 0;">
@@ -26425,7 +26426,11 @@ async function brevoEnviarRelatorio(osId){
       </div>
       <div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;">
         <p style="margin:0 0 16px;">Exmo(a) Sr(a) <strong>${cli.nome||''}</strong>,</p>
-        <p style="margin:0 0 16px;">Segue em anexo o relatório de peritagem referente ao serviço prestado nas suas instalações.</p>
+        <p style="margin:0 0 16px;">O relatório de peritagem referente ao serviço prestado nas suas instalações já está disponível. Pode consultá-lo, com o registo fotográfico completo, no botão abaixo.</p>
+        <div style="text-align:center;margin:22px 0;">
+          <a href="${linkRelatorio}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:10px;">📄 Ver o meu relatório</a>
+        </div>
+        <p style="margin:0 0 16px;font-size:12px;color:#64748b;text-align:center;">Se o botão não funcionar, copie este endereço para o navegador:<br><span style="color:#0e7490;word-break:break-all;">${linkRelatorio}</span></p>
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
           <div style="font-size:12px;color:#64748b;text-transform:uppercase;font-weight:700;margin-bottom:10px;">Resumo do Serviço</div>
           <table style="width:100%;font-size:13px;border-collapse:collapse;">
@@ -26445,7 +26450,6 @@ async function brevoEnviarRelatorio(osId){
           <div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:6px;">🔧 Recomendação</div>
           <p style="margin:0;font-size:13px;color:#92400e;">${rel.campos.sugestao.split('\n').join('<br>')}</p>
         </div>`:''}
-        <p style="margin:20px 0 0;font-size:12px;color:#64748b;">O relatório completo encontra-se em anexo (PDF).</p>
         <p style="margin:16px 0 0;font-size:13px;">Para qualquer questão:<br>
           📞 <a href="tel:${empTel}" style="color:#1e3a5f;">${empTel}</a> &nbsp;·&nbsp;
           ✉️ <a href="mailto:${empEmail}" style="color:#1e3a5f;">${empEmail}</a>
@@ -26456,32 +26460,12 @@ async function brevoEnviarRelatorio(osId){
       </div>
     </div>`;
 
-  // Gerar Word (.docx) do relatório
-  toast('⏳ A gerar documento Word do relatório...','📄');
-  let docxBase64 = null;
-  let nomeAnexo = `Relatorio_OS_${osId}.docx`;
-  try{
-    docxBase64 = await rpGerarDocxBase64(osId);
-    toast('✅ Documento Word gerado!','📝');
-  }catch(e){
-    console.warn('DOCX falhou:', e);
-    toast('⚠️ Não foi possível gerar o Word — email enviado sem anexo','⚠️');
-  }
-
-  // Actualizar texto do corpo para mencionar Word
-  const corpoHtmlFinal = corpoHtml.replace(
-    'O relatório completo encontra-se em anexo (PDF).',
-    'O relatório completo encontra-se em anexo em formato Word (.docx).'
-  );
-
-  // Payload Brevo — juntar ficheiros anexados pelo admin
-  const anexosExtra = (rel.anexos||[])
+  // v15.98 — o relatório vai por LINK (email leve, chega sempre e mostra as fotos).
+  // Já não se anexa o Word. Só seguem anexos que o admin tenha juntado à mão.
+  const corpoHtmlFinal = corpoHtml;
+  const todosAnexos = (rel.anexos||[])
     .filter(a=>a.base64)
     .map(a=>({content:a.base64, name:a.nome}));
-  const todosAnexos = [
-    ...(docxBase64?[{content:docxBase64, name:nomeAnexo}]:[]),
-    ...anexosExtra,
-  ];
   const payload = {
     sender:  {name:empNome, email:empEmail},
     replyTo: {email: cfg.replyTo||'localizafugas@gmail.com', name:empNome},
@@ -36807,6 +36791,1487 @@ window.abrirApresentacaoGrupo = function(){
   }
 };
 </script>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     v15.90/15.91 — OS DE CAMPO (técnico)
+     Um só ecrã: abrir OS → iniciar tempo → relatório dentro da OS → fechar
+     com as condições de pagamento já definidas. Tudo editável, com gravação
+     automática. Só atua para role 'tecnico' (principal). Admin não muda.
+     ═══════════════════════════════════════════════════════════════════ -->
+<style id="ofc-css">
+#ofc{position:fixed;inset:0;z-index:950;background:#e9eef4;display:none;flex-direction:column;color:#0f2447;font-size:15px;}
+#ofc.on{display:flex;}
+#ofc *{box-sizing:border-box;}
+#ofc .ofc-top{background:#0f2447;color:#fff;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 14px;flex-shrink:0;}
+#ofc .ofc-top-row{display:flex;align-items:center;gap:10px;}
+#ofc .ofc-back{background:rgba(255,255,255,.12);border:0;color:#fff;border-radius:10px;min-width:44px;height:44px;font-size:20px;cursor:pointer;}
+#ofc .ofc-id{font-size:12px;opacity:.7;}
+#ofc .ofc-cli{font-size:20px;font-weight:800;line-height:1.2;margin-top:2px;}
+#ofc .ofc-save{font-size:11.5px;opacity:.75;margin-left:auto;text-align:right;white-space:nowrap;}
+#ofc .ofc-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 130px;}
+#ofc .ofc-sec{background:#fff;border-radius:14px;padding:16px 14px;margin-bottom:12px;border:1px solid #d9e1ea;}
+#ofc .ofc-h{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:800;margin:0 0 12px;}
+#ofc .ofc-n{width:28px;height:28px;border-radius:50%;background:#0f2447;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+#ofc .ofc-n.ok{background:#15803d;}
+#ofc .ofc-lbl{font-size:13px;font-weight:700;color:#334155;margin:16px 0 7px;}
+#ofc .ofc-lbl:first-of-type{margin-top:4px;}
+#ofc .ofc-hint{font-size:12.5px;color:#64748b;margin:-3px 0 8px;line-height:1.4;}
+#ofc .ofc-in,#ofc .ofc-ta{width:100%;font-size:16px;padding:12px;border:1.5px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f2447;font-family:inherit;}
+#ofc .ofc-ta{min-height:96px;resize:vertical;line-height:1.45;}
+#ofc .ofc-in:focus,#ofc .ofc-ta:focus{outline:none;border-color:#0e7490;box-shadow:0 0 0 3px rgba(14,116,144,.15);}
+#ofc .ofc-chips{display:flex;flex-wrap:wrap;gap:7px;}
+#ofc .ofc-chip{border:1.5px solid #cbd5e1;background:#fff;color:#334155;border-radius:22px;padding:9px 14px;font-size:14px;font-weight:600;cursor:pointer;min-height:42px;font-family:inherit;}
+#ofc .ofc-chip.on{background:#0f2447;border-color:#0f2447;color:#fff;}
+#ofc .ofc-chip.add{border-style:dashed;color:#0e7490;border-color:#0e7490;}
+#ofc .ofc-info{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:14px;}
+#ofc .ofc-info b{color:#64748b;font-weight:600;}
+#ofc .ofc-acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+#ofc .ofc-act{flex:1;min-width:110px;min-height:46px;border-radius:10px;border:1.5px solid #cbd5e1;background:#f8fafc;color:#0f2447;font-weight:700;font-size:14px;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;font-family:inherit;}
+#ofc .ofc-nota{background:#fefce8;border:1.5px solid #fde047;border-radius:10px;padding:10px 12px;font-size:13.5px;color:#713f12;margin-top:12px;white-space:pre-wrap;}
+#ofc .ofc-lock{opacity:.4;pointer-events:none;filter:grayscale(.4);}
+#ofc .ofc-teste{border:1.5px solid #e2e8f0;border-radius:12px;padding:10px;margin-bottom:8px;}
+#ofc .ofc-teste.an{border-color:#dc2626;background:#fff8f8;}
+#ofc .ofc-teste.ok{border-color:#16a34a;background:#f7fdf9;}
+#ofc .ofc-teste-top{display:flex;gap:8px;align-items:center;}
+#ofc .ofc-x{border:0;background:#f1f5f9;color:#64748b;border-radius:8px;min-width:40px;height:40px;font-size:16px;cursor:pointer;}
+#ofc .ofc-st{display:flex;gap:6px;margin-top:8px;}
+#ofc .ofc-st button{flex:1;min-height:42px;border-radius:9px;border:1.5px solid #e2e8f0;background:#fff;font-size:13px;font-weight:700;color:#64748b;cursor:pointer;font-family:inherit;}
+#ofc .ofc-st button.an{background:#dc2626;border-color:#dc2626;color:#fff;}
+#ofc .ofc-st button.ok{background:#16a34a;border-color:#16a34a;color:#fff;}
+#ofc .ofc-st button.na{background:#64748b;border-color:#64748b;color:#fff;}
+#ofc .ofc-fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;}
+#ofc .ofc-foto{border:1.5px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#f8fafc;position:relative;}
+#ofc .ofc-foto img{width:100%;height:120px;object-fit:cover;display:block;}
+#ofc .ofc-foto input{border:0;border-top:1px solid #e2e8f0;border-radius:0;font-size:14px;padding:9px;width:100%;}
+#ofc .ofc-foto input.falta,#ofc .ofc-foto textarea.falta,#ofc textarea.ofc-fdesc.falta{background:#fef2f2;}
+#ofc .ofc-foto .ofc-fx{position:absolute;top:6px;right:6px;background:rgba(15,36,71,.75);color:#fff;border:0;border-radius:8px;width:34px;height:34px;font-size:15px;cursor:pointer;}
+#ofc .ofc-foto .ofc-up{position:absolute;left:6px;top:6px;background:#f59e0b;color:#fff;border-radius:6px;font-size:11px;font-weight:700;padding:2px 7px;}
+#ofc .ofc-fadd{display:flex;gap:8px;margin-top:10px;}
+#ofc .ofc-fadd label{flex:1;min-height:50px;border:2px dashed #0e7490;border-radius:12px;color:#0e7490;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;background:#fff;}
+#ofc .ofc-fadd label.off{opacity:.35;pointer-events:none;}
+#ofc .ofc-cnt{font-size:12.5px;font-weight:700;border-radius:20px;padding:3px 10px;margin-left:auto;}
+#ofc .ofc-tools{display:flex;gap:8px;margin-top:7px;}
+#ofc .ofc-tools button{border:1.5px solid #0d9488;background:#f0fdfa;color:#0d9488;border-radius:9px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+#ofc .ofc-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #eef2f7;font-size:14.5px;}
+#ofc .ofc-row:last-child{border-bottom:0;}
+#ofc .ofc-row span:last-child{font-weight:700;font-variant-numeric:tabular-nums;}
+#ofc .ofc-tot{display:flex;justify-content:space-between;align-items:baseline;background:#0f2447;color:#fff;border-radius:12px;padding:14px 16px;margin-top:10px;}
+#ofc .ofc-tot b{font-size:26px;font-variant-numeric:tabular-nums;}
+#ofc .ofc-cond{background:#f1f5f9;border-radius:10px;padding:4px 12px;margin-bottom:6px;}
+#ofc .ofc-sig{border:2px solid #cbd5e1;border-radius:12px;background:#fff;position:relative;height:170px;touch-action:none;}
+#ofc .ofc-sig canvas{width:100%;height:100%;display:block;touch-action:none;border-radius:10px;}
+#ofc .ofc-sig .ofc-sig-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:14px;pointer-events:none;}
+#ofc .ofc-sig-bar{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:13px;color:#64748b;}
+#ofc .ofc-sig-bar button{border:0;background:none;color:#0e7490;font-weight:700;font-size:13px;cursor:pointer;padding:6px;}
+#ofc .ofc-falta{background:#fff7ed;border:1.5px solid #fdba74;border-radius:12px;padding:12px 14px;font-size:13.5px;color:#9a3412;margin-top:14px;line-height:1.6;}
+#ofc .ofc-falta.ok{background:#f0fdf4;border-color:#86efac;color:#166534;}
+#ofc .ofc-bar{position:absolute;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #d5dde7;padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px);display:flex;gap:10px;align-items:center;box-shadow:0 -6px 20px rgba(15,36,71,.1);}
+#ofc .ofc-clock{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1;}
+#ofc .ofc-clock small{display:block;font-size:11px;font-weight:600;color:#64748b;letter-spacing:0;margin-top:3px;}
+#ofc .ofc-clock.pausa{color:#d97706;}
+#ofc .ofc-pbtn{min-width:52px;height:52px;border-radius:12px;border:1.5px solid #cbd5e1;background:#f8fafc;font-size:20px;cursor:pointer;}
+#ofc .ofc-main{flex:1;min-height:54px;border:0;border-radius:12px;font-size:16.5px;font-weight:800;color:#fff;background:#0e7490;cursor:pointer;font-family:inherit;}
+#ofc .ofc-main.start{background:#15803d;}
+#ofc .ofc-main.armed{background:#b45309;}
+#ofc .ofc-main.close{background:#0f2447;}
+#ofc .ofc-main:disabled{opacity:.6;}
+#ofc .ofc-pq{position:relative;margin-top:4px;}
+#ofc .ofc-pq-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:#fff;border:1.5px solid #0e7490;border-radius:12px;box-shadow:0 10px 30px rgba(15,36,71,.18);max-height:320px;overflow:auto;}
+#ofc .ofc-pq-row{padding:14px;border-bottom:1px solid #eef2f7;font-size:15.5px;cursor:pointer;}
+#ofc .ofc-pq-row:last-child{border-bottom:0;}
+#ofc .ofc-pq-row:active{background:#ecfeff;}
+#ofc .ofc-pq-row.novo{color:#0e7490;font-weight:600;background:#f0fdfa;}
+#ofc .ofc-sel{display:flex;align-items:center;gap:8px;background:#eef6f8;border:1.5px solid #bfdde4;border-radius:10px;padding:6px 6px 6px 12px;margin-bottom:6px;font-weight:700;font-size:15px;}
+@media (min-width:720px){ #ofc .ofc-scroll{padding-left:calc(50% - 340px);padding-right:calc(50% - 340px);} }
+</style>
+
+<div id="ofc" role="dialog" aria-label="Ordem de serviço">
+  <div class="ofc-top">
+    <div class="ofc-top-row">
+      <button class="ofc-back" onclick="ofcSair()" aria-label="Voltar">←</button>
+      <div style="flex:1;min-width:0;">
+        <div class="ofc-id" id="ofc-id"></div>
+        <div class="ofc-cli" id="ofc-cli"></div>
+      </div>
+      <div class="ofc-save" id="ofc-save"></div>
+    </div>
+  </div>
+  <div class="ofc-scroll" id="ofc-scroll"></div>
+  <div class="ofc-bar" id="ofc-bar"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const S = {};
+  let _tick=null, _saveT=null;
+
+  // ── utilitários ──────────────────────────────────────────────
+  // Grava no Firestore sem ficar preso quando não há rede: o Firestore guarda no
+  // telemóvel e sincroniza sozinho quando a rede voltar.
+  const grava=(col,id,data)=>{ const p=window.fsSetMerge(col,id,data); return Promise.race([p, new Promise(r=>setTimeout(()=>r('fila'),6000))]); };
+  const semEsperar=(p)=>Promise.race([Promise.resolve(p).catch(e=>console.warn(e)), new Promise(r=>setTimeout(r,6000))]);
+  // Fotos por enviar ficam numa base local (IndexedDB) até haver rede.
+  const IDB={
+    db:null,
+    abrir(){ if(this.db) return Promise.resolve(this.db); return new Promise((res,rej)=>{ const r=indexedDB.open('hg_ofc',1);
+      r.onupgradeneeded=()=>{ r.result.createObjectStore('fotos',{keyPath:'fid'}); };
+      r.onsuccess=()=>{ this.db=r.result; res(this.db); }; r.onerror=()=>rej(r.error); }); },
+    async op(modo, fn){ const db=await this.abrir(); return new Promise((res,rej)=>{ const tx=db.transaction('fotos',modo); const st=tx.objectStore('fotos'); const rq=fn(st); tx.oncomplete=()=>res(rq&&rq.result); tx.onerror=()=>rej(tx.error); }); },
+    put(o){ return this.op('readwrite',st=>st.put(o)).catch(()=>{}); },
+    del(fid){ return this.op('readwrite',st=>st.delete(fid)).catch(()=>{}); },
+    todas(){ return this.op('readonly',st=>st.getAll()).then(x=>x||[]).catch(()=>[]); },
+  };
+  const novoFid=()=>'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const legendaFinal=f=>[(f.legenda||'').trim(),(f.descricao||'').trim()].filter(Boolean).join(' — ');
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const eur = v => '€'+(+(v)||0).toFixed(2).replace('.',',');
+  const T = (msg, ico) => { try{ toast(msg, ico||'✅'); }catch(e){ alert(msg); } };
+  const hhmm = () => new Date().toTimeString().slice(0,5);
+  const getOS = () => (window.DB.ordens||[]).find(x=>x.id===S.id);
+  const getRel = () => (window.DB.relatorios_pesquisa||[]).find(x=>x.id===S.id);
+  const ehTec = () => (window.currentUser&&window.currentUser.role)==='tecnico';
+  const limpo = o => JSON.parse(JSON.stringify(o));
+  const fechada = os => os && (os.estado==='concluida' || os.estado==='os_fechada');
+
+  const TIPOLOGIAS = ['Moradia','Apartamento','Condomínio Área Comum','Loja','Indústria','Escola','Piscina'];
+  const ANOMALIAS  = ['Fuga de água','Fuga em piscina','Fuga em rede de incêndio','Infiltração','Entupimento','Rotura','Humidade','Outro'];
+  const ZONAS      = ['Casa de Banho','Cozinha','Telhado / Cobertura','Terraço','Varanda','Área Externa','Garagem','Cave','Piscina','Área Comum'];
+  const METS_DEF   = ['Teste de Estanqueidade','Inspeção Visual','Ensaio Electro-Acústico','Ensaio com Gás Traçador','Rastreador Químico','Termografia Infravermelha','Higroscopia','Alagamento com Rastreador Químico','Desentupimento'];
+  const EQUIPS_DEF = ['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
+  const LOCAIS_DEF = ['Autoclismo','Base de duche','Banheira','Lavatório','Bidé','Lava-loiça','Máquina de lavar','Contador','Esquentador / Caldeira','Terraço','Varanda','Tubagem à vista'];
+  const PAGS = [['mb','💳 Multibanco'],['mbway','📱 MBWay'],['dinheiro','💵 Numerário'],['transferencia','🏦 Transferência'],['cheque','📝 Cheque'],['entidade','🏢 Entidade pagadora']];
+  const IMEDIATOS = ['mb','mbway','dinheiro','cheque'];
+  const cfg = () => (window.DB&&window.DB.empresaConfig)||{};
+  const listaMets   = () => { const l=(cfg().testesRelatorio&&cfg().testesRelatorio.length)?[...cfg().testesRelatorio]:[...METS_DEF];
+    return l.some(x=>/inspe[cç][aã]o visual/i.test(x)) ? l : ['Inspeção Visual', ...l]; };
+  const ZONA_ITENS = {
+    'Casa de Banho':['Autoclismo','Base de duche','Banheira','Lavatório','Bidé','Sanita','Torneiras / misturadoras','Ralo','Juntas e silicones','Tubagem embutida'],
+    'Cozinha':['Lava-loiça','Torneira','Máquina de lavar loiça','Máquina de lavar roupa','Esquentador / Caldeira','Tubagem embutida','Ralo'],
+    'Telhado / Cobertura':['Telhas','Caleiras','Tubos de queda','Rufos','Clarabóias','Chaminé','Impermeabilização'],
+    'Terraço':['Impermeabilização','Ralo','Juntas do pavimento','Soleiras','Rodapés','Floreiras'],
+    'Varanda':['Ralo','Pavimento','Soleira','Rodapé','Guarda / fixações'],
+    'Área Externa':['Contador','Rede enterrada','Rede de rega','Caixas de visita','Válvulas'],
+    'Garagem':['Tubagem à vista','Coluna montante','Ralos','Teto','Paredes'],
+    'Cave':['Paredes enterradas','Tubagem','Drenagem','Pavimento'],
+    'Piscina':['Skimmers','Bicos injetores','Aspiração','Ralo de fundo','Luminárias','Estrutura','Casa das máquinas'],
+    'Área Comum':['Coluna montante','Contadores','Tubos de queda','Caixas de visita','Escadas / patamares'],
+  };
+  const OUTROS='Outros itens';
+  const TERMO_VERSAO='2026-09-os-v3';
+  const TERMO=[
+    ['Planta da tubagem','A planta da tubagem, quando fornecida pelo cliente, serve apenas de referência. Não garantimos a localização da fuga, com ou sem planta, porque não nos é possível confirmar se o traçado foi alterado nem se a planta foi respeitada durante a instalação.'],
+    ['Margem de segurança','Nas fugas de água em área exterior, a localização indicada tem uma margem de segurança de 3 metros de raio. Se a fuga não estiver dentro desse raio, voltamos ao local sem qualquer custo para o cliente.'],
+    ['Manuseamento de equipamentos e telhados','Para realizar o trabalho, temos de manusear passadores (válvulas de corte), sanitas, torneiras e autoclismos, e de subir a telhados com telha de barro ou de fibrocimento (amianto). Como não é possível conhecer o estado de desgaste dos metais, das loiças sanitárias e das telhas, não nos responsabilizamos por quebras que ocorram durante a intervenção. Pelo risco de queda inerente ao acesso a telhados, não damos garantia sobre a quebra de telhas.'],
+    ['Fugas de água não localizadas','Se existir uma fuga de água e não for possível localizá-la no prazo de 1 hora, é cobrada apenas a taxa de deslocação de 70,00 € + IVA.'],
+  ];
+  const PLANTA_OBS='O cliente declara ter entregue a planta da tubagem. A planta foi usada apenas como referência: não é possível confirmar se o traçado foi alterado nem se foi respeitado na instalação, pelo que não garante a localização da fuga.';
+  const listaEquips = () => (cfg().equipamentosRelatorio&&cfg().equipamentosRelatorio.length)?cfg().equipamentosRelatorio:EQUIPS_DEF;
+  const multiUnidade = t => /apart|condom|comum|fra[cç]/i.test(t||'');
+
+  function listaLocaisAnomalia(anom){
+    try{
+      if(typeof RP_TEC_LISTA_ANOMALIA!=='undefined' && RP_TEC_LISTA_ANOMALIA[anom]){
+        return RP_TEC_LISTA_ANOMALIA[anom].map(t=>t.nome).filter(Boolean).slice(0,14);
+      }
+    }catch(e){}
+    return LOCAIS_DEF;
+  }
+
+  // ── tempo ────────────────────────────────────────────────────
+  function inicioMs(os){
+    if(os.iniciadoEm){ const t=new Date(os.iniciadoEm).getTime(); if(!isNaN(t)) return t; }
+    if(os.horaIniReal){ const d=new Date((os.data||new Date().toISOString().slice(0,10))+'T'+os.horaIniReal+':00'); if(!isNaN(d)) return d.getTime(); }
+    return null;
+  }
+  function segPausa(os){
+    let s=0; (os.pausas||[]).forEach(p=>{ if(!p||!p.inicio) return; const a=new Date(p.inicio).getTime(); const b=p.fim?new Date(p.fim).getTime():Date.now(); if(b>a) s+=(b-a)/1000; });
+    return s;
+  }
+  function segTrabalho(os){
+    if(fechada(os) && os.horaIniReal && os.horaFimReal){
+      const m=_minutosEntreHoras(os.horaIniReal, os.horaFimReal); return Math.max(0,((m||0)*60)-segPausa(os));
+    }
+    const ini=inicioMs(os); if(!ini) return 0;
+    return Math.max(0,(Date.now()-ini)/1000 - segPausa(os));
+  }
+  const fmtSeg = s => { s=Math.floor(s); const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); };
+
+  // Valor: usa as condições definidas no agendamento
+  function valorFixo(os){
+    try{ if(typeof osServicoValorFixo==='function' && osServicoValorFixo(os)) return true; }catch(e){}
+    if((parseFloat(os.medidaQtd)||0)>0) return true;
+    if(!(parseFloat(os.h1)>0)) return true;
+    return false;
+  }
+  function calcValor(os, minutos){
+    const iva=parseInt(os.iva)||23;
+    if(valorFixo(os) || !(minutos>0)){
+      return {net:+(os.net||0), ivaV:+(os.ivaVal||0), total:+(os.total||0), hAdd:+(os.haddN||0), fixo:valorFixo(os)};
+    }
+    const horas=minutos/60;
+    const net=+calcNetOS(horas, parseFloat(os.h1)||0, parseFloat(os.haddV)||0).toFixed(2);
+    const ivaV=+(net*iva/100).toFixed(2);
+    return {net, ivaV, total:+(net+ivaV).toFixed(2), hAdd:calcHorasAdd(horas), fixo:false};
+  }
+
+  // ── abrir ────────────────────────────────────────────────────
+  window.ofcAbrir = function(id, foco){
+    const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
+    if(typeof osBloquearAuxiliar==='function' && osEhTecnicoAuxiliar(os)) return _orig.detalhe(id);
+    S.id=id; S.armed=false;
+    const rel=getRel()||{}; const c=rel.campos||{};
+    let anom=c.tipoProblema||os.tipoAnomalia||'';
+    if(!anom && typeof _rpAnomDoServico==='function') anom=_rpAnomDoServico(os);
+    S.c={
+      tipologia: c.tipologia||c.localProblema||os.tipologia||'',
+      numeroFracao: c.numeroFracao||'',
+      tipoProblema: anom,
+      divisoes: [...(c.divisoes||[])],
+      metodologias: (c.metodologias&&c.metodologias.length) ? [...c.metodologias] : ['Inspeção Visual'],
+      equipamentos: [...(c.equipamentos||[])],
+      reclamacao: c.reclamacao||c.descritivo||'',
+      conclusao: c.conclusao||'',
+    };
+    S.manif=Array.isArray(c.locaisManifestacao)&&c.locaisManifestacao.length ? [...c.locaisManifestacao]
+      : String(c.localManifestacao||'').split(/\s*;\s*|\n+/).map(x=>x.trim()).filter(Boolean);
+    S.testes=(Array.isArray(c.testes)?c.testes:[])
+      .filter(t=>t && !t.dano && (t.custom || t.status || (t.obs||'').trim()))
+      .map(t=>({...t, key:t.key||('loc_'+Math.random().toString(36).slice(2)), nome:t.nome||'', status:t.status||'', obs:t.obs||'',
+        zona: t.zona || ((S.c.divisoes||[]).includes(t.grupo)?t.grupo:OUTROS)}));
+    S.testes.forEach(t=>{ if(t.zona!==OUTROS && !S.c.divisoes.includes(t.zona)) S.c.divisoes.push(t.zona); });
+    let fotos=[];
+    try{ fotos=(typeof rpGetFotos==='function')?rpGetFotos(id,c,rel):(c.fotos||rel.fotos||[]); }catch(e){ fotos=c.fotos||rel.fotos||[]; }
+    S.fotos=(fotos||[]).map(f=> typeof f==='string' ? (/^https?:/.test(f)?{url:f,legenda:''}:{dataUrl:f,legenda:''})
+      : (f.local!=null ? {...f, legenda:f.local, descricao:f.descricao||''} : {...f, descricao:f.descricao||''}));
+    S.pag = (os.pagamento&&os.pagamento.metodo) || (os.pagador&&os.pagador.nome?'entidade':'');
+    S.pagRef = (os.pagamento&&os.pagamento.ref)||'';
+    S.tipoRel = 'preliminar'; // v15.91 — o técnico fecha sempre como PRELIMINAR; a administração valida
+    S.planta = os.plantaFornecida?'sim':'nao';
+    S.assOutro = !!os.assinadoPorOutro; S.assNome=os.assinanteNome||''; S.assNif=os.assinanteNif||'';
+    const _bk=(window.DB.relatorios_assinaturas||[]).find(x=>x.osId===id||x._firebaseId===id)||{};
+    S.sigTec = os.assinaturaTecnico||_bk.assinaturaTecnico||''; S.sigCli = os.assinaturaCliente||_bk.assinaturaCliente||'';
+    S.sigMudou=false; S.pagMudou=false;
+    $('ofc').classList.add('on');
+    document.body.style.overflow='hidden';
+    render();
+    $('ofc-scroll').scrollTop=0;
+    clearInterval(_tick); _tick=setInterval(tick,1000); tick();
+    IDB.todas().then(l=>{
+      if(S.id!==id) return;
+      const ja=new Set(S.fotos.map(f=>f.fid).filter(Boolean));
+      const novas=l.filter(x=>x.osId===id && !ja.has(x.fid));
+      if(!novas.length) return;
+      novas.forEach(x=>{ const {osId,criadoEm,...f}=x; S.fotos.push(f); });
+      renderZonas(); renderFotos(); atualizarFaltas();
+      T('📷 '+novas.length+' foto(s) recuperada(s) do telemóvel.','📷');
+      if(navigator.onLine) sincronizarFotos();
+    });
+    if(foco){ setTimeout(()=>{ const el=$(foco==='fecho'?'ofc-sec-fecho':'ofc-sec-rel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },120); }
+  };
+
+  window.ofcSair = async function(){
+    if(S.dirty) await guardarRel(false).catch(()=>{});
+    clearInterval(_tick); _tick=null;
+    $('ofc').classList.remove('on');
+    document.body.style.overflow='';
+    S.id=null;
+    try{ osRenderMinhas(); }catch(e){}
+  };
+
+  // ── render ───────────────────────────────────────────────────
+  function render(){
+    const os=getOS(); if(!os) return;
+    const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const iniciado=!!os.horaIniReal, fech=fechada(os);
+    const sigLock=fech || !!os.concluidoEm;   // já foi fechada uma vez → assinaturas nunca mais se alteram
+    $('ofc-id').textContent=os.id+' · '+(fech?'Fechada':iniciado?'Em curso':'Agendada')+' · '+fmtDate(os.data)+' '+(os.horaIni||'');
+    $('ofc-cli').textContent=cli.nome||os.clienteNomeSnapshot||'Cliente';
+    const mp=(typeof _tecBuildMaps==='function')?_tecBuildMaps(cli):{morada:'',cpOk:false};
+    const tecs=(os.tecnicos||[]).map(t=>(window.DB.users||[]).find(u=>u.id===t)?.name).filter(Boolean);
+    const hist=(typeof tecHistoricoCliente==='function')?tecHistoricoCliente(os.clienteId,os.id):[];
+    const obsCom=((typeof osLimparClausulas==='function'?osLimparClausulas(os.obs):os.obs)||'').trim();
+
+    let h='';
+    // Cliente
+    h+='<div class="ofc-sec"><div class="ofc-info">'
+      +'<b>Serviço</b><span>'+esc(srv.nome||'—')+'</span>'
+      +(os.tipoAnomalia?'<b>Problema</b><span><strong>'+esc(os.tipoAnomalia)+'</strong></span>':'')
+      +'<b>Morada</b><span>'+esc(mp.morada||'—')+'</span>'
+      +((os.contactNome||os.contactTel)?'<b>No local</b><span>'+esc([os.contactNome,os.contactTel].filter(Boolean).join(' · '))+'</span>':'')
+      +(!ehTec()&&tecs.length>1?'<b>Equipa</b><span>'+esc(tecs.join(', '))+'</span>':'')
+      +'</div><div class="ofc-acts">'
+      +(mp.cpOk?'<button class="ofc-act" onclick="_tecAbrirMaps(\''+os.id+'\',\'\',(window.DB.clientes||[]).find(x=>x.id===\''+os.clienteId+'\'))">🧭 Navegar</button>':'')
+      +((cli.tel||os.contactTel)?'<a class="ofc-act" href="tel:'+esc(os.contactTel||cli.tel)+'">📞 Ligar</a>':'')
+      +(os.clienteId?'<button class="ofc-act" onclick="ofcHistorico()">📚 Histórico do cliente'+(ultimosAtendimentos(os,50).length?' ('+ultimosAtendimentos(os,50).length+')':'')+'</button>':'')
+      +'</div>'
+      +(obsCom?'<div class="ofc-nota" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a5f;"><strong>💬 Observação do comercial</strong>\n'+esc(obsCom)+'</div>':'')
+      +'<div class="ofc-nota" style="white-space:normal;"><strong>📝 Nota da equipa comercial</strong>'
+      +'<div style="font-size:12px;opacity:.8;margin:2px 0 6px;">Podes corrigir ou acrescentar — fica gravado na OS.</div>'
+      +'<textarea class="ofc-ta" style="min-height:70px;background:#fffef5;border-color:#fde047;font-size:15px;" placeholder="Sem nota. Escreve aqui se precisares." oninput="ofcNota(this.value)">'+esc(os.notaInterna||'')+'</textarea></div>'
+      +'</div>';
+
+    // Últimos atendimentos deste cliente (sem dados de outros técnicos nem valores)
+    const ult=ultimosAtendimentos(os);
+    if(ult.length){
+      h+='<div class="ofc-sec"><div class="ofc-h" style="margin-bottom:8px;">📋 Últimos atendimentos deste cliente</div>'
+        +ult.map(a=>'<div style="border-left:3px solid #0e7490;padding:6px 0 6px 12px;margin-bottom:10px;">'
+          +'<div style="font-size:13px;font-weight:700;color:#0e7490;">'+esc(fmtDate(a.data))+(a.servico?' · '+esc(a.servico):'')+'</div>'
+          +(a.problema?'<div style="font-size:13.5px;margin-top:3px;"><b style="color:#64748b;font-weight:600;">Problema:</b> '+esc(a.problema)+'</div>':'')
+          +(a.onde?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Onde:</b> '+esc(a.onde)+'</div>':'')
+          +(a.zonas?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Zonas:</b> '+esc(a.zonas)+'</div>':'')
+          +(a.conclusao?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Conclusão:</b> '+esc(a.conclusao)+'</div>':'')
+          +'</div>').join('')
+        +'</div>';
+    }
+
+    // 1 · Tempo
+    h+='<div class="ofc-sec"><div class="ofc-h"><span class="ofc-n'+(iniciado?' ok':'')+'">1</span>Chegada e tempo</div>';
+    if(!iniciado){
+      h+='<div class="ofc-hint" style="margin:0;">Quando estiveres no cliente, carrega em <strong>Iniciar trabalho</strong> em baixo. O tempo conta até fechares a OS.</div>';
+    } else {
+      h+='<div class="ofc-row"><span>Início</span><span>'+esc(os.horaIniReal)+'</span></div>'
+        +(fech?'<div class="ofc-row"><span>Fim</span><span>'+esc(os.horaFimReal||'—')+'</span></div>':'')
+        +((os.pausas||[]).length?'<div class="ofc-row"><span>Pausas</span><span>'+Math.round(segPausa(os)/60)+' min</span></div>':'')
+        +'<div class="ofc-row"><span>Tempo de trabalho</span><span id="ofc-t-trab">'+fmtSeg(segTrabalho(os))+'</span></div>'
+        +(ehTec()?'<div class="ofc-hint" style="margin-top:8px;">As horas são registadas automaticamente. Correções de horário são feitas pelo escritório.</div>':'');
+    }
+    h+='</div>';
+
+    // 2 · Relatório
+    h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-rel"><div class="ofc-h"><span class="ofc-n" id="ofc-n2">2</span>Relatório</div>'
+      +'<div id="ofc-caract"></div>'
+      +'<div class="ofc-lbl">Onde se manifesta o problema *</div>'
+      +'<div id="ofc-manif"></div>'
+      +'<div class="ofc-lbl">Zonas inspecionadas e itens testados *</div>'
+      +'<div class="ofc-hint">Escreve a zona e escolhe. Depois, em cada zona, escreve o item testado — ao escolher, a câmara abre para a foto.</div>'
+      +'<div id="ofc-zonas-itens"></div>'
+      +'<div id="ofc-meteq"></div>'
+      +'<div class="ofc-lbl" style="display:flex;align-items:center;">Outras fotos<span class="ofc-cnt" id="ofc-fcnt"></span></div>'
+      +'<div class="ofc-hint">As fotos dos itens tiram-se no próprio item. Aqui ficam outras (vista geral, danos). Mínimo 4 fotos no total.</div>'
+      +'<div class="ofc-fotos" id="ofc-fotos"></div>'
+      +'<div class="ofc-fadd"><label id="ofc-fcam">📷 Tirar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ofcFotoAdd(this)"></label>'
+      +'<label id="ofc-fgal">🖼️ Galeria<input type="file" accept="image/*" style="display:none" onchange="ofcFotoAdd(this)"></label></div>'
+      +'<div class="ofc-lbl">O que observaste</div>'
+      +'<textarea class="ofc-ta" id="ofc-obs" oninput="ofcSet(\'reclamacao\',this.value)" placeholder="Resumo do que viste durante a pesquisa.">'+esc(S.c.reclamacao)+'</textarea>'
+      +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-obs\')">🎙️ Ditar</button>'+(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-obs\')">✨ Melhorar texto</button>':'')+'</div>'
+      +'<div class="ofc-lbl">Conclusão (preliminar)</div>'
+      +'<div class="ofc-hint">Podes gerar a partir das fotos, dos testes e das metodologias, e depois corrigir. A administração valida antes de seguir para o cliente.</div>'
+      +'<textarea class="ofc-ta" id="ofc-concl" oninput="ofcSet(\'conclusao\',this.value)" placeholder="Onde está a origem do problema e o que recomendas.">'+esc(S.c.conclusao)+'</textarea>'
+      +'<div class="ofc-tools" style="flex-wrap:wrap;"><button type="button" id="ofc-ia-btn" onclick="ofcGerarConclusao()" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">🤖 Gerar conclusão</button><button type="button" onclick="rpDitar(\'ofc-concl\')">🎙️ Ditar</button>'
+      +(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-concl\')">✨ Melhorar texto</button>':'')+'</div>'
+      +'</div>';
+
+    // 3 · Fecho
+    h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-fecho"><div class="ofc-h"><span class="ofc-n'+(fech?' ok':'')+'">3</span>'+(fech?'Fecho (podes corrigir)':'Fechar a OS')+'</div>'
+      +blocoPagamento(os,cli)
+      +'<div class="ofc-hint" style="margin:14px 0 0;background:#fff7ed;border-radius:10px;padding:10px 12px;color:#9a3412;">📋 O relatório fica <strong>preliminar</strong>. A administração revê e valida antes de o enviar ao cliente.</div>'
+      +'<div class="ofc-lbl">O cliente entregou a planta da tubagem?</div><div class="ofc-chips" id="ofc-g-planta">'
+      +[['sim','Sim'],['nao','Não']].map(([v,l])=>'<button type="button" class="ofc-chip'+(S.planta===v?' on':'')+'" onclick="ofcPlanta(\''+v+'\')">'+l+'</button>').join('')+'</div>'
+      +'<div id="ofc-planta-obs" class="ofc-hint" style="display:'+(S.planta==='sim'?'block':'none')+';margin-top:8px;background:#eff6ff;border-radius:10px;padding:10px 12px;color:#1e3a5f;">📐 '+esc(PLANTA_OBS)+'</div>'
+      +'<div class="ofc-lbl">Termo de responsabilidade</div>'
+      +'<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;">'
+      +TERMO.map((t,i)=>'<div style="margin-bottom:'+(i<TERMO.length-1?'10px':'0')+';"><strong>'+(i+1)+'. '+esc(t[0])+'.</strong> '+esc(t[1])+'</div>').join('')
+      +'<div style="margin-top:10px;font-size:12.5px;color:#64748b;">Ao assinar, o cliente declara ter tomado conhecimento destas condições.</div></div>'
+      +'<div class="ofc-lbl">Assinatura do técnico *</div>'+sigHtml('tec', sigLock)
+      +'<div class="ofc-lbl">Assinatura do cliente *</div>'
+      +(sigLock?(S.assOutro?'<div class="ofc-hint">Assinou no local: <strong>'+esc(S.assNome)+'</strong>'+(S.assNif?' · NIF '+esc(S.assNif):'')+'</div>':'')
+      :'<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:8px;"><input type="checkbox" '+(S.assOutro?'checked':'')+' onchange="ofcAssOutro(this.checked)" style="width:22px;height:22px;"> O cliente não está presente — assina outra pessoa</label>')
+      +'<div id="ofc-ass-outro" style="display:'+(S.assOutro&&!sigLock?'grid':'none')+';grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px;">'
+      +'<input class="ofc-in" placeholder="Nome de quem assina *" value="'+esc(S.assNome)+'" oninput="ofcAss(\'assNome\',this.value)">'
+      +'<input class="ofc-in" placeholder="NIF" value="'+esc(S.assNif)+'" oninput="ofcAss(\'assNif\',this.value)"></div>'
+      +sigHtml('cli', sigLock)
+      +'<div id="ofc-faltas"></div>'
+      +'</div>';
+
+    $('ofc-scroll').innerHTML=h;
+    renderCaract(); renderManif(); renderZonas(); renderMetEq(); renderFotos(); renderBar(); atualizarFaltas();
+    if(!sigLock){ iniciarSig('tec'); iniciarSig('cli'); }
+    $('ofc-save').textContent=S.dirty?'A guardar…':'';
+  }
+
+  function chipsUm(campo, lista){
+    const v=S.c[campo]||'';
+    const l=lista.includes(v)||!v?lista:[...lista,v];
+    return l.map(x=>'<button type="button" class="ofc-chip'+(v===x?' on':'')+'" onclick="ofcPick(\''+campo+'\',this.dataset.v)" data-v="'+esc(x)+'">'+esc(x)+'</button>').join('');
+  }
+  function chipsVarios(campo, lista){
+    const sel=S.c[campo]||[];
+    const l=[...lista, ...sel.filter(x=>!lista.includes(x))];
+    return l.map(x=>'<button type="button" class="ofc-chip'+(sel.includes(x)?' on':'')+'" onclick="ofcTog(\''+campo+'\',this)" data-v="'+esc(x)+'">'+esc(x)+'</button>').join('');
+  }
+
+  function blocoPagamento(os, cli){
+    const naoFat=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
+    const fixo=valorFixo(os);
+    let h='<div class="ofc-lbl">Condições definidas no agendamento</div><div class="ofc-cond">';
+    if(naoFat){
+      h+='<div class="ofc-row"><span>Serviço</span><span>Sem cobrança (garantia / orçamento)</span></div></div>';
+      return h;
+    }
+    if(fixo){
+      h+='<div class="ofc-row"><span>Valor acordado</span><span>'+eur(os.total)+' c/IVA</span></div>';
+    } else {
+      h+='<div class="ofc-row"><span>1.ª hora</span><span>'+eur(os.h1)+'</span></div>'
+        +((parseFloat(os.haddV)||0)>0?'<div class="ofc-row"><span>Tempo adicional (por bloco)</span><span>'+eur(os.haddV)+'</span></div>':'')
+        +'<div class="ofc-row"><span>IVA</span><span>'+(parseInt(os.iva)||23)+'%</span></div>';
+    }
+    const pg=os.pagador&&os.pagador.nome?os.pagador:null;
+    h+='<div class="ofc-row"><span>Quem paga</span><span>'+esc(pg?pg.nome+(pg.nif?' · NIF '+pg.nif:''):(cli.nome||'Cliente'))+'</span></div></div>';
+    h+='<div id="ofc-valor"></div>';
+    const extras=(window._modalidadesExtra||[]).map(m=>[m.id,m.nome,m.tipo]);
+    h+='<div class="ofc-lbl">Forma de pagamento *</div><div class="ofc-chips" id="ofc-g-pag">'
+      +[...PAGS,...extras].map(([v,l])=>'<button type="button" class="ofc-chip'+(S.pag===v?' on':'')+'" onclick="ofcPag(\''+esc(v)+'\')">'+esc(l)+'</button>').join('')+'</div>'
+      +'<div id="ofc-pag-ref" style="display:'+(['transferencia','cheque'].includes(S.pag)?'block':'none')+';margin-top:8px;">'
+      +'<input class="ofc-in" placeholder="Referência / nº cheque (opcional)" value="'+esc(S.pagRef)+'" oninput="ofcPagRef(this.value)"></div>';
+    return h;
+  }
+
+  function atualizarValor(){
+    const el=$('ofc-valor'); const os=getOS(); if(!el||!os) return;
+    const v=fechada(os)?{net:+(os.net||0),ivaV:+(os.ivaVal||0),total:+(os.total||0),fixo:valorFixo(os)}:calcValor(os, segTrabalho(os)/60);
+    el.innerHTML='<div class="ofc-cond" style="background:#fff;border:1px solid #e2e8f0;">'
+      +(v.fixo?'':'<div class="ofc-row"><span>Tempo contado</span><span>'+fmtSeg(segTrabalho(os)).slice(0,5)+'</span></div>')
+      +'<div class="ofc-row"><span>Subtotal s/IVA</span><span>'+eur(v.net)+'</span></div>'
+      +'<div class="ofc-row"><span>IVA '+(parseInt(os.iva)||23)+'%</span><span>'+eur(v.ivaV)+'</span></div></div>'
+      +'<div class="ofc-tot"><span>Total a cobrar</span><b>'+eur(v.total)+'</b></div>';
+  }
+
+  // ── barra inferior (relógio + ação principal) ────────────────
+  function renderBar(){
+    const os=getOS(); if(!os) return;
+    const iniciado=!!os.horaIniReal, fech=fechada(os), pausa=!!os.pausaAtiva;
+    let h='';
+    if(!iniciado){
+      h='<button class="ofc-main start'+(S.armed?' armed':'')+'" onclick="ofcIniciar()">'+(S.armed?'Toca outra vez para confirmar':'▶ Iniciar trabalho')+'</button>';
+    } else if(fech){
+      h='<div class="ofc-clock" style="font-size:20px;">'+esc(os.horaIniReal)+'–'+esc(os.horaFimReal||'')+'<small>OS fechada</small></div>'
+       +'<button class="ofc-main" id="ofc-btn-main" onclick="ofcGuardarEdicao()">💾 Guardar alterações</button>';
+    } else {
+      h='<div class="ofc-clock'+(pausa?' pausa':'')+'" id="ofc-clock">'+fmtSeg(segTrabalho(os))+'<small>'+(pausa?'Em pausa':'A contar desde '+esc(os.horaIniReal))+'</small></div>'
+       +'<button class="ofc-pbtn" onclick="ofcPausa()" aria-label="'+(pausa?'Retomar':'Pausar')+'">'+(pausa?'▶':'⏸')+'</button>'
+       +'<button class="ofc-main close" id="ofc-btn-main" onclick="ofcFechar()">✅ Fechar OS</button>';
+    }
+    $('ofc-bar').innerHTML=h;
+  }
+
+  function tick(){
+    const os=getOS(); if(!os){ return; }
+    const s=segTrabalho(os);
+    const c=$('ofc-clock'); if(c && c.firstChild) c.firstChild.nodeValue=fmtSeg(s);
+    const t=$('ofc-t-trab'); if(t) t.textContent=fmtSeg(s);
+    atualizarValor();
+  }
+
+  function ultimosAtendimentos(os, max){
+    if(!os.clienteId) return [];
+    return (window.DB.ordens||[])
+      .filter(o=>o.clienteId===os.clienteId && o.id!==os.id && o.estado!=='cancelada' && (o.estado==='concluida'||o.estado==='os_fechada'||o.concluidoEm))
+      .sort((a,b)=>(b.data||'').localeCompare(a.data||''))
+      .slice(0,max||3)
+      .map(o=>{
+        const r=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)||{}; const c=r.campos||{};
+        const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId)||{};
+        let concl=(c.conclusao||'').trim(); if(concl.length>320) concl=concl.slice(0,317)+'…';
+        return {data:o.data, servico:srv.nome||'', problema:c.tipoProblema||o.tipoAnomalia||'',
+          onde:c.localManifestacao||'', zonas:(c.divisoes||[]).join(', '), conclusao:concl};
+      });
+  }
+
+  let _notaT=null;
+  window.ofcNota=function(v){
+    const os=getOS(); if(!os) return; clearTimeout(_notaT);
+    _notaT=setTimeout(async()=>{
+      const patch={notaInterna:v, notaInternaEditadaPor:window.currentUser?.name||'', notaInternaEditadaEm:new Date().toISOString()};
+      try{ await window.fsSetMerge('ordens', os.id, patch); Object.assign(os, patch); const sv=$('ofc-save'); if(sv) sv.textContent='✓ Nota guardada'; }
+      catch(e){ T('Não foi possível guardar a nota.','❌'); }
+    },900);
+  };
+
+  // ── Validação da localização ao iniciar ──
+  const _geoCache={};
+  async function coordsCliente(os){
+    const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const lat=os.lat||cli.srvLat||cli.lat, lng=os.lng||cli.srvLng||cli.lng||cli.lon;
+    if(isFinite(lat)&&isFinite(lng)&&lat&&lng) return {lat:+lat,lng:+lng,raio:300,fonte:'ficha'};
+    const rua=cli.srvRua||cli.rua||'', cp=(cli.srvCp||cli.cp||'').trim(), loc=cli.srvLocalidade||cli.localidade||'';
+    const k=rua+'|'+cp; if(_geoCache[k]) return _geoCache[k];
+    const q=async u=>{ const r=await fetch(u,{headers:{'Accept-Language':'pt'}}); return r.json(); };
+    try{
+      if(rua){
+        const d=await q('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pt&q='+encodeURIComponent([rua,cp,loc].filter(Boolean).join(', ')));
+        if(d&&d[0]) return _geoCache[k]={lat:+d[0].lat,lng:+d[0].lon,raio:300,fonte:'morada'};
+      }
+    }catch(e){}
+    try{
+      const cpF=cp.replace(/[^0-9]/g,''); if(cpF.length===7){
+        const d=await q('https://json.geoapi.pt/cp/'+cpF.slice(0,4)+'-'+cpF.slice(4));
+        const c=(d&&(d.centro||d.centroide||(d.lat&&[d.lat,d.lng])))||null;
+        if(c&&isFinite(c[0])) return _geoCache[k]={lat:+c[0],lng:+c[1],raio:500,fonte:'código postal'};
+      }
+    }catch(e){}
+    return null;
+  }
+  const posicaoAtual=()=>new Promise(res=>{
+    if(!navigator.geolocation) return res({erro:'sem_gps'});
+    navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}),
+      e=>res({erro:e.code===1?'negado':'indisponivel'}), {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+  });
+  function distM(a,b){ const R=6371000,t=x=>x*Math.PI/180; const dLa=t(b.lat-a.lat), dLo=t(b.lng-a.lng);
+    const h=Math.sin(dLa/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+  async function validarLocal(os){
+    const raioCfg=parseFloat(cfg().raioInicioM)||0;
+    const [pos, alvo]=await Promise.all([posicaoAtual(), coordsCliente(os)]);
+    if(pos.erro) return {ok:false, motivo:pos.erro==='negado'?'A localização do telemóvel está desligada ou sem permissão.':'Não foi possível obter a posição GPS.', semGps:true};
+    if(!alvo) return {ok:false, motivo:'Não foi possível localizar a morada do cliente no mapa.', lat:pos.lat, lng:pos.lng, acc:pos.acc, semMorada:true};
+    const d=distM(pos, alvo), raio=raioCfg||alvo.raio, folga=Math.min(pos.acc||0,150);
+    if(d<=raio+folga) return {ok:true, validado:true, distM:d, acc:pos.acc, lat:pos.lat, lng:pos.lng};
+    return {ok:false, longe:true, distM:d, acc:pos.acc, lat:pos.lat, lng:pos.lng, motivo:'Estás a '+(d>=1000?(d/1000).toFixed(1)+' km':Math.round(d)+' m')+' da morada do cliente (tolerância '+raio+' m).'};
+  }
+  function mostrarBloqueioGPS(os, g){
+    let ov=$('ofc-gps'); if(!ov){ ov=document.createElement('div'); ov.id='ofc-gps'; $('ofc').appendChild(ov); }
+    ov.style.cssText='position:absolute;inset:0;z-index:6;background:rgba(15,36,71,.55);display:flex;align-items:flex-end;';
+    ov.innerHTML='<div style="background:#fff;width:100%;border-radius:16px 16px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);">'
+      +'<div style="font-size:18px;font-weight:800;margin-bottom:8px;">📍 Não é possível iniciar aqui</div>'
+      +'<div style="font-size:15px;line-height:1.5;margin-bottom:12px;">'+esc(g.motivo)+(g.longe?' Só podes iniciar o trabalho na morada do cliente.':'')+'</div>'
+      +(g.semGps?'<div class="ofc-hint">Ativa a localização do telemóvel e dá permissão ao navegador, depois tenta outra vez.</div>':'')
+      +'<button class="ofc-main start" style="width:100%;margin-bottom:10px;" onclick="document.getElementById(\'ofc-gps\').remove();ofcIniciarDeNovo()">🔄 Tentar outra vez</button>'
+      +'<details style="margin-top:4px;"><summary style="font-size:14px;color:#64748b;cursor:pointer;padding:6px 0;">Estou no local mas o GPS falha</summary>'
+      +'<textarea class="ofc-ta" id="ofc-gps-just" style="margin-top:8px;min-height:70px;" placeholder="Explica o que se passa (fica registado e a gestão é avisada)"></textarea>'
+      +'<button class="ofc-act" style="width:100%;margin-top:8px;" onclick="ofcIniciarJustificado()">Iniciar com justificação</button></details>'
+      +'<button class="ofc-act" style="width:100%;margin-top:10px;" onclick="document.getElementById(\'ofc-gps\').remove()">Cancelar</button></div>';
+    S._gps=g;
+  }
+  window.ofcIniciarDeNovo=function(){ S.armed=true; ofcIniciar(); };
+  window.ofcIniciarJustificado=async function(){
+    const j=($('ofc-gps-just').value||'').trim();
+    if(j.length<10){ T('Escreve uma justificação (mínimo 10 caracteres).','✍️'); return; }
+    const os=getOS(); if(!os) return; $('ofc-gps').remove();
+    await iniciarAgora(os, {...(S._gps||{}), validado:false, justificacao:j});
+    try{
+      await grava('mensagens_internas','msg_gps_'+os.id,{id:'msg_gps_'+os.id,tipo:'inicio_sem_gps',osId:os.id,tecnicoNome:window.currentUser?.name||'',motivo:(S._gps||{}).motivo||'',justificacao:j,lida:false,criadoEm:new Date().toISOString()});
+    }catch(e){}
+  };
+
+  // ── início / pausa ───────────────────────────────────────────
+  window.ofcIniciar = async function(){
+    const os=getOS(); if(!os) return;
+    if(typeof osBloquearAuxiliar==='function' && osBloquearAuxiliar(os,'Iniciar o trabalho')) return;
+    if(!S.armed){ S.armed=true; renderBar(); setTimeout(()=>{ if(S.armed){ S.armed=false; renderBar(); } },3500); return; }
+    S.armed=false;
+    const btn=document.querySelector('#ofc-bar .ofc-main'); if(btn){ btn.disabled=true; btn.textContent='📍 A confirmar a localização…'; }
+    const g=await validarLocal(os);
+    if(btn){ btn.disabled=false; }
+    if(!g.ok){ renderBar(); mostrarBloqueioGPS(os, g); return; }
+    await iniciarAgora(os, g);
+  };
+  async function iniciarAgora(os, g){
+    const ini=hhmm(), patch={estado:'em_curso', horaIniReal:ini, iniciadoEm:new Date().toISOString(),
+      inicioGPS:limpo({validado:!!g.validado, distM:g.distM!=null?Math.round(g.distM):null, precisaoM:g.acc!=null?Math.round(g.acc):null,
+        lat:g.lat||null, lng:g.lng||null, motivo:g.motivo||'', justificacao:g.justificacao||'', em:new Date().toISOString()})};
+    if(g.justificacao) patch.inicioForaDoLocal=true;
+    try{ await grava('ordens', os.id, patch); Object.assign(os, patch); }
+    catch(e){ T('❌ Não foi possível iniciar: '+(e.message||'sem ligação'),'❌'); renderBar(); return; }
+    try{ if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(os.id); }catch(e){}
+    try{ if(typeof tecPararDeslocamento==='function') tecPararDeslocamento(); }catch(e){}
+    try{ auditLog(g.justificacao?'os_iniciada_fora_local':'os_iniciada','OS '+os.id+' iniciada às '+ini+(g.validado?' — no local ('+Math.round(g.distM)+' m)':' — SEM validação GPS: '+(g.motivo||'')+(g.justificacao?' · justificação: '+g.justificacao:''))); }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(80);
+    T('▶ Trabalho iniciado às '+ini,'⏱');
+    render();
+    setTimeout(()=>{ const el=$('ofc-sec-rel'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },150);
+  }
+
+  window.ofcPausa = async function(){
+    const os=getOS(); if(!os) return;
+    const pausas=[...(os.pausas||[])];
+    let patch;
+    if(os.pausaAtiva){
+      const u=pausas[pausas.length-1]; if(u && !u.fim) u.fim=new Date().toISOString();
+      patch={pausas, pausaAtiva:false};
+    } else {
+      pausas.push({inicio:new Date().toISOString()});
+      patch={pausas, pausaAtiva:true};
+    }
+    try{ await window.fsSetMerge('ordens', os.id, patch); Object.assign(os, patch); }
+    catch(e){ T('❌ Erro: '+(e.message||'sem ligação'),'❌'); return; }
+    try{ auditLog(patch.pausaAtiva?'os_pausada':'os_retomada','OS '+os.id+(patch.pausaAtiva?' pausada':' retomada')+' por '+(window.currentUser?.name||'')); }catch(e){}
+    T(patch.pausaAtiva?'⏸ Em pausa — o tempo não conta.':'▶ Retomado.', patch.pausaAtiva?'⏸️':'▶️');
+    renderBar(); tick();
+  };
+
+  // ── edição de campos ─────────────────────────────────────────
+  function sujo(){
+    S.dirty=true; $('ofc-save').textContent='A guardar…';
+    clearTimeout(_saveT); _saveT=setTimeout(()=>{ guardarRel(false).catch(()=>{}); },1500);
+    atualizarFaltas();
+  }
+  window.ofcSet = function(campo, v){ S.c[campo]=v; sujo(); };
+  window.ofcPick = function(campo, v){
+    S.c[campo]=(S.c[campo]===v?'':v);
+    const g=$('ofc-g-'+campo); if(g) g.innerHTML=chipsUm(campo, campo==='tipologia'?TIPOLOGIAS:ANOMALIAS);
+    if(campo==='tipologia'){ const w=$('ofc-frac-wrap'); if(w) w.style.display=multiUnidade(S.c.tipologia)?'block':'none'; }
+    sujo();
+  };
+  window.ofcTog = function(campo, el){
+    const v=el.dataset.v, arr=S.c[campo]=S.c[campo]||[];
+    const i=arr.indexOf(v); if(i>=0) arr.splice(i,1); else arr.push(v);
+    el.classList.toggle('on', i<0); sujo();
+  };
+
+  // Conclusão gerada pela IA a partir das fotos, testes e metodologias
+  window.ofcGerarConclusao = async function(){
+    const apiKey=((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
+    if(!apiKey){ T('A chave da IA não está configurada (Configurações → Email).','⚠️'); return; }
+    if(!S.fotos.length && !S.testes.length){ T('Tira as fotos e marca os testes primeiro.','📷'); return; }
+    const ta=$('ofc-concl'), btn=$('ofc-ia-btn');
+    if((ta.value||'').trim() && !confirm('Substituir a conclusão atual pela gerada?')) return;
+    const txt=btn.textContent; btn.disabled=true; btn.textContent='⏳ A analisar fotos…';
+    try{
+      const imgs=[];
+      S.fotos.slice(0,8).forEach((f,i)=>{
+        if(f.url) imgs.push({type:'image',source:{type:'url',url:f.url}});
+        else if(f.dataUrl&&f.dataUrl.startsWith('data:image/')){
+          const mt=f.dataUrl.slice(5,f.dataUrl.indexOf(';')); imgs.push({type:'image',source:{type:'base64',media_type:mt,data:f.dataUrl.split(',')[1]}});
+        } else return;
+        imgs.push({type:'text',text:'Foto '+(i+1)+' — local: '+(f.legenda||'não indicado')+(f.descricao?' · descrição do técnico: '+f.descricao:'')});
+      });
+      const testes=S.testes.filter(t=>(t.nome||'').trim()).map(t=>'- ['+t.zona+'] '+t.nome+': '+({anomalia:'ANOMALIA DETETADA',sem:'sem anomalia',na:'não se aplica'}[t.status]||'sem resultado')+((t.obs||'').trim()?' ('+t.obs.trim()+')':'')).join('\n')||'(nenhum)';
+      const os=getOS()||{};
+      const dados='Problema reportado: '+(os.tipoAnomalia||'—')
+        +'\nAnomalia confirmada pelo técnico: '+(S.c.tipoProblema||'—')
+        +'\nTipo de imóvel: '+(S.c.tipologia||'—')+(S.c.numeroFracao?' · fração '+S.c.numeroFracao:'')
+        +'\nOnde se manifesta: '+(S.manif.filter(Boolean).join('; ')||'—')
+        +'\nZonas inspecionadas: '+((S.c.divisoes||[]).join(', ')||'—')
+        +'\nMetodologias utilizadas: '+((S.c.metodologias||[]).join(', ')||'—')
+        +'\nEquipamentos: '+((S.c.equipamentos||[]).join(', ')||'—')
+        +'\nItens testados (por zona):\n'+testes
+        +'\nObservações do técnico: '+(S.c.reclamacao||'—');
+      const prompt='És o responsável técnico de uma empresa de deteção de fugas e infiltrações. Com base APENAS nas fotos e nos dados abaixo, recolhidos no local pelo técnico, escreve a conclusão preliminar do relatório.\n\n'
+        +'Regras:\n- Português europeu, frases curtas e simples, que qualquer pessoa perceba (cliente, condomínio, seguradora).\n'
+        +'- Diz: onde está a origem provável do problema, em que te baseias (testes/metodologias e o que se vê nas fotos) e o que se recomenda fazer.\n'
+        +'- Se os dados não chegam para uma conclusão segura, diz isso claramente e indica o que falta confirmar.\n'
+        +'- Não inventes locais, medidas, valores nem causas que não estejam nos dados ou visíveis nas fotos.\n'
+        +'- Sem títulos, sem listas com marcadores, no máximo 3 parágrafos curtos. Responde só com o texto.\n\nDADOS DA VISITA\n'+dados;
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-5',max_tokens:900,messages:[{role:'user',content:[...imgs,{type:'text',text:prompt}]}]})});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d=await r.json(); const out=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+      if(!out) throw new Error('resposta vazia');
+      ta.value=out; S.c.conclusao=out; S.c.conclusaoIA=true; sujo();
+      T('🤖 Conclusão gerada — revê e corrige se for preciso.','🤖');
+    }catch(e){ T('Não foi possível gerar: '+e.message,'❌'); }
+    btn.disabled=false; btn.textContent=txt;
+  };
+
+  // Pedido de validação à administração (mensagem interna)
+  async function pedirValidacao(os, motivo){
+    try{
+      const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+      const doc={id:'msg_val_'+os.id, tipo:'relatorio_validar', osId:os.id,
+        clienteNome:cli.nome||os.clienteNomeSnapshot||'', tecnicoNome:window.currentUser?.name||'',
+        motivo, validado:false, lida:false, arquivado:false, criadoEm:new Date().toISOString()};
+      await grava('mensagens_internas', doc.id, doc);
+      // Aviso também por email à gestão (Brevo — mesmo circuito já usado na app)
+      try{
+        const cfgE=window._emailCfg||{}, emp=window._empCfg||{};
+        if(cfgE.brevoApiKey && navigator.onLine){
+          const dest=cfgE.remetente||emp.email||'propostas@hidrogest.net';
+          fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{method:'POST',
+            headers:{'Content-Type':'application/json','api-key':cfgE.brevoApiKey},
+            body:JSON.stringify({sender:{name:emp.nome||'HidroGest',email:dest}, to:[{email:dest,name:emp.nome||'Gestão'}],
+              subject:'📋 Relatório a validar — OS '+os.id+' ('+(doc.clienteNome||'')+')',
+              textContent:'O técnico '+doc.tecnicoNome+' '+(motivo==='edicao'?'corrigiu':'fechou')+' a OS '+os.id+' ('+doc.clienteNome+').\n\nO relatório está PRELIMINAR e tem de ser validado pela administração antes de ser enviado ao cliente.\n\nNo HidroGest: menu "✅ Validar relatórios".'})
+          }).catch(()=>{});
+        }
+      }catch(e){}
+      const arr=window.DB.mensagens_internas=window.DB.mensagens_internas||[];
+      const i=arr.findIndex(m=>(m._firebaseId||m.id)===doc.id); if(i>=0) arr[i]={...arr[i],...doc}; else arr.push(doc);
+    }catch(e){ console.warn('pedido de validação falhou:', e); }
+  }
+
+  // ═══ PESQUISA: escreve → vê → escolhe (mesma lógica da pesquisa de clientes) ═══
+  const MANIF_SUG=['Teto','Parede','Pavimento','Casa de banho','Cozinha','Quarto','Sala','Garagem','Fração inferior','Fachada'];
+  const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  let _aprend=null;
+  function aprendido(){
+    if(_aprend) return _aprend;
+    const itens={}, manif={}, zonas={};
+    (window.DB.relatorios_pesquisa||[]).forEach(r=>{
+      const c=r.campos||{};
+      (c.testes||[]).forEach(t=>{ const n=(t.nome||'').trim(), z=t.zona||t.grupo||''; if(!n||!z||z.startsWith('__')) return; itens[z]=itens[z]||{}; itens[z][n]=(itens[z][n]||0)+1; });
+      (c.divisoes||[]).forEach(z=>{ zonas[z]=(zonas[z]||0)+1; });
+      (Array.isArray(c.locaisManifestacao)?c.locaisManifestacao:String(c.localManifestacao||'').split(/\s*;\s*/)).forEach(m=>{ m=(m||'').trim(); if(m&&m.length<80) manif[m]=(manif[m]||0)+1; });
+    });
+    return _aprend={itens, manif, zonas};
+  }
+  function ordenar(base, contagem, excluir){
+    const cont={}; base.forEach((n,i)=>cont[n]=(cont[n]||0)+(50-i)/1000);
+    Object.entries(contagem||{}).forEach(([n,k])=>cont[n]=(cont[n]||0)+k);
+    const ex=new Set((excluir||[]).map(norm));
+    return Object.entries(cont).filter(([n])=>!ex.has(norm(n))).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  }
+  const PQ={};
+  function pesquisa(id, ph){
+    return '<div class="ofc-pq"><input class="ofc-in" id="ofc-pq-'+id+'" data-pq="'+id+'" placeholder="🔍 '+esc(ph)+'" autocomplete="off" autocorrect="off" enterkeyhint="search"'
+      +' oninput="ofcPq(this)" onblur="setTimeout(function(){ofcPqFechar(\''+id+'\')},250)"'
+      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();ofcPqEnter(this)}">'
+      +'<div class="ofc-pq-list" id="ofc-pql-'+id+'"></div></div>';
+  }
+  window.ofcPq=function(inp){
+    const id=inp.dataset.pq, cfg=PQ[id], box=$('ofc-pql-'+id); if(!cfg||!box) return;
+    const txt=inp.value.trim(), q=norm(txt);
+    if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+    let l=cfg.fonte();
+    l=[...l.filter(n=>norm(n).startsWith(q)), ...l.filter(n=>!norm(n).startsWith(q)&&norm(n).includes(q))].slice(0,8);
+    const exato=l.some(n=>norm(n)===q);
+    box.innerHTML=l.map(n=>'<div class="ofc-pq-row" onmousedown="event.preventDefault()" onclick="ofcPqEsc(\''+id+'\',this.dataset.v)" data-v="'+esc(n)+'">'+esc(n)+'</div>').join('')
+      +(!exato?'<div class="ofc-pq-row novo" onmousedown="event.preventDefault()" onclick="ofcPqEsc(\''+id+'\',this.dataset.v)" data-v="'+esc(txt)+'">＋ Adicionar: <strong>'+esc(txt)+'</strong></div>':'');
+    box.style.display='block';
+  };
+  window.ofcPqEnter=function(inp){
+    const box=$('ofc-pql-'+inp.dataset.pq); const r=box&&box.querySelector('.ofc-pq-row');
+    ofcPqEsc(inp.dataset.pq, r?r.dataset.v:inp.value);
+  };
+  window.ofcPqFechar=function(id){ const b=$('ofc-pql-'+id); if(b) b.style.display='none'; };
+  window.ofcPqEsc=function(id, v){
+    v=String(v||'').trim(); const cfg=PQ[id]; if(!v||!cfg) return;
+    const inp=$('ofc-pq-'+id); if(inp) inp.value='';
+    ofcPqFechar(id);
+    cfg.escolher(v);
+  };
+  const linhaSel=(txt, onRem, extra)=>'<div class="ofc-sel"><span style="flex:1;">'+esc(txt)+'</span>'+(extra||'')+'<button type="button" class="ofc-x" onclick="'+onRem+'" aria-label="Remover">✕</button></div>';
+
+  // ── Tipo de imóvel + anomalia ──
+  function renderCaract(){
+    const el=$('ofc-caract'); if(!el) return;
+    PQ.tipologia={fonte:()=>ordenar(TIPOLOGIAS,{},[]), escolher:v=>{ S.c.tipologia=v; renderCaract(); sujo(); }};
+    PQ.anomalia={fonte:()=>ordenar(ANOMALIAS,{},[]), escolher:v=>{ S.c.tipoProblema=v; renderCaract(); sujo(); }};
+    el.innerHTML='<div class="ofc-lbl">Tipo de imóvel</div>'
+      +(S.c.tipologia?linhaSel(S.c.tipologia,"ofcLimpar('tipologia')"):pesquisa('tipologia','Escreve o tipo de imóvel (ex.: apartamento)'))
+      +(multiUnidade(S.c.tipologia)?'<div class="ofc-lbl">Nº da fração inspecionada *</div><input class="ofc-in" value="'+esc(S.c.numeroFracao)+'" placeholder="Ex.: 3.º Esq., Fração B" oninput="ofcSet(\'numeroFracao\',this.value)">':'')
+      +'<div class="ofc-lbl">Anomalia *</div>'
+      +(S.c.tipoProblema?linhaSel(S.c.tipoProblema,"ofcLimpar('tipoProblema')"):pesquisa('anomalia','Escreve a anomalia (ex.: infiltração)'));
+  }
+  window.ofcLimpar=function(campo){ S.c[campo]=''; renderCaract(); sujo(); const i=$('ofc-pq-'+(campo==='tipologia'?'tipologia':'anomalia')); if(i) i.focus(); };
+
+  // ── Onde se manifesta ──
+  function renderManif(){
+    const el=$('ofc-manif'); if(!el) return;
+    PQ.manif={fonte:()=>ordenar(MANIF_SUG, aprendido().manif, S.manif), escolher:v=>{ S.manif.push(v); renderManif(); sujo(); }};
+    el.innerHTML=S.manif.map((m,i)=>'<div class="ofc-sel"><input class="ofc-in" style="flex:1;padding:8px 10px;font-weight:600;background:transparent;border-color:transparent;" value="'+esc(m)+'" oninput="ofcManif('+i+',this.value)"><button type="button" class="ofc-x" onclick="ofcManifDel('+i+')" aria-label="Remover">✕</button></div>').join('')
+      +pesquisa('manif','Escreve onde aparece (ex.: teto do WC)');
+  }
+  window.ofcManif=function(i,v){ S.manif[i]=v; sujo(); };
+  window.ofcManifDel=function(i){ S.manif.splice(i,1); renderManif(); sujo(); };
+
+  // ── Zonas → itens testados (cada item pede logo a foto) ──
+  function zonasVisiveis(){
+    const z=[...(S.c.divisoes||[])];
+    if(S.testes.some(t=>t.zona===OUTROS)) z.push(OUTROS);
+    return z;
+  }
+  function renderZonas(){
+    const el=$('ofc-zonas-itens'); if(!el) return;
+    const zs=zonasVisiveis();
+    PQ.zona={fonte:()=>ordenar(ZONAS, aprendido().zonas, S.c.divisoes||[]), escolher:v=>{
+      if(!(S.c.divisoes||[]).includes(v)) (S.c.divisoes=S.c.divisoes||[]).push(v);
+      renderZonas(); sujo();
+      const i=(S.c.divisoes||[]).indexOf(v); const n=$('ofc-pq-item'+i); if(n){ n.scrollIntoView({block:'center'}); n.focus(); }
+    }};
+    el.innerHTML=zs.map((z,zi)=>{
+      PQ['item'+zi]={fonte:()=>ordenar(ZONA_ITENS[z]||[], aprendido().itens[z], S.testes.filter(t=>t.zona===z).map(t=>t.nome)),
+        escolher:v=>adicionarItem(z,v)};
+      const itens=S.testes.filter(t=>t.zona===z);
+      const ok=itens.some(t=>(t.nome||'').trim()&&t.status);
+      return '<div style="border:1.5px solid '+(ok?'#86efac':'#cbd5e1')+';border-radius:14px;padding:12px;margin-bottom:12px;background:'+(ok?'#f7fdf9':'#f8fafc')+';">'
+        +'<div style="font-weight:800;font-size:16px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">'+(ok?'✅':'🔎')+' '+esc(z)
+        +'<button type="button" class="ofc-x" style="margin-left:auto;" data-z="'+esc(z)+'" onclick="ofcZonaDel(this.dataset.z)" aria-label="Remover zona">✕</button></div>'
+        +itens.map(cartaoItem).join('')
+        +pesquisa('item'+zi,'Escreve o item testado em '+z)
+        +'</div>';
+    }).join('')
+    +pesquisa('zona', zs.length?'Escreve outra zona inspecionada':'Escreve a zona inspecionada (ex.: casa de banho)');
+  }
+  function cartaoItem(t){
+    const cls=t.status==='anomalia'?' an':t.status==='sem'?' ok':'';
+    const fotos=S.fotos.map((f,i)=>({f,i})).filter(x=>x.f.itemKey===t.key);
+    return '<div class="ofc-teste'+cls+'" style="background:#fff;"><div class="ofc-teste-top">'
+      +'<div style="flex:1;font-weight:800;font-size:15.5px;">'+esc(t.nome)+'</div>'
+      +'<button type="button" class="ofc-x" onclick="ofcTesteDel(\''+t.key+'\')" aria-label="Remover">✕</button></div>'
+      +'<div class="ofc-st">'
+      +'<button type="button" class="'+(t.status==='anomalia'?'an':'')+'" onclick="ofcTesteSt(\''+t.key+'\',\'anomalia\')">Anomalia</button>'
+      +'<button type="button" class="'+(t.status==='sem'?'ok':'')+'" onclick="ofcTesteSt(\''+t.key+'\',\'sem\')">Sem anomalia</button>'
+      +'<button type="button" class="'+(t.status==='na'?'na':'')+'" onclick="ofcTesteSt(\''+t.key+'\',\'na\')">N/A</button></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px;">'
+      +fotos.map(x=>'<div style="display:flex;gap:10px;width:100%;align-items:stretch;">'
+        +'<div style="position:relative;width:88px;height:88px;flex-shrink:0;border-radius:9px;overflow:hidden;border:1px solid #e2e8f0;"><img src="'+esc(x.f.url||x.f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;">'
+        +(!x.f.url?'<span class="ofc-up" style="position:absolute;left:3px;top:3px;font-size:9px;">a enviar</span>':'')
+        +'<button type="button" onclick="ofcFotoDel('+x.i+')" style="position:absolute;top:3px;right:3px;background:rgba(15,36,71,.75);color:#fff;border:0;border-radius:6px;width:26px;height:26px;font-size:12px;">✕</button></div>'
+        +'<textarea data-fi="'+x.i+'" class="ofc-in ofc-fdesc'+(!(x.f.descricao||'').trim()?' falta':'')+'" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição da foto * — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
+      +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 14px;font-weight:800;font-size:14px;">📷 '+(fotos.length?'Mais uma foto':'Tirar foto')+'</button></div>'
+      +'<input class="ofc-in" style="margin-top:8px;font-size:14px;padding:9px;" value="'+esc(t.obs)+'" placeholder="Observação (opcional)" oninput="ofcTeste(\''+t.key+'\',\'obs\',this.value)">'
+      +'</div>';
+  }
+  function adicionarItem(z, nome){
+    if(S.testes.some(t=>t.zona===z && norm(t.nome)===norm(nome))){ T('"'+nome+'" já está nesta zona.','ℹ️'); return; }
+    const t={key:'it_'+Date.now(), grupo:z, zona:z, nome:nome, tipo:'tempo', min:null, status:'', obs:'', custom:true};
+    S.testes.push(t);
+    ofcFotoItem(t.key);            // pede logo a foto (tem de ser no mesmo toque)
+    renderZonas(); sujo();
+  }
+  window.ofcFotoItem=function(key){
+    const t=S.testes.find(x=>x.key===key); if(!t) return;
+    const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.setAttribute('capture','environment');
+    fi.style.display='none'; document.body.appendChild(fi);
+    fi.onchange=async()=>{
+      const f=fi.files&&fi.files[0]; fi.remove(); if(!f) return;
+      let d; try{ d=(typeof _rpTecComprimir==='function')?await _rpTecComprimir(f):await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }
+      catch(e){ T('Não foi possível ler a foto.','⚠️'); return; }
+      const item={fid:novoFid(), dataUrl:d, legenda:(t.zona&&t.zona!==OUTROS?t.zona+' — ':'')+t.nome, descricao:'', itemKey:key};
+      IDB.put({...item, osId:S.id, criadoEm:Date.now()});
+      S.fotos.push(item); renderZonas(); renderFotos(); sujo(); enviarFoto(item);
+      const ta=document.querySelector('#ofc-zonas-itens textarea[data-fi="'+(S.fotos.length-1)+'"]'); if(ta){ ta.scrollIntoView({block:'center'}); ta.focus(); }
+    };
+    fi.click();
+  };
+  window.ofcZonaDel=function(z){
+    const n=S.testes.filter(t=>t.zona===z).length;
+    if(n && !confirm('Remover a zona "'+z+'" e os '+n+' item(ns) testado(s) dela (com as fotos)?')) return;
+    const keys=new Set(S.testes.filter(t=>t.zona===z).map(t=>t.key));
+    S.testes=S.testes.filter(t=>t.zona!==z); S.fotos=S.fotos.filter(f=>!keys.has(f.itemKey));
+    S.c.divisoes=(S.c.divisoes||[]).filter(x=>x!==z);
+    renderZonas(); renderFotos(); sujo();
+  };
+  window.ofcTeste=function(key, p, v){ const t=S.testes.find(x=>x.key===key); if(t){ t[p]=v; sujo(); } };
+  window.ofcTesteSt=function(key, st){ const t=S.testes.find(x=>x.key===key); if(t){ t.status=(t.status===st?'':st); renderZonas(); sujo(); } };
+  window.ofcTesteDel=function(key){
+    const nf=S.fotos.filter(f=>f.itemKey===key).length;
+    if(nf && !confirm('Remover este item e as '+nf+' foto(s) dele?')) return;
+    S.testes=S.testes.filter(x=>x.key!==key); S.fotos=S.fotos.filter(f=>f.itemKey!==key);
+    renderZonas(); renderFotos(); sujo();
+  };
+
+  // ── Metodologias e equipamentos ──
+  function renderMetEq(){
+    const el=$('ofc-meteq'); if(!el) return;
+    PQ.met={fonte:()=>ordenar(listaMets(),{},S.c.metodologias), escolher:v=>{ S.c.metodologias.push(v); renderMetEq(); sujo(); }};
+    PQ.equip={fonte:()=>ordenar(listaEquips(),{},S.c.equipamentos), escolher:v=>{ S.c.equipamentos.push(v); renderMetEq(); sujo(); }};
+    el.innerHTML='<div class="ofc-lbl">Metodologias utilizadas *</div>'
+      +S.c.metodologias.map((m,i)=>linhaSel(m,"ofcMetDel('metodologias',"+i+")")).join('')
+      +pesquisa('met','Escreve a metodologia (ex.: termografia)')
+      +'<div class="ofc-lbl">Equipamentos</div>'
+      +S.c.equipamentos.map((m,i)=>linhaSel(m,"ofcMetDel('equipamentos',"+i+")")).join('')
+      +pesquisa('equip','Escreve o equipamento (ex.: geofone)');
+  }
+  window.ofcMetDel=function(campo,i){ S.c[campo].splice(i,1); renderMetEq(); sujo(); };
+
+  // ── Histórico completo do cliente (sem técnicos nem valores) ──
+  window.ofcHistorico=function(){
+    const os=getOS(); if(!os) return;
+    const l=ultimosAtendimentos(os, 50);
+    let ov=$('ofc-hist'); if(!ov){ ov=document.createElement('div'); ov.id='ofc-hist'; $('ofc').appendChild(ov); }
+    ov.style.cssText='position:absolute;inset:0;z-index:5;background:rgba(15,36,71,.5);display:flex;align-items:flex-end;';
+    ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:#fff;width:100%;max-height:85%;overflow:auto;border-radius:16px 16px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);">'
+      +'<div style="display:flex;align-items:center;margin-bottom:12px;"><strong style="font-size:17px;">📚 Histórico do cliente</strong><button class="ofc-x" style="margin-left:auto;" onclick="document.getElementById(\'ofc-hist\').remove()">✕</button></div>'
+      +(l.length?l.map(a=>'<div style="border-left:3px solid #0e7490;padding:6px 0 6px 12px;margin-bottom:12px;">'
+          +'<div style="font-size:13px;font-weight:700;color:#0e7490;">'+esc(fmtDate(a.data))+(a.servico?' · '+esc(a.servico):'')+'</div>'
+          +(a.problema?'<div style="font-size:14px;margin-top:3px;"><b style="color:#64748b;font-weight:600;">Problema:</b> '+esc(a.problema)+'</div>':'')
+          +(a.onde?'<div style="font-size:14px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Onde:</b> '+esc(a.onde)+'</div>':'')
+          +(a.zonas?'<div style="font-size:14px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Zonas:</b> '+esc(a.zonas)+'</div>':'')
+          +(a.conclusao?'<div style="font-size:14px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Conclusão:</b> '+esc(a.conclusao)+'</div>':'')
+          +'</div>').join('')
+        :'<div style="padding:20px;text-align:center;color:#64748b;">Sem atendimentos anteriores deste cliente.</div>')
+      +'</div>';
+  };
+
+  // Fotos
+  function renderFotos(){
+    const el=$('ofc-fotos'); if(!el) return;
+    el.innerHTML=S.fotos.map((f,i)=>{
+      if(f.itemKey) return '';
+      const src=f.url||f.dataUrl||'';
+      const falta=!(f.legenda||'').trim();
+      return '<div class="ofc-foto"><img src="'+esc(src)+'" alt="">'
+        +(!f.url?'<span class="ofc-up">a enviar</span>':'')
+        +'<button type="button" class="ofc-fx" onclick="ofcFotoDel('+i+')" aria-label="Apagar foto">✕</button>'
+        +'<input class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Local da foto *" oninput="ofcFotoLeg('+i+',this)">'
+        +'<textarea data-fi="'+i+'" class="'+(!(f.descricao||'').trim()?'falta':'')+'" rows="2" placeholder="Descrição da foto *" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
+    }).join('');
+    fotoGate();
+  }
+  function fotoGate(){
+    const n=S.fotos.length, semLeg=S.fotos.some(f=>!f.itemKey && !(f.legenda||'').trim());
+    ['ofc-fcam','ofc-fgal'].forEach(id=>{ const l=$(id); if(l) l.classList.toggle('off', semLeg); });
+    const c=$('ofc-fcnt'); if(c){ c.textContent='Total '+n+' / 4'; c.style.background=n>=4?'#dcfce7':'#fee2e2'; c.style.color=n>=4?'#166534':'#b91c1c'; }
+  }
+  window.ofcFotoDesc = function(i, el){ if(S.fotos[i]){ S.fotos[i].descricao=el.value; atualizarLocal(S.fotos[i]); el.classList.toggle('falta', !el.value.trim()); sujo(); } };
+  window.ofcFotoLeg = function(i, el){ if(S.fotos[i]){ S.fotos[i].legenda=el.value; atualizarLocal(S.fotos[i]); el.classList.toggle('falta', !el.value.trim()); fotoGate(); sujo(); } };
+  window.ofcFotoDel = function(i){ if(!confirm('Apagar esta foto?')) return; S.fotos.splice(i,1); renderFotos(); sujo(); };
+  window.ofcFotoAdd = async function(input){
+    const f=input.files&&input.files[0]; input.value=''; if(!f) return;
+    if(S.fotos.some(x=>!(x.legenda||'').trim())){ T('Escreve primeiro o local da foto anterior.','📍'); return; }
+    let d;
+    try{ d=(typeof _rpTecComprimir==='function')?await _rpTecComprimir(f):await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }
+    catch(e){ T('Não foi possível ler a foto.','⚠️'); return; }
+    const item={fid:novoFid(), dataUrl:d, legenda:'', descricao:''}; S.fotos.push(item);
+    IDB.put({...item, osId:S.id, criadoEm:Date.now()});
+    renderFotos();
+    const ins=document.querySelectorAll('#ofc-fotos input'); const l=ins[ins.length-1]; if(l){ l.focus(); l.scrollIntoView({block:'center'}); }
+    enviarFoto(item);
+  };
+  async function enviarFoto(item){
+    if(typeof window.fsUploadFoto!=='function' || !item.dataUrl) return;
+    try{
+      const up=await window.fsUploadFoto('relatorios/'+S.id+'/foto_'+Date.now()+'.jpg', item.dataUrl);
+      item.url=up.url; item.path=up.path; delete item.dataUrl;
+      if(item.fid) IDB.del(item.fid);
+      renderFotosSemPerderFoco(); sujo();
+    }catch(e){ console.warn('OS de campo — envio de foto falhou (volta a tentar ao guardar):', e); }
+  }
+  function renderFotosSemPerderFoco(){
+    const a=document.activeElement, dentro=a && a.closest && a.closest('#ofc-fotos');
+    if(dentro) return; // não interromper quem está a escrever a legenda
+    renderFotos();
+  }
+  let _locT={};
+  function atualizarLocal(f){ if(!f||!f.fid||f.url) return; clearTimeout(_locT[f.fid]); _locT[f.fid]=setTimeout(()=>IDB.put({...f, osId:S.id, criadoEm:Date.now()}),500); }
+  async function enviarPendentes(btn){
+    if(!S.fotos.some(f=>f.dataUrl && !f.url)) return;
+    window._rpFotosTemp=S.fotos;
+    if(typeof rpUploadFotosPendentes==='function'){
+      await rpUploadFotosPendentes(S.id, ({done,total})=>{ if(btn) btn.textContent='⏳ Fotos '+done+'/'+total+'…'; });
+      S.fotos=window._rpFotosTemp.map(f=>typeof f==='string'?{url:f,legenda:''}:f);
+      S.fotos.forEach(f=>{ if(f.url&&f.fid) IDB.del(f.fid); });
+    }
+  }
+
+  // Fecho — escolhas
+  window.ofcPag = function(v){
+    S.pag=(S.pag===v?'':v); S.pagMudou=true;
+    const g=$('ofc-g-pag'); if(g) g.querySelectorAll('.ofc-chip').forEach(b=>b.classList.toggle('on', b.getAttribute('onclick').includes("'"+S.pag+"'") && !!S.pag));
+    const r=$('ofc-pag-ref'); if(r) r.style.display=['transferencia','cheque'].includes(S.pag)?'block':'none';
+    atualizarFaltas();
+  };
+  window.ofcPagRef = function(v){ S.pagRef=v; S.pagMudou=true; };
+  window.ofcTipoRel = function(v){ S.tipoRel=v; $('ofc-g-tiporel').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='definitivo'))); atualizarFaltas(); };
+  window.ofcPlanta = function(v){ S.planta=v; S.sigMudou=true; $('ofc-g-planta').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='sim')));
+    const o=$('ofc-planta-obs'); if(o) o.style.display=v==='sim'?'block':'none'; sujo(); };
+  window.ofcAssOutro = function(on){ S.assOutro=on; S.sigMudou=true; $('ofc-ass-outro').style.display=on?'grid':'none'; atualizarFaltas(); guardarAssinaturas(); };
+
+  // As assinaturas gravam-se na OS logo que são feitas — sair e voltar não as perde.
+  let _sigT=null;
+  function guardarAssinaturas(){
+    const os=getOS(); if(!os || fechada(os) || os.concluidoEm) return;
+    clearTimeout(_sigT);
+    _sigT=setTimeout(async()=>{
+      const patch={assinaturaTecnico:S.sigTec||'', assinaturaCliente:S.sigCli||'',
+        assinadoPorOutro:!!S.assOutro, assinanteNome:S.assOutro?(S.assNome||'').trim():'', assinanteNif:S.assOutro?(S.assNif||'').trim():''};
+      try{
+        await window.fsSetMerge('ordens', os.id, patch); Object.assign(os, patch);
+        if(patch.assinaturaTecnico||patch.assinaturaCliente)
+          await window.fsSetMerge('relatorios_assinaturas', os.id, {osId:os.id, assinaturaTecnico:patch.assinaturaTecnico, assinaturaCliente:patch.assinaturaCliente, guardadoEm:new Date().toISOString()});
+      }catch(e){ console.warn('OS de campo — assinatura não gravou (volta a tentar ao fechar):', e); }
+    },600);
+  }
+  window.ofcAss = function(k,v){ S[k]=v; S.sigMudou=true; atualizarFaltas(); guardarAssinaturas(); };
+
+  // Assinaturas (canvas)
+  function sigHtml(q, bloqueada){
+    const tem=q==='tec'?S.sigTec:S.sigCli;
+    if(bloqueada){
+      return '<div class="ofc-sig" style="display:flex;align-items:center;justify-content:center;background:#f8fafc;">'
+        +(tem?'<img src="'+esc(tem)+'" alt="Assinatura" style="max-width:100%;max-height:150px;object-fit:contain;">':'<span style="color:#94a3b8;font-size:14px;">Sem assinatura</span>')+'</div>'
+        +'<div class="ofc-sig-bar"><span>'+(q==='tec'?'Técnico':'Cliente')+'</span><span>🔒 Guardada</span></div>';
+    }
+    return '<div class="ofc-sig"><canvas id="ofc-sig-'+q+'"></canvas><div class="ofc-sig-ph" id="ofc-sig-ph-'+q+'" style="display:'+(tem?'none':'flex')+'">Assine aqui com o dedo</div></div>'
+      +'<div class="ofc-sig-bar"><span>'+(q==='tec'?esc(window.currentUser?.name||'Técnico'):'Cliente')+'</span><button type="button" onclick="ofcSigLimpar(\''+q+'\')">Limpar</button></div>';
+  }
+  function iniciarSig(q){
+    const cv=$('ofc-sig-'+q); if(!cv) return;
+    const r=cv.getBoundingClientRect(); const W=Math.max(300,Math.round(r.width||320)), H=Math.round(r.height||166);
+    cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d'); ctx.lineWidth=2.6; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#0f2447';
+    const atual=q==='tec'?S.sigTec:S.sigCli;
+    if(atual){ const im=new Image(); im.onload=()=>{ try{ ctx.drawImage(im,0,0,W,H); }catch(e){} }; im.src=atual; }
+    let on=false, lx=0, ly=0;
+    const pos=e=>{ const b=cv.getBoundingClientRect(); return [(e.clientX-b.left)*W/b.width,(e.clientY-b.top)*H/b.height]; };
+    cv.onpointerdown=e=>{ e.preventDefault(); on=true; try{ cv.setPointerCapture(e.pointerId); }catch(_){} [lx,ly]=pos(e); const ph=$('ofc-sig-ph-'+q); if(ph) ph.style.display='none'; };
+    cv.onpointermove=e=>{ if(!on) return; e.preventDefault(); const [x,y]=pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(x,y); ctx.stroke(); lx=x; ly=y; };
+    cv.onpointerup=cv.onpointercancel=()=>{ if(!on) return; on=false; const d=cv.toDataURL('image/png'); if(q==='tec') S.sigTec=d; else S.sigCli=d; S.sigMudou=true; atualizarFaltas(); guardarAssinaturas(); };
+  }
+  window.ofcSigLimpar = function(q){
+    const cv=$('ofc-sig-'+q); if(cv) cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+    if(q==='tec') S.sigTec=''; else S.sigCli='';
+    const ph=$('ofc-sig-ph-'+q); if(ph) ph.style.display='flex';
+    S.sigMudou=true; atualizarFaltas(); guardarAssinaturas();
+  };
+
+  // ── validação ────────────────────────────────────────────────
+  function faltas(os){
+    const f=[];
+    const c=S.c;
+    if(multiUnidade(c.tipologia) && !(c.numeroFracao||'').trim()) f.push('nº da fração');
+    if(!c.tipoProblema) f.push('anomalia');
+    if(!S.manif.some(x=>(x||'').replace(/—\s*$/,'').trim())) f.push('onde se manifesta o problema');
+    if(!(c.divisoes||[]).length) f.push('zona inspecionada');
+    (c.divisoes||[]).forEach(z=>{ if(!S.testes.some(t=>t.zona===z && (t.nome||'').trim() && t.status)) f.push('item testado com resultado em "'+z+'"'); });
+    if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
+    if(S.fotos.some(x=>!(x.legenda||'').trim())) f.push('local em todas as fotos');
+    if(S.fotos.some(x=>!(x.descricao||'').trim())) f.push('descrição em todas as fotos');
+    if(!(c.metodologias||[]).length) f.push('metodologias');
+    const naoFat=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
+    if(!naoFat && !S.pag) f.push('forma de pagamento');
+    if(!S.sigTec) f.push('assinatura do técnico');
+    if(S.assOutro){ if(!(S.assNome||'').trim()) f.push('nome de quem assina'); }
+    else if(!S.sigCli) f.push('assinatura do cliente');
+    return f;
+  }
+  function atualizarFaltas(){
+    const os=getOS(); const el=$('ofc-faltas'); if(!os||!el) return;
+    const f=faltas(os);
+    el.className='ofc-falta'+(f.length?'':' ok');
+    el.innerHTML=f.length?('<strong>Falta para fechar:</strong> '+f.map(esc).join(' · ')):'✅ Tudo preenchido — podes fechar a OS.';
+    const n2=$('ofc-n2'); const relOk=!f.some(x=>!/pagamento|assinatura|quem assina/.test(x)); if(n2) n2.classList.toggle('ok', relOk);
+  }
+
+  // ── gravação do relatório ────────────────────────────────────
+  function resumoTrabalho(){
+    const linhas=[];
+    zonasVisiveis().forEach(z=>{
+      const its=S.testes.filter(t=>t.zona===z && (t.nome||'').trim());
+      if(!its.length) return;
+      linhas.push((linhas.length?'\n':'')+'ZONA: '+z);
+      its.forEach(t=>linhas.push(linhaItem(t)));
+    });
+    let r='ITENS TESTADOS POR ZONA:\n'+(linhas.length?linhas.join('\n'):'(nenhum)');
+    if((S.c.equipamentos||[]).length) r+='\n\nEQUIPAMENTOS: '+S.c.equipamentos.join(', ');
+    return r;
+  }
+  function linhaItem(t){
+    {
+      let s='• '+t.nome.trim();
+      if(t.status==='anomalia') s+=' — ANOMALIA DETETADA'; else if(t.status==='sem') s+=' — sem anomalia'; else if(t.status==='na') s+=' — não se aplica';
+      if((t.obs||'').trim()) s+='\n   ↳ '+t.obs.trim();
+      return s;
+    }
+  }
+  function montarCampos(os, ant){
+    const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
+    const fotos=S.fotos.filter(f=>f.url).map(f=>({url:f.url, path:f.path||'',
+      legenda:[(f.legenda||'').trim(),(f.descricao||'').trim()].filter(Boolean).join(' — '),
+      local:f.legenda||'', descricao:f.descricao||'', itemKey:f.itemKey||'', fid:f.fid||''}));
+    const trab=resumoTrabalho();
+    const campos={
+      ...(ant||{}),
+      tipologia:S.c.tipologia, localProblema:S.c.tipologia,
+      numeroFracao:S.c.numeroFracao, tipoProblema:S.c.tipoProblema,
+      locaisManifestacao:S.manif.map(x=>(x||'').replace(/\s*—\s*$/,'').trim()).filter(Boolean),
+      localManifestacao:S.manif.map(x=>(x||'').replace(/\s*—\s*$/,'').trim()).filter(Boolean).join('; '),
+      assinaturaTecnico:os.assinaturaTecnico||S.sigTec||'',
+      divisoes:S.c.divisoes, metodologias:S.c.metodologias, equipamentos:S.c.equipamentos,
+      testes:S.testes, reclamacao:S.c.reclamacao, descritivo:S.c.reclamacao,
+      planta:S.planta==='sim'?'sim':'nao', obsPlanta:S.planta==='sim'?PLANTA_OBS:((ant&&ant.planta==='sim')?'':((ant&&ant.obsPlanta)||'')),
+      conclusao:S.c.conclusao, conclusaoIA:!!S.c.conclusaoIA, trabalho:trab, detalhamento:trab,
+      fotos,
+      cliNome:cli.nome||'', cliNif:cli.nif||'', cliMorada:[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', '),
+    };
+    if(!(ant&&ant.dataManual)){
+      campos.horaIniInterv=(os.horaIniReal||os.horaIni||'').slice(0,5);
+      campos.horaFimInterv=(os.horaFimReal||'').slice(0,5)||(ant&&ant.horaFimInterv)||'';
+      campos.dataExecucao=os.concluidoEm?os.concluidoEm.slice(0,10):(os.data||'');
+    }
+    return {campos, fotos};
+  }
+  async function guardarRel(extra){
+    const os=getOS(); if(!os) return;
+    clearTimeout(_saveT);
+    const ant=getRel()||{};
+    const {campos, fotos}=montarCampos(os, ant.campos);
+    const doc=limpo({
+      id:os.id, osId:os.id, campos, fotos,
+      estado: ant.estado||'rascunho',
+      criadoEm: ant.criadoEm||new Date().toISOString(),
+      editadoEm:new Date().toISOString(), editadoPor:window.currentUser?.id||'',
+      ...(extra||{})
+    });
+    const _r=await grava('relatorios_pesquisa', os.id, doc);
+    const arr=window.DB.relatorios_pesquisa=window.DB.relatorios_pesquisa||[];
+    const i=arr.findIndex(x=>x.id===os.id);
+    if(i>=0) arr[i]={...arr[i], ...doc, campos:{...(arr[i].campos||{}), ...doc.campos}}; else arr.push(doc);
+    S.dirty=false; const sv=$('ofc-save');
+    if(sv) sv.textContent=(!navigator.onLine||_r==='fila')?'📴 Sem rede — guardado no telemóvel':'✓ Guardado '+hhmm();
+    return doc;
+  }
+
+  function pagamentoObj(os){
+    const naoFat=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
+    if(naoFat || !S.pag) return null;
+    const ex=(window._modalidadesExtra||[]).find(m=>m.id===S.pag);
+    const imediato=IMEDIATOS.includes(S.pag)||(ex&&ex.tipo==='imediato');
+    const metLabel={mb:'Multibanco',mbway:'MBWay',dinheiro:'Numerário',transferencia:'Transferência Bancária',cheque:'Cheque',entidade:'Entidade Pagadora'}[S.pag]||(ex&&ex.nome)||S.pag;
+    return {metodo:S.pag, ref:S.pagRef||'', imediato:!!imediato, metLabel, confirmadoEm:new Date().toISOString(), confirmadoPor:window.currentUser?.id||''};
+  }
+
+  // ── FECHAR A OS ──────────────────────────────────────────────
+  window.ofcFechar = async function(){
+    const os=getOS(); if(!os) return;
+    if(typeof osBloquearAuxiliar==='function' && osBloquearAuxiliar(os,'Fechar a OS')) return;
+    if(!os.horaIniReal){ T('Inicia o trabalho primeiro.','⏱'); return; }
+    const f=faltas(os);
+    if(f.length){ T('Falta: '+f.join(' · '),'⚠️'); const el=$('ofc-faltas'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+    const btn=$('ofc-btn-main'); const txt=btn?btn.textContent:'';
+    const repor=()=>{ if(btn){ btn.disabled=false; btn.textContent=txt; } };
+    if(btn){ btn.disabled=true; btn.textContent='⏳ A fechar…'; }
+    try{ if(navigator.onLine) await semEsperar(enviarPendentes(btn)); }catch(e){ console.warn(e); }
+    const porEnviar=S.fotos.filter(x=>!x.url);
+    if(porEnviar.length){
+      if(!confirm('Sem rede: '+porEnviar.length+' foto(s) ainda não foram enviadas.\n\nFicam guardadas no telemóvel e são enviadas sozinhas quando houver rede (não apagues a app nem os dados do navegador).\n\nFechar a OS agora?')){ repor(); return; }
+      for(const f of porEnviar){ if(!f.fid) f.fid=novoFid(); await IDB.put({...f, osId:S.id, criadoEm:Date.now()}); }
+    }
+
+    const fim=os.horaFimReal||hhmm(), ini=os.horaIniReal;
+    const agoraISO=new Date().toISOString();
+    const pausas=(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:agoraISO}:p);
+    const minBruto=_minutosEntreHoras(ini,fim)||0;
+    const min=Math.max(0, minBruto-osCalcMinPausados({...os,pausas}));
+    const v=calcValor(os, min);
+    const pagamento=pagamentoObj(os);
+    const patch=limpo({
+      estado:'concluida', concluidoEm:agoraISO, horaIniReal:ini, horaFimReal:fim,
+      haddN:v.hAdd, net:v.net, ivaVal:v.ivaV, total:v.total,
+      assinaturaTecnico:S.sigTec||os.assinaturaTecnico||'', assinaturaCliente:S.sigCli||os.assinaturaCliente||'',
+      assinadoPorOutro:!!S.assOutro, assinanteNome:S.assOutro?S.assNome.trim():'', assinanteNif:S.assOutro?S.assNif.trim():'',
+      pagamento, pausas, pausaAtiva:false,
+      plantaFornecida:S.planta==='sim', plantaObs:S.planta==='sim'?PLANTA_OBS:'',
+      termoResponsabilidadeVersao:TERMO_VERSAO, termoResponsabilidadeTexto:TERMO.map((t,i)=>(i+1)+'. '+t[0]+'. '+t[1]).join('\n'),
+      fechadoViaOSCampo:true,
+    });
+    try{ await grava('ordens', os.id, patch); Object.assign(os, patch); }
+    catch(e){ repor(); T('❌ Não foi possível fechar: '+(e.message||'erro')+'. Tenta outra vez.','❌'); return; }
+
+    const primeiraVez=!(getRel()&&getRel().submetidoPeloTecnico);
+    let rel;
+    try{
+      rel=await guardarRel({
+        submetidoPeloTecnico:true, submetidoEm:agoraISO, submetidoPor:window.currentUser?.id||'',
+        relatorioEstado:'preliminar', aguardaValidacao:true, fechadoPor:window.currentUser?.name||'', fechadoPorId:window.currentUser?.id||'', fechadoEm:agoraISO,
+      });
+    }catch(e){ console.warn('OS de campo — relatório não gravado no fecho:', e); T('⚠️ OS fechada, mas o relatório não gravou. Abre de novo e guarda.','⚠️'); }
+
+    try{ if(primeiraVez && rel && typeof rpNotificarSupervisoresRelatorio==='function') await semEsperar(rpNotificarSupervisoresRelatorio(os, rel)); }catch(e){}
+    await semEsperar(pedirValidacao(os, 'fecho'));
+    try{
+      if(pagamento){
+        if(pagamento.imediato){
+          if(typeof osCriarReciboAutomatico==='function') await semEsperar(osCriarReciboAutomatico(os));
+          if(typeof osNotifPagamento==='function') osNotifPagamento(os.id,'verde',pagamento.metLabel,v.total);
+          if(typeof osCriarAvisoFatura==='function') osCriarAvisoFatura(os, pagamento.metLabel);
+        } else {
+          if(typeof osAvisarEmitirFatura==='function') osAvisarEmitirFatura(os, pagamento.metLabel);
+          if(typeof osNotifPagamento==='function') osNotifPagamento(os.id,'amarela',pagamento.metLabel,v.total);
+        }
+      }
+    }catch(e){ console.warn('OS de campo — aviso de faturação:', e); }
+    try{ if(typeof cronoPendenteFechoLimpar==='function') cronoPendenteFechoLimpar(); }catch(e){}
+    try{ auditLog('os_concluida','OS '+os.id+' concluída (OS de campo) — '+ini+'–'+fim+' — €'+v.total+' — '+(pagamento?pagamento.metLabel:'sem pagamento')); }catch(e){}
+    if(navigator.vibrate) navigator.vibrate([80,40,80]);
+    T(navigator.onLine?'✅ OS fechada — '+eur(v.total):'✅ OS fechada no telemóvel — é enviada quando houver rede.','✅');
+    S.sigMudou=false; S.pagMudou=false;
+    ofcSair();
+  };
+
+  // ── Guardar alterações numa OS já fechada ────────────────────
+  window.ofcGuardarEdicao = async function(){
+    const os=getOS(); if(!os) return;
+    if(S.fotos.some(x=>!(x.legenda||'').trim())){ T('Falta o local em alguma foto.','📍'); return; }
+    const btn=$('ofc-btn-main'); const txt=btn?btn.textContent:'';
+    if(btn){ btn.disabled=true; btn.textContent='⏳ A guardar…'; }
+    try{
+      await enviarPendentes(btn);
+      const ant=getRel()||{};
+      const rel=await guardarRel({relatorioEstado:'preliminar', aguardaValidacao:true, ...(ant.estado==='enviado'?{alteradoPeloTecnicoAposEnvio:true, alteradoEm:new Date().toISOString()}:{})});
+      await pedirValidacao(os, 'edicao');
+      const patch={};
+      // Assinaturas da OS fechada mantêm-se sempre — nunca são regravadas aqui.
+      if(S.sigMudou){ patch.plantaFornecida=S.planta==='sim'; patch.plantaObs=S.planta==='sim'?PLANTA_OBS:''; }
+      let novoPag=null;
+      if(S.pagMudou && (S.pag||'')!==((os.pagamento&&os.pagamento.metodo)||'') || (S.pagMudou && S.pagRef!==((os.pagamento&&os.pagamento.ref)||''))){
+        novoPag=pagamentoObj(os); patch.pagamento=novoPag;
+      }
+      if(Object.keys(patch).length){ await window.fsSetMerge('ordens', os.id, limpo(patch)); Object.assign(os, patch); }
+      if(novoPag && typeof osCriarAvisoFatura==='function') osCriarAvisoFatura(os, novoPag.metLabel);
+      if(ant.estado==='enviado' && typeof rpNotificarAlteracaoTecnico==='function'){ try{ await rpNotificarAlteracaoTecnico(os, rel); }catch(e){} }
+      try{ auditLog('os_editada_tecnico','OS '+os.id+' — técnico corrigiu dados no ecrã OS de campo'); }catch(e){}
+      S.sigMudou=false; S.pagMudou=false;
+      T('✅ Alterações guardadas — enviadas para validação da administração.','✅');
+    }catch(e){ T('❌ Não foi possível guardar: '+(e.message||'sem ligação'),'❌'); }
+    if(btn){ btn.disabled=false; btn.textContent=txt; }
+  };
+
+  // ── Sincronização das fotos guardadas no telemóvel ──
+  let _sincA=false;
+  async function sincronizarFotos(){
+    if(_sincA || !navigator.onLine || typeof window.fsUploadFoto!=='function') return;
+    _sincA=true;
+    try{
+      const l=await IDB.todas();
+      for(const x of l){
+        if(!x.dataUrl){ await IDB.del(x.fid); continue; }
+        let up; try{ up=await window.fsUploadFoto('relatorios/'+x.osId+'/foto_'+Date.now()+'.jpg', x.dataUrl); }catch(e){ break; }
+        // Se a OS está aberta neste ecrã, atualiza lá (o rascunho grava sozinho)
+        const aberta=(S.id===x.osId) && $('ofc').classList.contains('on');
+        const naTela=aberta && S.fotos.find(f=>f.fid===x.fid);
+        if(naTela){ naTela.url=up.url; naTela.path=up.path; delete naTela.dataUrl; renderFotosSemPerderFoco(); try{ renderZonas(); }catch(e){} sujo(); }
+        else {
+          const rel=(window.DB.relatorios_pesquisa||[]).find(r=>r.id===x.osId)||{};
+          const fotos=[...(rel.fotos||(rel.campos&&rel.campos.fotos)||[])];
+          if(!fotos.some(f=>f.fid===x.fid)) fotos.push({url:up.url, path:up.path, legenda:legendaFinal(x), local:x.legenda||'', descricao:x.descricao||'', itemKey:x.itemKey||'', fid:x.fid});
+          await grava('relatorios_pesquisa', x.osId, {fotos, campos:{fotos}});
+          if(rel.id){ rel.fotos=fotos; rel.campos={...(rel.campos||{}), fotos}; }
+        }
+        await IDB.del(x.fid);
+      }
+    }finally{ _sincA=false; }
+  }
+  window.addEventListener('online', ()=>{ sincronizarFotos(); const sv=$('ofc-save'); if(sv&&S.id) sv.textContent='📶 Rede de volta — a enviar…'; });
+  window.addEventListener('offline', ()=>{ const sv=$('ofc-save'); if(sv&&S.id) sv.textContent='📴 Sem rede — guardado no telemóvel'; });
+  setInterval(sincronizarFotos, 60000);
+  setTimeout(sincronizarFotos, 8000);
+
+  // ── Encaminhar o técnico para este ecrã ──────────────────────
+  const _orig={
+    detalhe: window.osAbrirDetalhe,
+    form: window.rpAbrirFormulario,
+    concluir: window.osAbrirConcluir,
+    iniciar: window.tecIniciarRapido,
+    parar: window.tecPararRapido,
+  };
+  const usaCampo = id => {
+    if(!ehTec()) return false;
+    const os=(window.DB.ordens||[]).find(x=>x.id===id);
+    if(!os || (typeof osEhTecnicoAuxiliar==='function' && osEhTecnicoAuxiliar(os))) return false;
+    return true;
+  };
+  window.osAbrirDetalhe = function(id){
+    if(usaCampo(id)){ if(S.id===id && $('ofc').classList.contains('on')){ renderBar(); tick(); return; } return ofcAbrir(id); }
+    return _orig.detalhe.apply(this, arguments);
+  };
+  window.rpAbrirFormulario = function(id, preserve){
+    if(usaCampo(id) && !preserve){ if(typeof closeMo==='function') closeMo('mo-relat-pesquisa'); return ofcAbrir(id,'relatorio'); }
+    return _orig.form.apply(this, arguments);
+  };
+  window.osAbrirConcluir = function(id){
+    if(usaCampo(id)){ if(typeof closeMo==='function') closeMo('mo-os-concluir'); return ofcAbrir(id,'fecho'); }
+    return _orig.concluir.apply(this, arguments);
+  };
+  window.tecIniciarRapido = function(id){
+    if(usaCampo(id)) return ofcAbrir(id);
+    return _orig.iniciar.apply(this, arguments);
+  };
+  window.tecPararRapido = function(id){
+    if(usaCampo(id)) return ofcAbrir(id,'fecho');
+    return _orig.parar.apply(this, arguments);
+  };
+})();
+</script>
+<!-- ═══ fim v15.90 — OS DE CAMPO ═══ -->
+
+<!-- ═══ v15.91 — VALIDAÇÃO DE RELATÓRIOS PELA ADMINISTRAÇÃO ═══
+     O técnico fecha sempre como PRELIMINAR. A administração recebe o aviso,
+     revê, valida (torna definitivo) e só então pode enviar ao cliente. -->
+<style>
+#val-pill{position:fixed;right:16px;bottom:78px;z-index:940;background:#c2410c;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:800;font-size:14px;box-shadow:0 8px 24px rgba(194,65,12,.35);cursor:pointer;display:none;}
+#val-painel{position:fixed;inset:0;z-index:1001;background:rgba(15,36,71,.45);display:none;align-items:flex-end;justify-content:center;}
+#val-painel.on{display:flex;}
+#val-painel .vp{background:#fff;width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);}
+#val-painel .vp-item{border:1.5px solid #fed7aa;border-radius:12px;padding:12px;margin-bottom:10px;}
+#val-painel .vp-acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+#val-painel .vp-acts button{flex:1;min-width:90px;min-height:42px;border-radius:9px;border:1.5px solid #cbd5e1;background:#f8fafc;font-weight:700;font-size:13px;cursor:pointer;}
+#val-painel .vp-acts .ok{background:#15803d;border-color:#15803d;color:#fff;}
+</style>
+<button id="val-pill" onclick="valAbrirPainel()"></button>
+<div id="val-painel" onclick="if(event.target===this)this.classList.remove('on')"><div class="vp" id="val-lista"></div></div>
+<script>
+(function(){
+  'use strict';
+  const GEST=['admin','gerente','supervisor'];
+  const ehGestao=()=>GEST.includes(window.currentUser&&window.currentUser.role);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const relDe=id=>(window.DB.relatorios_pesquisa||[]).find(x=>x.id===id);
+  const precisaValidar=id=>{ const r=relDe(id); return !!(r && r.relatorioEstado==='preliminar'); };
+  const pendentes=()=>(window.DB.mensagens_internas||[])
+    .filter(m=>m.tipo==='relatorio_validar' && !m.validado && !m.arquivado && precisaValidar(m.osId))
+    .sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+  const vistos=new Set();
+
+  function atualizar(){
+    const pill=document.getElementById('val-pill'); if(!pill) return;
+    if(!ehGestao()){ pill.style.display='none'; return; }
+    const p=pendentes();
+    const gps=(window.DB.mensagens_internas||[]).filter(m=>m.tipo==='inicio_sem_gps'&&!m.lida).length;
+    pill.style.display=(p.length||gps)?'block':'none';
+    pill.textContent=(p.length?'📋 '+p.length+' relatório'+(p.length>1?'s':'')+' a validar':'')+(p.length&&gps?' · ':'')+(gps?'📍 '+gps+' sem GPS':'');
+    p.forEach(m=>{
+      const k=m.osId+'|'+m.criadoEm;
+      if(!vistos.has(k)){
+        if(vistos.size || window._valArranque){
+          try{ toast('📋 Relatório da OS '+m.osId+' ('+(m.clienteNome||'')+') aguarda validação para ser enviado ao cliente.','📋'); }catch(e){}
+          try{ if('Notification' in window && Notification.permission==='granted') new Notification('📋 Relatório a validar',{body:'OS '+m.osId+' — '+(m.clienteNome||'')}); }catch(e){}
+        }
+        vistos.add(k);
+      }
+    });
+    window._valArranque=true;
+    if(document.getElementById('val-painel').classList.contains('on')) desenhar();
+  }
+
+  function desenhar(){
+    const p=pendentes(), el=document.getElementById('val-lista');
+    el.innerHTML='<div style="display:flex;align-items:center;margin-bottom:12px;"><strong style="font-size:17px;color:#0f2447;">Relatórios a validar</strong>'
+      +'<button onclick="document.getElementById(\'val-painel\').classList.remove(\'on\')" style="margin-left:auto;border:0;background:#f1f5f9;border-radius:8px;width:38px;height:38px;font-size:16px;cursor:pointer;">✕</button></div>'
+      +'<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Fechados pelos técnicos como preliminares. Só depois de validados podem ser enviados ao cliente.</div>'
+      +(()=>{ const g=(window.DB.mensagens_internas||[]).filter(m=>m.tipo==='inicio_sem_gps'&&!m.lida);
+          return g.length?'<div style="font-weight:800;color:#b45309;margin:4px 0 8px;">📍 Trabalhos iniciados sem confirmação GPS</div>'
+            +g.map(m=>'<div class="vp-item" style="border-color:#fde68a;"><div style="font-weight:800;">'+esc(m.osId)+' · '+esc(m.tecnicoNome||'')+'</div>'
+              +'<div style="font-size:13px;color:#64748b;margin-top:3px;">'+esc(m.motivo||'')+'</div><div style="font-size:13.5px;margin-top:4px;">“'+esc(m.justificacao||'')+'”</div>'
+              +'<div class="vp-acts"><button onclick="valGpsVisto(\''+esc(m.id||m._firebaseId)+'\')">✓ Visto</button></div></div>').join('')
+            +'<div style="font-weight:800;color:#0f2447;margin:14px 0 8px;">📋 Relatórios</div>':''; })()
+      +(p.length?p.map(m=>'<div class="vp-item"><div style="font-weight:800;color:#0f2447;">'+esc(m.osId)+' · '+esc(m.clienteNome||'—')+'</div>'
+        +'<div style="font-size:12.5px;color:#64748b;margin-top:3px;">'+esc(m.tecnicoNome||'')+' · '+(m.motivo==='edicao'?'corrigido pelo técnico':'OS fechada')+' · '+new Date(m.criadoEm).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>'
+        +'<div class="vp-acts"><button onclick="valVer(\''+esc(m.osId)+'\')">👁 Ver</button>'
+        +'<button onclick="valRever(\''+esc(m.osId)+'\')">✏️ Rever</button>'
+        +'<button class="ok" onclick="valValidar(\''+esc(m.osId)+'\')">✅ Validar</button></div></div>').join('')
+        :'<div style="text-align:center;padding:24px;color:#16a34a;font-weight:700;">Tudo validado ✅</div>');
+  }
+  window.valGpsVisto=async function(id){ try{ await window.fsSetMerge('mensagens_internas', id, {lida:true, vistoPor:window.currentUser?.name||''}); const m=(window.DB.mensagens_internas||[]).find(x=>(x.id||x._firebaseId)===id); if(m) m.lida=true; }catch(e){} desenhar(); atualizar(); };
+  window.valAbrirPainel=function(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} desenhar(); document.getElementById('val-painel').classList.add('on'); };
+  window.valVer=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpVerRelatorio==='function') rpVerRelatorio(id); };
+  window.valRever=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpAbrirFormulario==='function') rpAbrirFormulario(id); };
+  window.valValidar=async function(id){ if(typeof rpTornarDefinitivo==='function') await rpTornarDefinitivo(id); atualizar(); };
+
+  async function marcarValidado(osId){
+    const r=relDe(osId);
+    try{ await window.fsSetMerge('relatorios_pesquisa', osId, {aguardaValidacao:false, validadoPor:window.currentUser?.name||'', validadoEm:new Date().toISOString()}); if(r){ r.aguardaValidacao=false; } }catch(e){}
+    const m=(window.DB.mensagens_internas||[]).find(x=>x.tipo==='relatorio_validar'&&x.osId===osId);
+    if(m){ try{ await window.fsSetMerge('mensagens_internas', m._firebaseId||m.id||('msg_val_'+osId), {validado:true, lida:true, validadoPor:window.currentUser?.name||'', validadoEm:new Date().toISOString()}); m.validado=true; }catch(e){} }
+  }
+
+  // Validar = tornar definitivo (função já existente) + fechar o aviso
+  const _tornar=window.rpTornarDefinitivo;
+  if(typeof _tornar==='function'){
+    window.rpTornarDefinitivo=async function(osId){
+      const r=await _tornar.apply(this, arguments);
+      if(!precisaValidar(osId)) await marcarValidado(osId);
+      atualizar();
+      return r;
+    };
+  }
+
+  // Bloquear envio ao cliente enquanto o relatório for preliminar
+  function guarda(nome){
+    const orig=window[nome]; if(typeof orig!=='function') return;
+    window[nome]=async function(osId){
+      const id=osId||window._rpVerOsId||window._rpEditOsId;
+      if(id && precisaValidar(id)){
+        if(!ehGestao()){ try{ toast('Este relatório aguarda validação da administração.','🔒'); }catch(e){} return; }
+        if(!confirm('O relatório da OS '+id+' é PRELIMINAR e ainda não foi validado.\n\nValidar agora e continuar com o envio?')) return;
+        await window.rpTornarDefinitivo(id);
+        if(precisaValidar(id)) return;
+      }
+      return orig.apply(this, arguments);
+    };
+  }
+  ['rpEnviarEmailDireto','rpReenviarRelatorio','rpEnviarEmailComHTML'].forEach(guarda);
+
+
+  // ── Onde fica no admin: menu lateral + página "Relatórios OS" ──
+  const _rs=window.renderSidebar;
+  if(typeof _rs==='function'){
+    window.renderSidebar=function(){
+      const r=_rs.apply(this, arguments);
+      try{
+        if(window.currentUser?.role==='tecnico'){
+          document.querySelectorAll('.ni[data-page="dashboard"]').forEach(e=>e.remove());
+        } else if(ehGestao()){
+          document.querySelectorAll('.ni[data-val]').forEach(e=>e.remove());
+          const ref=document.querySelector('.ni[data-page="relat-pesquisa"]');
+          if(ref){
+            const n=pendentes().length;
+            const d=document.createElement('div');
+            d.className='ni'; d.setAttribute('data-val','1');
+            d.onclick=()=>valAbrirPainel();
+            d.innerHTML='<span class="ico">✅</span> Validar relatórios'+(n?'<span class="nb" style="background:#c2410c;">'+n+'</span>':'');
+            ref.parentNode.insertBefore(d, ref.nextSibling);
+          }
+        }
+      }catch(e){}
+      return r;
+    };
+  }
+  const _rhc=window.rpRenderHomeCards;
+  if(typeof _rhc==='function'){
+    window.rpRenderHomeCards=function(){
+      const r=_rhc.apply(this, arguments);
+      try{
+        const cards=document.getElementById('rp-home-cards'); if(!cards) return r;
+        let b=document.getElementById('val-home');
+        if(!ehGestao()){ if(b) b.remove(); return r; }
+        const n=pendentes().length;
+        if(!b){ b=document.createElement('div'); b.id='val-home'; cards.parentNode.insertBefore(b, cards); }
+        b.innerHTML='<div onclick="valAbrirPainel()" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:12px;border-radius:12px;border:1.5px solid '+(n?'#fdba74':'#bbf7d0')+';background:'+(n?'#fff7ed':'#f0fdf4')+';">'
+          +'<span style="font-size:26px;font-weight:900;color:'+(n?'#c2410c':'#15803d')+';">'+n+'</span>'
+          +'<div><div style="font-weight:800;color:#0f2447;">Relatórios a validar</div><div style="font-size:12px;color:#64748b;">Fechados pelos técnicos como preliminares — validar antes de enviar ao cliente</div></div>'
+          +'<span style="margin-left:auto;font-weight:700;color:#0e7490;">Abrir</span></div>';
+      }catch(e){}
+      return r;
+    };
+  }
+  let _ultN=-1;
+  setInterval(()=>{ if(!ehGestao()) return; const n=pendentes().length; if(n!==_ultN){ _ultN=n; try{ renderSidebar(); }catch(e){} try{ if(document.getElementById('rp-home-cards')) rpRenderHomeCards(); }catch(e){} } }, 5000);
+
+  // ── Técnico: só vê o seu trabalho ──
+  const _nav=window.navigate;
+  if(typeof _nav==='function'){
+    window.navigate=function(page, el){
+      if(window.currentUser?.role==='tecnico' && page==='dashboard') page='minhas-os';
+      return _nav.call(this, page, el);
+    };
+  }
+  const _gs=window.osGlobalSearch;
+  if(typeof _gs==='function'){
+    window.osGlobalSearch=function(q){
+      if(window.currentUser?.role!=='tecnico') return _gs.apply(this, arguments);
+      const box=document.getElementById('search-results'); if(!box) return;
+      q=String(q||'').trim().toLowerCase(); if(!q){ box.style.display='none'; return; }
+      const meu=window.currentUser.id;
+      const res=(window.DB.ordens||[]).filter(o=>(o.tecnicos||[]).includes(meu) && o.estado!=='cancelada').filter(o=>{
+        const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId)||{};
+        return (o.id+' '+(cli.nome||o.clienteNomeSnapshot||'')).toLowerCase().includes(q);
+      }).slice(0,12);
+      box.innerHTML=res.length?res.map(o=>{ const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId)||{};
+        return '<div class="sr-item" onclick="osSearchOpen(\'os\',\''+esc(o.id)+'\')"><span class="sr-badge sr-os">OS</span><div><div class="sr-title">'+esc(o.id)+' — '+esc(cli.nome||o.clienteNomeSnapshot||'—')+'</div><div class="sr-sub">'+esc(o.data||'')+' '+esc(o.horaIni||'')+'</div></div></div>'; }).join('')
+        :'<div class="sr-empty">Nenhuma OS tua corresponde a "'+esc(q)+'"</div>';
+      box.style.display='block';
+    };
+  }
+
+  setInterval(atualizar, 4000);
+  setTimeout(atualizar, 2500);
+})();
+</script>
+<!-- ═══ fim v15.91 — VALIDAÇÃO ═══ -->
+
+
+
+
+
+
+
 
 </body>
 </html>

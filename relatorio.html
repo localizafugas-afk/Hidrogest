@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Relatório de Peritagem — Localiza Fugas</title>
+<style>
+  :root{box-sizing:border-box}*{box-sizing:inherit}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#eef2f6;color:#0f2447;line-height:1.5}
+  .wrap{max-width:760px;margin:0 auto;background:#fff;min-height:100vh}
+  .estado{padding:60px 24px;text-align:center;color:#475569}
+  .estado .em{font-size:44px;margin-bottom:14px}
+  .estado h2{margin:0 0 8px;color:#0f2447}
+  .spin{width:42px;height:42px;border:4px solid #dbe4ee;border-top-color:#0e7490;border-radius:50%;animation:g 1s linear infinite;margin:0 auto 18px}
+  @keyframes g{to{transform:rotate(360deg)}}
+  .top{background:#0f2447;color:#fff;padding:22px 20px}
+  .top .marca{font-size:19px;font-weight:800}
+  .top .sub{color:#93c5fd;font-size:13px;margin-top:3px}
+  .top .os{margin-top:14px;font-size:13px;color:#cbd5e1}
+  .top .os b{color:#fff}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:4px 11px;border-radius:20px;margin-top:12px}
+  .badge.prelim{background:#f59e0b;color:#fff}
+  .badge.final{background:#16a34a;color:#fff}
+  .sec{padding:18px 20px;border-bottom:1px solid #eef2f7}
+  .h{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#64748b;font-weight:800;margin:0 0 10px}
+  .grid{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;font-size:14.5px}
+  .grid b{color:#64748b;font-weight:600}
+  .txt{font-size:14.5px;white-space:pre-wrap}
+  .zona{border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:12px}
+  .zona .zt{font-weight:800;margin-bottom:6px}
+  .item{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f1f5f9;font-size:14.5px}
+  .item:first-of-type{border-top:0}
+  .item .obs{display:block;font-size:12.5px;color:#64748b;margin-top:2px}
+  .tag{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:auto;white-space:nowrap;flex-shrink:0}
+  .tag.an{background:#fee2e2;color:#b91c1c}.tag.ok{background:#dcfce7;color:#166534}.tag.na{background:#e2e8f0;color:#475569}
+  .meta{font-size:13.5px;color:#475569;margin-top:4px}
+  .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .foto{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#f8fafc}
+  .foto a{display:block}
+  .foto img{width:100%;height:150px;object-fit:cover;display:block;background:#e2e8f0}
+  .foto .cap{padding:9px 10px;font-size:13px}
+  .foto .cap b{display:block;margin-bottom:2px}
+  .concl{background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:14px;font-size:14.5px;color:#14532d;white-space:pre-wrap}
+  .obsplanta{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;font-size:13.5px;color:#1e3a5f;margin-top:8px}
+  .termo{background:#f8fafc;border:1px solid #cbd5e1;border-radius:12px;padding:14px;font-size:13px;line-height:1.55;white-space:pre-wrap}
+  .assin{margin-top:14px}
+  .assin img{max-height:80px;max-width:230px;display:block}
+  .assin .nome{font-size:13px;color:#64748b;margin-top:4px}
+  .foot{padding:22px 20px;font-size:12.5px;color:#94a3b8;text-align:center}
+  .barra{position:sticky;bottom:0;display:flex;gap:8px;padding:14px 20px;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 14px);background:#fff;border-top:1px solid #eef2f7}
+  .barra button,.barra a{flex:1;text-align:center;text-decoration:none;border:0;cursor:pointer;font-weight:700;padding:13px;border-radius:11px;font-size:14.5px;font-family:inherit}
+  .barra .pdf{background:#0e7490;color:#fff}
+  .barra .tel{background:#0f2447;color:#fff}
+  @media print{.barra,.top .badge{display:none}.wrap{max-width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="estado" id="loading">
+    <div class="spin"></div>
+    <div>A carregar o relatório…</div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  Página pública do RELATÓRIO — hidrogest.net/relatorio.html
+//  Gémea do track.html: mesma ligação ao Firebase e mesmo token.
+// ═══════════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBZIZpjrD62jPMTDPQKS5uBJ4Wj0W1tZmA",
+  authDomain: "portal-localiza-f08c5.firebaseapp.com",
+  projectId: "portal-localiza-f08c5",
+  storageBucket: "portal-localiza-f08c5.firebasestorage.app",
+  messagingSenderId: "159682339032",
+  appId: "1:159682339032:web:3a4b9011337611b208b7ad"
+};
+
+const params = new URLSearchParams(location.search);
+const osId   = params.get('os') || '';
+const token  = params.get('t')  || '';
+let _db = null;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function carregarScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+function mostrarErro(t,m){
+  document.getElementById('wrap').innerHTML='<div class="estado"><div class="em">⚠️</div><h2>'+esc(t)+'</h2><div>'+esc(m)+'</div></div>';
+}
+
+// Mesmo cálculo de token do track.html (segredo hg_track_2026)
+async function verificarToken(osId, token){
+  const msgUint8 = new TextEncoder().encode(osId + 'hg_track_2026');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+  const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  return hashHex.slice(0,16) === token;
+}
+
+function fmtData(d){
+  if(!d) return '';
+  const m=String(d).match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : String(d);
+}
+const TAG={anomalia:['an','Anomalia'], sem:['ok','Sem anomalia'], na:['na','N/A']};
+
+async function init(){
+  if(!osId || !token){ mostrarErro('Link inválido','Este link não contém os dados necessários.'); return; }
+  if(!(await verificarToken(osId, token))){ mostrarErro('Link inválido','O link do relatório não é válido ou foi alterado.'); return; }
+
+  try{
+    await carregarScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+    await carregarScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    _db = firebase.firestore();
+  }catch(e){ mostrarErro('Sem ligação','Não foi possível ligar ao servidor. Verifica a internet e tenta outra vez.'); return; }
+
+  let os, rel;
+  try{
+    const [osSnap, relSnap] = await Promise.all([
+      _db.collection('ordens').doc(osId).get(),
+      _db.collection('relatorios_pesquisa').doc(osId).get()
+    ]);
+    if(!osSnap.exists){ mostrarErro('Relatório não encontrado','Não encontrámos este relatório. Contacte-nos, por favor.'); return; }
+    os  = osSnap.data();
+    rel = relSnap.exists ? relSnap.data() : {};
+  }catch(e){ mostrarErro('Sem acesso','Não foi possível abrir o relatório neste momento. Tente mais tarde.'); return; }
+
+  // Só mostra ao cliente relatórios já validados pela administração
+  if(rel.relatorioEstado === 'preliminar' || rel.aguardaValidacao){
+    mostrarErro('Relatório em preparação','Este relatório ainda está a ser finalizado pela nossa equipa. Recebê-lo-á assim que estiver concluído.');
+    return;
+  }
+
+  let emp = {};
+  try{ const e=await _db.collection('config').doc('empresa').get(); if(e.exists) emp=e.data(); }catch(e){}
+  desenhar(os, rel, emp);
+}
+
+function desenhar(os, rel, emp){
+  const c = rel.campos || {};
+  const nomeEmp = emp.nome || 'Localiza Fugas — Valentim Fialho Unip. Lda.';
+  const cliente = c.cliNome || os.clienteNomeSnapshot || 'Cliente';
+  const definitivo = rel.relatorioEstado === 'definitivo';
+
+  // Onde se manifesta
+  const manif = Array.isArray(c.locaisManifestacao) && c.locaisManifestacao.length
+    ? c.locaisManifestacao : (c.localManifestacao ? String(c.localManifestacao).split(/\s*;\s*/) : []);
+
+  // Zonas e itens
+  const testes = Array.isArray(c.testes) ? c.testes.filter(t=>t && (t.nome||'').trim()) : [];
+  const zonas = [];
+  testes.forEach(t=>{ const z=t.zona||t.grupo||'Outros'; let g=zonas.find(x=>x.z===z); if(!g){g={z,itens:[]};zonas.push(g);} g.itens.push(t); });
+
+  // Fotos
+  const fotos = (Array.isArray(c.fotos)&&c.fotos.length ? c.fotos : (rel.fotos||[]))
+    .filter(f=>f && (f.url||f.dataUrl));
+
+  let h = '';
+  h += '<div class="top"><div class="marca">💧 '+esc(nomeEmp)+'</div>'
+     + '<div class="sub">Relatório de Peritagem Não Destrutiva</div>'
+     + '<div class="os">OS <b>'+esc(os.id||osId)+'</b> · <b>'+esc(cliente)+'</b>'
+     + (c.dataExecucao?' · '+fmtData(c.dataExecucao):(os.data?' · '+fmtData(os.data):''))+'</div>'
+     + '<span class="badge '+(definitivo?'final':'prelim')+'">'+(definitivo?'Documento final':'Documento preliminar')+'</span></div>';
+
+  // Dados
+  h += '<div class="sec"><div class="h">Dados do serviço</div><div class="grid">'
+     + (os.servicoNomeSnapshot?'<b>Serviço</b><span>'+esc(os.servicoNomeSnapshot)+'</span>':'')
+     + (c.cliMorada?'<b>Morada</b><span>'+esc(c.cliMorada)+'</span>':'')
+     + (c.tipologia?'<b>Tipo de imóvel</b><span>'+esc(c.tipologia)+(c.numeroFracao?' · Fração '+esc(c.numeroFracao):'')+'</span>':'')
+     + (c.tipoProblema?'<b>Anomalia</b><span>'+esc(c.tipoProblema)+'</span>':'')
+     + (c.tecnico?'<b>Técnico</b><span>'+esc(c.tecnico)+'</span>':'')
+     + '</div></div>';
+
+  if(manif.length)
+    h += '<div class="sec"><div class="h">Onde se manifesta o problema</div><div class="txt">'+manif.map(esc).join('<br>')+'</div></div>';
+
+  if(zonas.length){
+    h += '<div class="sec"><div class="h">Zonas inspecionadas e itens testados</div>';
+    zonas.forEach(g=>{
+      h += '<div class="zona"><div class="zt">🔎 '+esc(g.z)+'</div>';
+      g.itens.forEach(t=>{
+        const tg = TAG[t.status];
+        h += '<div class="item"><div>'+esc(t.nome)+(t.obs?'<span class="obs">'+esc(t.obs)+'</span>':'')+'</div>'
+           + (tg?'<span class="tag '+tg[0]+'">'+tg[1]+'</span>':'')+'</div>';
+      });
+      h += '</div>';
+    });
+    const met=(c.metodologias||[]).join(', '), eq=(c.equipamentos||[]).join(', ');
+    if(met||eq) h += '<div class="meta">'+(met?'<b>Metodologias:</b> '+esc(met):'')+(met&&eq?' · ':'')+(eq?'<b>Equipamentos:</b> '+esc(eq):'')+'</div>';
+    h += '</div>';
+  }
+
+  if(fotos.length){
+    h += '<div class="sec"><div class="h">Registo fotográfico ('+fotos.length+')</div><div class="fotos">';
+    fotos.forEach(f=>{
+      const src=f.url||f.dataUrl;
+      const titulo=f.local||f.legenda||'';
+      const desc=f.descricao||'';
+      h += '<div class="foto"><a href="'+esc(src)+'" target="_blank" rel="noopener"><img loading="lazy" src="'+esc(src)+'" alt=""></a>'
+         + (titulo||desc?'<div class="cap">'+(titulo?'<b>'+esc(titulo)+'</b>':'')+esc(desc)+'</div>':'')+'</div>';
+    });
+    h += '</div></div>';
+  }
+
+  if((c.conclusao||'').trim())
+    h += '<div class="sec"><div class="h">Conclusão</div><div class="concl">'+esc(c.conclusao)+'</div></div>';
+
+  if(c.obsPlanta)
+    h += '<div class="sec"><div class="obsplanta">📐 '+esc(c.obsPlanta)+'</div></div>';
+
+  const termo = c.termoResponsabilidadeTexto || os.termoResponsabilidadeTexto || '';
+  if(termo){
+    h += '<div class="sec"><div class="h">Termo de responsabilidade</div><div class="termo">'+esc(termo)+'</div>';
+    const sig = c.assinaturaTecnico || os.assinaturaTecnico || '';
+    if(sig) h += '<div class="assin"><img src="'+esc(sig)+'" alt="Assinatura"><div class="nome">'+esc(c.tecnico||'Responsável técnico')+'</div></div>';
+    h += '</div>';
+  }
+
+  h += '<div class="foot">'+esc(nomeEmp)
+     + (emp.nif?'<br>NIF '+esc(emp.nif):'')
+     + ((emp.tel||emp.email)?'<br>'+(emp.tel?'📞 '+esc(emp.tel):'')+(emp.tel&&emp.email?' · ':'')+(emp.email?'✉️ '+esc(emp.email):''):'')
+     + '</div>';
+
+  const tel = (emp.tel||'').replace(/\s/g,'');
+  h += '<div class="barra"><button class="pdf" onclick="window.print()">⬇️ Guardar / Imprimir</button>'
+     + (tel?'<a class="tel" href="tel:'+esc(tel)+'">📞 Contactar</a>':'')+'</div>';
+
+  document.getElementById('wrap').innerHTML = h;
+  document.title = 'Relatório OS '+(os.id||osId)+' — '+cliente;
+}
+
+init();
+</script>
+</body>
+</html>

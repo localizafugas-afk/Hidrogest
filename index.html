@@ -1266,7 +1266,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v15.98<br>
+      HidroGest v15.99<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1291,7 +1291,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v15.98<br>
+      HidroGest v15.99<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -37046,6 +37046,7 @@ window.abrirApresentacaoGrupo = function(){
     try{ fotos=(typeof rpGetFotos==='function')?rpGetFotos(id,c,rel):(c.fotos||rel.fotos||[]); }catch(e){ fotos=c.fotos||rel.fotos||[]; }
     S.fotos=(fotos||[]).map(f=> typeof f==='string' ? (/^https?:/.test(f)?{url:f,legenda:''}:{dataUrl:f,legenda:''})
       : (f.local!=null ? {...f, legenda:f.local, descricao:f.descricao||''} : {...f, descricao:f.descricao||''}));
+    S.fotos.forEach(f=>{ if(!f.fid) f.fid=novoFid(); });
     S.pag = (os.pagamento&&os.pagamento.metodo) || (os.pagador&&os.pagador.nome?'entidade':'');
     S.pagRef = (os.pagamento&&os.pagamento.ref)||'';
     S.tipoRel = 'preliminar'; // v15.91 — o técnico fecha sempre como PRELIMINAR; a administração valida
@@ -37611,7 +37612,7 @@ window.abrirApresentacaoGrupo = function(){
         +'<div style="position:relative;width:88px;height:88px;flex-shrink:0;border-radius:9px;overflow:hidden;border:1px solid #e2e8f0;"><img src="'+esc(x.f.url||x.f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;">'
         +(!x.f.url?'<span class="ofc-up" style="position:absolute;left:3px;top:3px;font-size:9px;">a enviar</span>':'')
         +'<button type="button" onclick="ofcFotoDel('+x.i+')" style="position:absolute;top:3px;right:3px;background:rgba(15,36,71,.75);color:#fff;border:0;border-radius:6px;width:26px;height:26px;font-size:12px;">✕</button></div>'
-        +'<textarea data-fi="'+x.i+'" class="ofc-in ofc-fdesc'+(!(x.f.descricao||'').trim()?' falta':'')+'" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição da foto * — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
+        +'<textarea data-fid="'+esc(x.f.fid||'')+'" data-campo="descricao" class="ofc-in ofc-fdesc'+(!(x.f.descricao||'').trim()?' falta':'')+'" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição da foto * — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
       +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 14px;font-weight:800;font-size:14px;">📷 '+(fotos.length?'Mais uma foto':'Tirar foto')+'</button></div>'
       +'<input class="ofc-in" style="margin-top:8px;font-size:14px;padding:9px;" value="'+esc(t.obs)+'" placeholder="Observação (opcional)" oninput="ofcTeste(\''+t.key+'\',\'obs\',this.value)">'
       +'</div>';
@@ -37699,8 +37700,8 @@ window.abrirApresentacaoGrupo = function(){
       return '<div class="ofc-foto"><img src="'+esc(src)+'" alt="">'
         +(!f.url?'<span class="ofc-up">a enviar</span>':'')
         +'<button type="button" class="ofc-fx" onclick="ofcFotoDel('+i+')" aria-label="Apagar foto">✕</button>'
-        +'<input class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Local da foto *" oninput="ofcFotoLeg('+i+',this)">'
-        +'<textarea data-fi="'+i+'" class="'+(!(f.descricao||'').trim()?'falta':'')+'" rows="2" placeholder="Descrição da foto *" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
+        +'<input data-fid="'+esc(f.fid||'')+'" data-campo="legenda" class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Local da foto *" oninput="ofcFotoLeg('+i+',this)">'
+        +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="'+(!(f.descricao||'').trim()?'falta':'')+'" rows="2" placeholder="Descrição da foto *" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
     }).join('');
     fotoGate();
   }
@@ -37709,8 +37710,17 @@ window.abrirApresentacaoGrupo = function(){
     ['ofc-fcam','ofc-fgal'].forEach(id=>{ const l=$(id); if(l) l.classList.toggle('off', semLeg); });
     const c=$('ofc-fcnt'); if(c){ c.textContent='Total '+n+' / 4'; c.style.background=n>=4?'#dcfce7':'#fee2e2'; c.style.color=n>=4?'#166534':'#b91c1c'; }
   }
-  window.ofcFotoDesc = function(i, el){ if(S.fotos[i]){ S.fotos[i].descricao=el.value; atualizarLocal(S.fotos[i]); el.classList.toggle('falta', !el.value.trim()); sujo(); } };
-  window.ofcFotoLeg = function(i, el){ if(S.fotos[i]){ S.fotos[i].legenda=el.value; atualizarLocal(S.fotos[i]); el.classList.toggle('falta', !el.value.trim()); fotoGate(); sujo(); } };
+  function _fotoPorRef(el,i){ const fid=el&&el.getAttribute&&el.getAttribute('data-fid'); return (fid&&S.fotos.find(f=>f.fid===fid)) || S.fotos[i]; }
+  window.ofcFotoDesc = function(i, el){ const f=_fotoPorRef(el,i); if(f){ f.descricao=el.value; atualizarLocal(f); el.classList.toggle('falta', !el.value.trim()); sujo(); } };
+  window.ofcFotoLeg = function(i, el){ const f=_fotoPorRef(el,i); if(f){ f.legenda=el.value; atualizarLocal(f); el.classList.toggle('falta', !el.value.trim()); fotoGate(); sujo(); } };
+  // Antes de validar/gravar, absorve o que estiver escrito nas caixas visíveis (evita perder texto ao mudar de ecrã)
+  function absorverCamposFoto(){
+    document.querySelectorAll('#ofc [data-fid]').forEach(el=>{
+      const f=S.fotos.find(x=>x.fid===el.getAttribute('data-fid')); if(!f) return;
+      const campo=el.getAttribute('data-campo')||'descricao';
+      if((el.value||'')!==(f[campo]||'')) f[campo]=el.value;
+    });
+  }
   window.ofcFotoDel = function(i){ if(!confirm('Apagar esta foto?')) return; S.fotos.splice(i,1); renderFotos(); sujo(); };
   window.ofcFotoAdd = async function(input){
     const f=input.files&&input.files[0]; input.value=''; if(!f) return;
@@ -37821,6 +37831,7 @@ window.abrirApresentacaoGrupo = function(){
     if(!(c.divisoes||[]).length) f.push('zona inspecionada');
     (c.divisoes||[]).forEach(z=>{ if(!S.testes.some(t=>t.zona===z && (t.nome||'').trim() && t.status)) f.push('item testado com resultado em "'+z+'"'); });
     if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
+    absorverCamposFoto();
     if(S.fotos.some(x=>!(x.legenda||'').trim())) f.push('local em todas as fotos');
     if(S.fotos.some(x=>!(x.descricao||'').trim())) f.push('descrição em todas as fotos');
     if(!(c.metodologias||[]).length) f.push('metodologias');
@@ -37888,6 +37899,7 @@ window.abrirApresentacaoGrupo = function(){
     return {campos, fotos};
   }
   async function guardarRel(extra){
+    try{ absorverCamposFoto(); }catch(e){}
     const os=getOS(); if(!os) return;
     clearTimeout(_saveT);
     const ant=getRel()||{};
@@ -38265,6 +38277,7 @@ window.abrirApresentacaoGrupo = function(){
 })();
 </script>
 <!-- ═══ fim v15.91 — VALIDAÇÃO ═══ -->
+
 
 
 

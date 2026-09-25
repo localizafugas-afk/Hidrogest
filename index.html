@@ -1308,7 +1308,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.04<br>
+      HidroGest v16.05<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1333,7 +1333,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.04<br>
+      HidroGest v16.05<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -36904,7 +36904,8 @@ window.abrirApresentacaoGrupo = function(){
         +(!x.f.url?'<span class="ofc-up" style="position:absolute;left:3px;top:3px;font-size:9px;">a enviar</span>':'')
         +'<button type="button" onclick="ofcFotoDel('+x.i+')" style="position:absolute;top:3px;right:3px;background:rgba(15,36,71,.75);color:#fff;border:0;border-radius:6px;width:26px;height:26px;font-size:12px;">✕</button></div>'
         +'<textarea data-fid="'+esc(x.f.fid||'')+'" data-campo="descricao" class="ofc-in ofc-fdesc'+(!(x.f.descricao||'').trim()?' falta':'')+'" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição da foto * — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
-      +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 14px;font-weight:800;font-size:14px;">📷 '+(fotos.length?'Mais uma foto':'Tirar foto')+'</button></div>'
+      +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\',\'camera\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 12px;font-weight:800;font-size:14px;">📷 '+(fotos.length?'Mais foto':'Câmara')+'</button>'
+      +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\',\'galeria\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 12px;font-weight:800;font-size:14px;">🖼️ Galeria</button></div>'
       +'<input class="ofc-in" style="margin-top:8px;font-size:14px;padding:9px;" value="'+esc(t.obs)+'" placeholder="Observação (opcional)" oninput="ofcTeste(\''+t.key+'\',\'obs\',this.value)">'
       +'</div>';
   }
@@ -36912,12 +36913,14 @@ window.abrirApresentacaoGrupo = function(){
     if(S.testes.some(t=>t.zona===z && norm(t.nome)===norm(nome))){ T('"'+nome+'" já está nesta zona.','ℹ️'); return; }
     const t={key:'it_'+Date.now(), grupo:z, zona:z, nome:nome, tipo:'tempo', min:null, status:'', obs:'', custom:true};
     S.testes.push(t);
-    ofcFotoItem(t.key);            // pede logo a foto (tem de ser no mesmo toque)
     renderZonas(); sujo();
+    // rola até ao item novo para o técnico escolher Câmara ou Galeria
+    setTimeout(()=>{ const cs=document.querySelectorAll('#ofc-zonas-itens .ofc-teste'); const last=cs[cs.length-1]; if(last) last.scrollIntoView({block:'center'}); },60);
   }
-  window.ofcFotoItem=function(key){
+  window.ofcFotoItem=function(key, modo){
     const t=S.testes.find(x=>x.key===key); if(!t) return;
-    const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*'; fi.setAttribute('capture','environment');
+    const fi=document.createElement('input'); fi.type='file'; fi.accept='image/*';
+    if(modo!=='galeria') fi.setAttribute('capture','environment');   // 'camera' abre a câmara; 'galeria' deixa escolher
     fi.style.display='none'; document.body.appendChild(fi);
     fi.onchange=async()=>{
       const f=fi.files&&fi.files[0]; fi.remove(); if(!f) return;
@@ -36926,7 +36929,7 @@ window.abrirApresentacaoGrupo = function(){
       const item={fid:novoFid(), dataUrl:d, legenda:(t.zona&&t.zona!==OUTROS?t.zona+' — ':'')+t.nome, descricao:'', itemKey:key};
       IDB.put({...item, osId:S.id, criadoEm:Date.now()});
       S.fotos.push(item); renderZonas(); renderFotos(); sujo(); enviarFoto(item);
-      const ta=document.querySelector('#ofc-zonas-itens textarea[data-fi="'+(S.fotos.length-1)+'"]'); if(ta){ ta.scrollIntoView({block:'center'}); ta.focus(); }
+      const ta=document.querySelector('#ofc-zonas-itens textarea[data-fid="'+item.fid+'"]'); if(ta){ ta.scrollIntoView({block:'center'}); ta.focus(); }
     };
     fi.click();
   };

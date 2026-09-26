@@ -1353,12 +1353,13 @@ tr:hover td{background:rgba(37,99,235,.03);}
 
   <!-- ⏱ Cronómetro flutuante global — sempre visível para o técnico enquanto há trabalho em curso -->
   <div id="crono-flutuante" onclick="cronoFlutuanteAbrir()" style="display:none;position:fixed;right:16px;bottom:16px;z-index:900;background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border-radius:14px;padding:12px 18px;box-shadow:0 8px 24px rgba(21,128,61,.4);cursor:pointer;font-family:'Outfit',sans-serif;user-select:none;display:flex;align-items:center;gap:12px;min-width:180px;">
-    <div style="width:12px;height:12px;border-radius:50%;background:#fff;animation:cronoBlink 1.2s infinite;"></div>
-    <div>
-      <div style="font-size:10px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.5px;">Trabalho em curso</div>
+    <div id="crono-flutuante-dot" style="width:12px;height:12px;border-radius:50%;background:#fff;animation:cronoBlink 1.2s infinite;flex-shrink:0;"></div>
+    <div style="flex:1;min-width:0;">
+      <div id="crono-flutuante-label" style="font-size:10px;font-weight:600;opacity:.85;text-transform:uppercase;letter-spacing:.5px;">Trabalho em curso</div>
       <div id="crono-flutuante-tempo" style="font-size:22px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;">00:00:00</div>
       <div id="crono-flutuante-os" style="font-size:11px;opacity:.9;"></div>
     </div>
+    <button id="crono-flutuante-continuar" onclick="event.stopPropagation();cronoFlutuanteContinuar();" style="display:none;background:#fff;color:#b45309;border:none;border-radius:10px;padding:9px 12px;font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;flex-shrink:0;">▶️ Continuar</button>
   </div>
   <div class="content">
 
@@ -4463,7 +4464,8 @@ function doLogin(uid){
   setTimeout(()=>{ if(window.currentUser && document.querySelector('.page.active')?.id==='page-dashboard') renderDashboard(); }, 2000);
   setTimeout(()=>{ if(window.currentUser && document.querySelector('.page.active')?.id==='page-dashboard') renderDashboard(); }, 4000);
   setTimeout(()=>{ if(window.currentUser && document.querySelector('.page.active')?.id==='page-dashboard') renderDashboard(); }, 7000);
-  setTimeout(()=>{ if(typeof rpNotificarTecnicoAtrasados==='function') rpNotificarTecnicoAtrasados(); }, 2000);
+  // Pop-up "Relatórios em Atraso" ao aceder ao sistema — desativado a pedido.
+  // setTimeout(()=>{ if(typeof rpNotificarTecnicoAtrasados==='function') rpNotificarTecnicoAtrasados(); }, 2000);
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
   setTimeout(()=>{
     auditLog('login',`Login efectuado — ${window.currentUser.name}`);
@@ -4479,8 +4481,8 @@ function doLogin(uid){
       }).catch(()=>{});
       // 2. Iniciar GPS para coordenadas reais
       locStartTracking();
-      // 3b. Notificar relatórios pendentes ao login
-      setTimeout(tecNotificarRelatoriosPendentes, 5000);
+      // 3b. Pop-up de relatórios pendentes ao login — desativado a pedido.
+      // setTimeout(tecNotificarRelatoriosPendentes, 5000);
       // 3. Heartbeat a cada 2 minutos — mantém online:true mesmo sem GPS activo
       //    Evita que o técnico "desapareça" por falta de movimento
       if(window._locHeartbeat) clearInterval(window._locHeartbeat);
@@ -4500,7 +4502,8 @@ function doLogin(uid){
         }
       }, 120000); // cada 2 minutos
     }
-    setTimeout(rpMostrarAlertaBV, 1800);
+    // Pop-up de boas-vindas "Relatórios pendentes de entrega" — desativado a pedido.
+    // setTimeout(rpMostrarAlertaBV, 1800);
     // Iniciar scheduler de relatórios diários
     setTimeout(relDiarioIniciarScheduler, 3000);
   },1000);
@@ -4616,7 +4619,8 @@ async function guardarNovaSenha(uid){
   setTimeout(()=>{ if(typeof _feriasFallbackLoad==='function') _feriasFallbackLoad(); }, 1000);
     setTimeout(()=>{
       auditLog('login',`Primeiro login — senha definida — ${window.currentUser.name}`);
-      setTimeout(rpMostrarAlertaBV, 1800);
+      // Pop-up de boas-vindas "Relatórios pendentes de entrega" — desativado a pedido.
+      // setTimeout(rpMostrarAlertaBV, 1800);
     },1000);
     // Toast de boas-vindas
     setTimeout(()=>{
@@ -13509,6 +13513,11 @@ async function osRegistarPagamentoRapido(id, met){
 
 // ── Cronómetro flutuante global (sempre visível para o técnico) ──────────────
 let _cronoFlutuanteInterval = null;
+// Limite de trabalho contínuo antes de pausar sozinho e tocar o telemóvel.
+const CRONO_LIMITE_SEG = 4*60*60; // 4 horas
+const _crono4hAlvo = {};     // osId -> próximo limiar (em segundos) que ainda vai disparar o aviso
+const _crono4hAPausar = {};  // osId -> true enquanto o pedido de pausa automática está a decorrer (evita duplo disparo)
+
 function cronoFlutuanteTick(){
   const box=document.getElementById('crono-flutuante'); if(!box) return;
   // Só para técnicos
@@ -13518,7 +13527,7 @@ function cronoFlutuanteTick(){
   const emCurso=(window.DB.ordens||[]).find(o=>
     (o.tecnicos||[]).includes(myId) &&
     (o.horaIniReal||o.iniciadoEm) && !o.horaFimReal &&
-    o.estado!=='concluida' && o.estado!=='os_fechada'
+    o.estado!=='concluida' && o.estado!=='os_fechada' && o.estado!=='cancelada'
   );
   if(!emCurso){ box.style.display='none'; return; }
 
@@ -13531,31 +13540,62 @@ function cronoFlutuanteTick(){
   } else { baseMs=Date.now(); }
 
   let s=Math.floor((Date.now()-baseMs)/1000);
-  // Descontar pausas registadas
+  // Descontar pausas registadas (uma pausa em curso "congela" s automaticamente,
+  // porque o seu próprio tempo decorrido cresce ao mesmo ritmo)
   const minPausa=(typeof osCalcMinPausados==='function')?osCalcMinPausados(emCurso):0;
   if(minPausa>0) s=Math.max(0, s-Math.round(minPausa*60));
   const hh=Math.floor(s/3600), mm=Math.floor((s%3600)/60), ss=s%60;
 
+  const pausado=!!emCurso.pausaAtiva;
+
+  // ── Ao fim de 4h de trabalho contínuo (a contar), pausa sozinho e toca o telemóvel ──
+  if(!pausado){
+    if(_crono4hAlvo[emCurso.id]==null) _crono4hAlvo[emCurso.id]=CRONO_LIMITE_SEG;
+    if(s>=_crono4hAlvo[emCurso.id] && !_crono4hAPausar[emCurso.id]){
+      _crono4hAPausar[emCurso.id]=true;
+      _crono4hAlvo[emCurso.id]+=CRONO_LIMITE_SEG; // próximo aviso, se continuar depois de retomar
+      const cli0=(window.DB.clientes||[]).find(x=>x.id===emCurso.clienteId)||{};
+      cronoAlertar4h(emCurso.id, cli0.nome||'');
+      Promise.resolve(typeof osPausarAuto4h==='function' ? osPausarAuto4h(emCurso.id) : null)
+        .finally(()=>{ _crono4hAPausar[emCurso.id]=false; });
+    }
+  }
+
   const cli=(window.DB.clientes||[]).find(x=>x.id===emCurso.clienteId)||{};
   const tempoEl=document.getElementById('crono-flutuante-tempo');
   const osEl=document.getElementById('crono-flutuante-os');
+  const labelEl=document.getElementById('crono-flutuante-label');
+  const dotEl=document.getElementById('crono-flutuante-dot');
+  const contBtn=document.getElementById('crono-flutuante-continuar');
   if(tempoEl) tempoEl.textContent=`${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
   if(osEl) osEl.textContent=`${emCurso.id} · ${(cli.nome||'').slice(0,22)}`;
+  if(labelEl) labelEl.textContent = pausado ? '⏸️ Pausado — 4h atingidas' : 'Trabalho em curso';
+  if(dotEl) dotEl.style.animation = pausado ? 'none' : 'cronoBlink 1.2s infinite';
+  if(contBtn) contBtn.style.display = pausado ? 'block' : 'none';
   box.dataset.osid=emCurso.id;
   box.style.display='flex';
 
-  // Passar a vermelho se ultrapassou o tempo estimado
-  if(emCurso.horaIni&&emCurso.horaFim){
+  if(pausado){
+    box.style.background='linear-gradient(135deg,#b45309,#d97706)';
+  } else if(emCurso.horaIni&&emCurso.horaFim){
+    // Passar a vermelho se ultrapassou o tempo estimado
     const [sh,sm]=emCurso.horaIni.split(':').map(Number),[eh,em]=emCurso.horaFim.split(':').map(Number);
     const estSeg=((eh*60+em)-(sh*60+sm))*60;
     box.style.background = (estSeg>0 && s>estSeg)
       ? 'linear-gradient(135deg,#b91c1c,#ef4444)'
       : 'linear-gradient(135deg,#15803d,#16a34a)';
+  } else {
+    box.style.background='linear-gradient(135deg,#15803d,#16a34a)';
   }
 }
 function cronoFlutuanteAbrir(){
   const id=document.getElementById('crono-flutuante')?.dataset?.osid;
   if(id && typeof osAbrirDetalhe==='function') osAbrirDetalhe(id);
+}
+// Botão "▶️ Continuar" do próprio widget flutuante — retoma sem ter de abrir a OS.
+function cronoFlutuanteContinuar(){
+  const id=document.getElementById('crono-flutuante')?.dataset?.osid;
+  if(id && typeof osRetomarTrabalho==='function') osRetomarTrabalho(id);
 }
 function cronoFlutuanteStart(){
   if(_cronoFlutuanteInterval) clearInterval(_cronoFlutuanteInterval);
@@ -13565,6 +13605,50 @@ function cronoFlutuanteStart(){
 // Arrancar assim que a app tiver dados
 if(typeof window!=='undefined'){
   document.addEventListener('DOMContentLoaded',()=>{ setTimeout(cronoFlutuanteStart, 2500); });
+}
+
+// ── Pausa automática ao fim de 4h + toca o telemóvel (vibração + som) ──────
+// Não abre a ficha da OS sozinha (o técnico pode estar noutro ecrã) — só
+// pausa o cronómetro no registo. O técnico retoma pelo botão "Continuar"
+// do próprio widget flutuante, ou dentro da OS.
+async function osPausarAuto4h(id){
+  const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os||os.pausaAtiva) return;
+  const pausas=[...(os.pausas||[]), {inicio:new Date().toISOString(), auto4h:true}];
+  try{
+    await window.fsSetMerge('ordens', id, {pausas, pausaAtiva:true});
+    if(typeof auditLog==='function') auditLog('os_pausada_auto_4h', `OS ${id}: pausa automática ao atingir 4h de trabalho contínuo.`);
+    if(typeof osRenderLista==='function') osRenderLista();
+    if(typeof osRenderMinhas==='function') osRenderMinhas();
+  }catch(e){ console.warn('Erro ao pausar automaticamente (4h):', e); }
+}
+window.osPausarAuto4h = osPausarAuto4h;
+
+function cronoAlertar4h(osId, cliNome){
+  // Vibração forte e repetida (funciona em telemóvel/PWA com o ecrã ligado)
+  try{ if(navigator.vibrate) navigator.vibrate([500,200,500,200,500,200,500]); }catch(e){}
+  // Toque sonoro (beep sintetizado, sem depender de ficheiro de áudio)
+  try{
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(Ctx){
+      const ctx = window._cronoAudioCtx || (window._cronoAudioCtx = new Ctx());
+      const beep=(atrasoMs)=>setTimeout(()=>{
+        try{
+          const o=ctx.createOscillator(), g=ctx.createGain();
+          o.type='sine'; o.frequency.value=880;
+          g.gain.setValueAtTime(0.0001, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime+0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.55);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(); o.stop(ctx.currentTime+0.6);
+        }catch(e2){}
+      }, atrasoMs);
+      [0,700,1400].forEach(beep);
+    }
+  }catch(e){ console.warn('Alerta sonoro 4h falhou:', e); }
+  if(typeof toast==='function') toast('⏰ 4 horas de trabalho atingidas — cronómetro pausado. Toque em "▶️ Continuar" quando quiser retomar.','⏰',10000);
+  if(typeof window.hgNotificar==='function'){
+    window.hgNotificar('⏰ 4 horas de trabalho', {body:`OS ${osId}${cliNome?(' — '+cliNome):''}: cronómetro pausado automaticamente ao atingir 4h contínuas.`});
+  }
 }
 
 // ── Temporizador ────────────────────────────────────────────────
@@ -26781,6 +26865,11 @@ async function osNaoRealizada(osId){
     if(!confirm('Não consegui enviar a foto ('+(e.message||e)+').\n\nQuer registar mesmo assim, sem foto?')) return;
   }
   const agora=new Date().toISOString();
+  // Se o cronómetro já tinha sido iniciado (horaIniReal/iniciadoEm), fecha-o agora
+  // também aqui — senão a OS fica "em curso" para sempre e o cronómetro
+  // flutuante do técnico nunca mais pára de contar.
+  const _fimNR = (os.horaIniReal||os.iniciadoEm) && !os.horaFimReal
+    ? new Date().toTimeString().slice(0,5) : (os.horaFimReal||'');
   await window.fsSetMerge('ordens', osId, {
     estado:'cancelada',
     naoRealizada:true,
@@ -26789,6 +26878,7 @@ async function osNaoRealizada(osId){
     naoRealizadaEm:agora,
     naoRealizadaPor:window.currentUser?.id,
     naoRealizadaPorNome:window.currentUser?.name||'',
+    horaFimReal:_fimNR,
   });
   document.querySelectorAll('.os-popover').forEach(p=>p.remove());
   closeMo('mo-os-tec');

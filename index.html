@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.14<br>
+      HidroGest v16.16<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.14<br>
+      HidroGest v16.16<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -7338,79 +7338,117 @@ function _repIntervalo(){
 }
 window._repTecFiltro = window._repTecFiltro || '';
 function repRenderTecnico(recs){
-  // v16.11 — MESMAS regras do relatório "Recebimentos por técnico":
-  //  • técnico = principal da OS (tecnicos[0]); valores sem IVA
-  //  • pago = OS marcada paga (o.pago) OU recibo pago; data do pagamento = pagoEm/recibo/confirmação
-  //  • Faturado = OS concluídas no período (Garantia/Orçamento fora)
-  //  • Recebido no período = pagamentos que entraram no período (podem ser de OS de meses anteriores)
+  // v16.16 — CONCILIAÇÃO por técnico. Base: todas as OS com data de agendamento no período (igual à Lista de OS).
+  // Técnico = 1.º da OS; valores sem IVA. Cada OS cai numa só coluna, por isso a soma das colunas = total dos agendamentos.
   const tecnicos = window.DB.users||[];
   const num = v => { const n=parseFloat(String(v==null?0:v).replace(',','.')); return isNaN(n)?0:n; };
+  const esc = x => String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const nomeDe = id => id==='__sem__' ? 'Sem técnico atribuído' : (tecnicos.find(u=>u.id===id)?.name || id);
-  const porTec = {};
-  const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),os:0,fat:0,pagas:0,porRec:0,recPer:0,nRecPer:0});
   const iv = _repIntervalo();
   const dentro = d => { d=String(d||'').slice(0,10); if(!d) return false;
     if(iv.dias) return iv.dias.includes(d); if(iv.de && d<iv.de) return false; if(iv.ate && d>iv.ate) return false; return true; };
   const reciboDe = {}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
   const liq = (o,rc)=>{ let net=num(o.net)||num(rc&&rc.net); if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; } return net; };
+  const bruto = (o,rc)=> num(o.total)||num(rc&&rc.total);
   const ordens = (typeof getVisibleOrdens==='function') ? (getVisibleOrdens()||[]) : (window.DB.ordens||[]);
+  const CATS=[['rec','Recebido'],['areceber','A receber'],['curso','Em curso'],['agend','Agendadas'],['gar','Garantias / Orçam.'],['canc','Canceladas']];
+  const CNOME=Object.fromEntries(CATS);
+  const porTec = {};
+  const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),tot:0,totB:0,n:0,c:Object.fromEntries(CATS.map(([k])=>[k,{v:0,n:0,b:0}]))});
+  const linhas=[]; // para a lista de diferenças
+  const payDate = (o,rc)=>{ const pag=o.pagamento||{}; return String(o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data||'').slice(0,10); };
   ordens.forEach(o=>{
-    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
     const rc=reciboDe[o.id];
-    const pago=(o.pago===true)||(rc&&rc.status==='paid');
     const tid=(o.tecnicos&&o.tecnicos[0])||(rc&&rc.techId)||'__sem__';
-    const net=liq(o,rc);
     if(window._repTecFiltro && tid!==window._repTecFiltro) return;
-    if((o.estado==='concluida'||o.estado==='os_fechada') && dentro(o.concluidoEm||o.data)){
-      const t=get(tid); t.os++; t.fat+=net; if(pago) t.pagas+=net; else t.porRec+=net;
-    }
-    if(pago){
-      const pag=o.pagamento||{};
-      const d=o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data;
-      if(dentro(d)){ const t=get(tid); t.recPer+=net; t.nRecPer++; }
+    const pago=(o.pago===true)||(rc&&rc.status==='paid');
+    const net=liq(o,rc), br=bruto(o,rc);
+    const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
+    const cliNome=(cli&&cli.nome)||o.clienteNomeSnapshot||o.clienteNome||'—';
+    const naoFat=(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o));
+    let cat;
+    if(o.estado==='cancelada') cat='canc';
+    else if(naoFat) cat='gar';
+    else if(o.estado==='concluida'||o.estado==='os_fechada') cat=pago?'rec':'areceber';
+    else if(o.estado==='em_curso') cat='curso';
+    else cat='agend';
+    if(dentro(o.data)){
+      const t=get(tid); t.c[cat].v+=net; t.c[cat].b+=br; t.c[cat].n++; t.tot+=net; t.totB+=br; t.n++;
+      const notas=[];
+      if((cat==='rec'||cat==='areceber') && !net) notas.push('valor 0');
+      if(tid==='__sem__') notas.push('sem técnico');
+      if(cat==='rec'){
+        const pd=payDate(o,rc);
+        if(!dentro(pd)) notas.push('pago fora do período ('+pd+')');
+      }
+      if(cat!=='rec' && cat!=='areceber' || notas.length) linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:CNOME[cat],net,notas:notas.join(' · ')});
+    } else if(pago && !naoFat && o.estado!=='cancelada' && dentro(payDate(o,rc))){
+      // OS de outro período, paga dentro deste → explica a diferença para o relatório "Recebimentos por técnico"
+      linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:'Recebido no período (OS de outro período)',net,notas:'pago em '+payDate(o,rc)});
     }
   });
   const _tecOpts=(window.DB.users||[]).filter(u=>u.role==='tecnico'||Object.prototype.hasOwnProperty.call(porTec,u.id))
     .sort((a,b)=>String(a.name).localeCompare(String(b.name)))
     .map(u=>`<option value="${u.id}"${u.id===window._repTecFiltro?' selected':''}>${u.name}</option>`).join('');
-  const lista=Object.values(porTec).filter(t=>t.os>0).sort((a,b)=>b.fat-a.fat);
-  const T=lista.reduce((s,t)=>({os:s.os+t.os,fat:s.fat+t.fat,pagas:s.pagas+t.pagas,porRec:s.porRec+t.porRec}),{os:0,fat:0,pagas:0,porRec:0});
-  const th='padding:10px 12px;font-size:11px;color:#64748b;text-transform:uppercase;';
-  const td='padding:10px 12px;';
+  const lista=Object.values(porTec).filter(t=>t.n>0).sort((a,b)=>b.tot-a.tot);
+  const T={tot:0,totB:0,n:0,c:Object.fromEntries(CATS.map(([k])=>[k,{v:0,n:0,b:0}]))};
+  lista.forEach(t=>{ T.tot+=t.tot; T.totB+=t.totB; T.n+=t.n; CATS.forEach(([k])=>{ T.c[k].v+=t.c[k].v; T.c[k].b+=t.c[k].b; T.c[k].n+=t.c[k].n; }); });
+  const th='padding:9px 10px;font-size:11px;color:#64748b;text-transform:uppercase;white-space:nowrap;';
+  const td='padding:9px 10px;';
+  const cel=(x,cor,b)=>`<td style="${td}text-align:right;${cor?'color:'+cor+';':''}${b?'font-weight:800;':''}">€${fmt(x.v)} <span style="font-weight:400;font-size:10px;color:#94a3b8;">(${x.n})</span></td>`;
+  const cores={rec:'#15803d',areceber:'#d97706',curso:'#1d4ed8',agend:'#64748b',gar:'#7c3aed',canc:'#9ca3af'};
+  const somaCheck = CATS.reduce((s,[k])=>s+T.c[k].v,0);
+  const difs=linhas.sort((a,b)=>String(a.cat).localeCompare(String(b.cat))||String(a.data).localeCompare(String(b.data)));
+  const difTot={}; difs.forEach(l=>{ (difTot[l.cat]=difTot[l.cat]||{v:0,n:0}); difTot[l.cat].v+=l.net; difTot[l.cat].n++; });
   return `<div class="rep-card" style="grid-column:1/-1;">
-    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · 1.º técnico da OS recebe a receita</span>
+    <div class="rep-card-title">👷 Faturamento por Técnico — conciliação <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · OS do período por data de agendamento · a receita fica no 1.º técnico da OS</span>
       <select onchange="window._repTecFiltro=this.value;renderReports()" style="float:right;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;">
         <option value="">👷 Todos os técnicos</option>${_tecOpts}
       </select></div>
     <div style="overflow:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px;">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e5e7eb;">
           <th style="${th}text-align:left;">Técnico</th>
-          <th style="${th}text-align:center;">OS realizadas</th>
-          <th style="${th}text-align:right;">Faturado</th>
-          <th style="${th}text-align:right;">Recebido</th>
-          <th style="${th}text-align:right;">A receber</th>
+          <th style="${th}text-align:right;color:${cores.rec};">Já recebido</th>
+          <th style="${th}text-align:right;color:${cores.areceber};">A receber</th>
+          <th style="${th}text-align:right;color:${cores.curso};">OS em curso</th>
+          <th style="${th}text-align:right;">Agendadas</th>
+          <th style="${th}text-align:right;color:${cores.gar};">Garantias/Orç.</th>
+          <th style="${th}text-align:right;">Canceladas</th>
+          <th style="${th}text-align:right;border-left:2px solid #e5e7eb;">Total agendamentos</th>
         </tr></thead>
         <tbody>
           ${lista.map((t,i)=>`<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
-            <td style="${td}font-weight:600;">${t.nome}</td>
-            <td style="${td}text-align:center;">${t.os}</td>
-            <td style="${td}text-align:right;font-weight:800;color:var(--accent);">€${fmt(t.fat)}</td>
-            <td style="${td}text-align:right;font-weight:700;color:#15803d;">€${fmt(t.pagas)}</td>
-            <td style="${td}text-align:right;font-weight:700;color:#d97706;">€${fmt(t.porRec)}</td>
+            <td style="${td}font-weight:600;">${esc(t.nome)}</td>
+            ${cel(t.c.rec,cores.rec,true)}${cel(t.c.areceber,cores.areceber,true)}${cel(t.c.curso,cores.curso,true)}
+            ${cel(t.c.agend,cores.agend)}${cel(t.c.gar,cores.gar)}${cel(t.c.canc,cores.canc)}
+            <td style="${td}text-align:right;font-weight:800;border-left:2px solid #e5e7eb;">€${fmt(t.tot)} <span style="font-weight:400;font-size:10px;color:#94a3b8;">(${t.n})</span></td>
           </tr>`).join('')}
         </tbody>
         <tfoot><tr style="background:#f0fdf4;border-top:2px solid #86efac;font-weight:800;">
-          <td style="${td}">TOTAL</td><td style="${td}text-align:center;">${T.os}</td>
-          <td style="${td}text-align:right;">€${fmt(T.fat)}</td><td style="${td}text-align:right;">€${fmt(T.pagas)}</td>
-          <td style="${td}text-align:right;">€${fmt(T.porRec)}</td>
+          <td style="${td}">TOTAL</td>
+          ${cel(T.c.rec,cores.rec,true)}${cel(T.c.areceber,cores.areceber,true)}${cel(T.c.curso,cores.curso,true)}
+          ${cel(T.c.agend)}${cel(T.c.gar)}${cel(T.c.canc)}
+          <td style="${td}text-align:right;border-left:2px solid #e5e7eb;">€${fmt(T.tot)} <span style="font-weight:400;font-size:10px;">(${T.n})</span></td>
         </tr></tfoot>
       </table>
     </div>
-    <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">
-      <b>Faturado</b> = trabalho realizado no período. &nbsp;<b>Recebido</b> = realizado e já recebido. &nbsp;<b>A receber</b> = realizado e ainda não recebido. &nbsp;(Faturado = Recebido + A receber.)<br>
-      Conta como recebido quando a OS está marcada como paga ou tem recibo pago. Garantias e orçamentos ficam de fora.
+    <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;line-height:1.6;">
+      <b>Conciliação:</b> Recebido €${fmt(T.c.rec.v)} + A receber €${fmt(T.c.areceber.v)} + Em curso €${fmt(T.c.curso.v)} + Agendadas €${fmt(T.c.agend.v)} + Garantias €${fmt(T.c.gar.v)} + Canceladas €${fmt(T.c.canc.v)}
+      = <b>€${fmt(somaCheck)}</b> ${Math.abs(somaCheck-T.tot)<0.005?'✅ igual ao total dos agendamentos':'⚠️ diferença de €'+fmt(somaCheck-T.tot)}.<br>
+      Total dos agendamentos com IVA: <b>€${fmt(T.totB)}</b> (${T.n} OS, incluindo canceladas) — na Lista de OS (mesmo período, todos os técnicos) o total "sem canceladas" é <b>€${fmt(T.totB-T.c.canc.b)}</b> c/IVA (canceladas: €${fmt(T.c.canc.b)}).<br>
+      <b>Realizado</b> (recebido + a receber) = €${fmt(T.c.rec.v+T.c.areceber.v)}. &nbsp; Já recebido = OS concluída marcada como paga ou com recibo pago.
     </div>
+    <details style="margin-top:10px;" ${difs.length?'open':''}>
+      <summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1e3a5f;">🔍 Diferenças para analisar (${difs.length})</summary>
+      <div style="font-size:11px;color:#64748b;margin:6px 0;">Tudo o que não está em "Já recebido"/"A receber" sem reparo, mais alertas (valor 0, sem técnico, pago fora do período) e pagamentos de OS de outros períodos — estes explicam a diferença para o relatório "Recebimentos por técnico" (que conta pela data do pagamento).</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${Object.entries(difTot).map(([k,v])=>`<span style="background:#f1f5f9;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:600;">${esc(k)}: ${v.n} · €${fmt(v.v)}</span>`).join('')}</div>
+      <div style="overflow:auto;max-height:420px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px;">
+        <thead><tr style="background:#f8fafc;"><th style="${th}text-align:left;">OS</th><th style="${th}text-align:left;">Data</th><th style="${th}text-align:left;">Cliente</th><th style="${th}text-align:left;">Técnico</th><th style="${th}text-align:left;">Categoria</th><th style="${th}text-align:right;">s/ IVA</th><th style="${th}text-align:left;">Nota</th></tr></thead>
+        <tbody>${difs.map((l,i)=>`<tr style="border-bottom:1px solid #eef2f7;background:${i%2?'#fff':'#fafbfd'};"><td style="padding:6px 10px;font-weight:600;">${esc(l.os)}</td><td style="padding:6px 10px;">${esc(l.data)}</td><td style="padding:6px 10px;">${esc(l.cli)}</td><td style="padding:6px 10px;">${esc(l.tec)}</td><td style="padding:6px 10px;">${esc(l.cat)}</td><td style="padding:6px 10px;text-align:right;">€${fmt(l.net)}</td><td style="padding:6px 10px;color:#b45309;">${esc(l.notas)}</td></tr>`).join('')||'<tr><td colspan="7" style="padding:12px;text-align:center;color:#64748b;">Sem diferenças.</td></tr>'}</tbody>
+      </table></div>
+    </details>
   </div>`;
 }
 
@@ -12961,7 +12999,17 @@ function osRenderLista(){
     const _canc=os.filter(o=>o.estado==='cancelada');
     const _totAtiv=_tot-_canc.reduce((s,o)=>s+(parseFloat(String(o.total||0).replace(',','.'))||0),0);
     const _f=v=>(typeof osFmt==='function'?osFmt(v):v.toFixed(2));
-    _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · €${_f(_totAtiv)} c/IVA sem canceladas`;
+    const _v=o=>(parseFloat(String(o.total||0).replace(',','.'))||0);
+    if(fTec){
+      // v16.15 — com um técnico escolhido, a receita conta só nas OS em que ele é o 1.º técnico (regra dos relatórios)
+      const _ativas=os.filter(o=>o.estado!=='cancelada');
+      const _prin=_ativas.filter(o=>(o.tecnicos||[])[0]===fTec);
+      const _sec=_ativas.filter(o=>(o.tecnicos||[])[0]!==fTec);
+      const _sp=_prin.reduce((t,o)=>t+_v(o),0), _ss=_sec.reduce((t,o)=>t+_v(o),0);
+      _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · 1.º técnico: ${_prin.length} OS · €${_f(_sp)} c/IVA`+(_sec.length?` · 2.º técnico: ${_sec.length} OS · €${_f(_ss)} (a receita conta para o 1.º técnico)`:'');
+    } else {
+      _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · €${_f(_totAtiv)} c/IVA sem canceladas`;
+    }
   }
 }
 

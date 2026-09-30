@@ -1308,7 +1308,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.05<br>
+      HidroGest v16.07<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1333,7 +1333,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.05<br>
+      HidroGest v16.07<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -8814,8 +8814,11 @@ function osServicoValorFixo(o){
 // ── Fração e valor cobrado a partir do tempo AGENDADO ──
 function osFracaoInfo(o){
   const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
-  const h1=parseFloat(o.h1)||parseFloat(srv.h1)||0;
-  const haddV=parseFloat(o.haddV)||parseFloat(srv.hadd)||0;
+  // v16.07 — respeitar o valor GRAVADO na OS mesmo quando é 0 (0 é um preço válido, ex.: valor fechado sem hora adicional).
+  // Só usar o preço da tabela de serviços quando o campo está mesmo em falta (null/undefined/'').
+  const _num=(v,fb)=>{ const n=parseFloat(v); return (v!=null && v!=='' && !isNaN(n)) ? n : fb; };
+  const h1=_num(o.h1, _num(srv.h1, 0));
+  const haddV=_num(o.haddV, _num(srv.hadd, 0));
   const ivaPct=parseInt(o.iva||srv.iva||23);
   const _m=h=>{const p=(h||'0:0').split(':');return (parseInt(p[0])||0)*60+(parseInt(p[1])||0);};
   // Usar o tempo REAL trabalhado quando existir; só recorrer ao agendado como estimativa.
@@ -11311,8 +11314,9 @@ window.osNotificarTecnicos = async function osNotificarTecnicos(os, tipo){
     ? `🗺️ Abrir rota no Google Maps:\n${mapsUrl}`
     : '';
 
-  const h1Val   = parseFloat(os.h1)    || parseFloat(srv.h1)   || 0;
-  const haddVal = parseFloat(os.haddV) || parseFloat(srv.hadd) || 0;
+  const _numAg=(v,fb)=>{ const n=parseFloat(v); return (v!=null && v!=='' && !isNaN(n)) ? n : fb; };
+  const h1Val   = _numAg(os.h1,   _numAg(srv.h1,   0));
+  const haddVal = _numAg(os.haddV,_numAg(srv.hadd, 0));
   const isCancelamento = tipo === 'cancelamento';
 
   const tipoLabel = isCancelamento
@@ -26682,6 +26686,45 @@ async function osCriarAvisoFatura(os, metLabel){
         documentoEmitido:false, arquivado:false, lida:false,
         criadoEm:new Date().toISOString(),
       });
+      // ── Email de faturação à gestão (só no aviso NOVO, para não repetir) ──
+      try{
+        const cfg=window._emailCfg||{}, emp=window._empCfg||{};
+        if(cfg.brevoApiKey && os.emailFaturaEnviado!==true){
+          const cli=(window.DB.clientes||[]).find(c=>c.id===os.clienteId)||{};
+          const dest=cfg.remetente||emp.email||'localizafugas@gmail.com';
+          const metNice=metLabel||dadosBase.metodoPagamento||'—';
+          const totalNice='€'+(typeof osFmt==='function'?osFmt(dadosBase.valorTotal||0):(dadosBase.valorTotal||0));
+          const dataTrab=os.data||(os.concluidoEm?String(os.concluidoEm).slice(0,10):'')||'';
+          const html=`<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#0f2447">
+            <div style="background:#0f2447;color:#fff;padding:16px 20px;border-radius:12px 12px 0 0">
+              <div style="font-size:17px;font-weight:800">💶 Emitir Fatura-Recibo</div>
+              <div style="color:#93c5fd;font-size:13px;margin-top:2px">${emp.nome||'HidroGest'}</div>
+            </div>
+            <div style="border:1px solid #e2e8f0;border-top:0;border-radius:0 0 12px 12px;padding:18px 20px">
+              <table style="width:100%;border-collapse:collapse;font-size:14.5px">
+                <tr><td style="color:#64748b;padding:6px 0">OS</td><td style="text-align:right;font-weight:700">${os.id}</td></tr>
+                <tr><td style="color:#64748b;padding:6px 0">Cliente</td><td style="text-align:right;font-weight:700">${cli.nome||'—'}</td></tr>
+                ${dataTrab?`<tr><td style="color:#64748b;padding:6px 0">Data do serviço</td><td style="text-align:right">${dataTrab}</td></tr>`:''}
+                <tr><td style="color:#64748b;padding:6px 0">Técnico</td><td style="text-align:right;font-weight:700">${dadosBase.tecnicoNome||'—'}</td></tr>
+                <tr><td style="color:#64748b;padding:6px 0">Modalidade de recebimento</td><td style="text-align:right;font-weight:700">${metNice}</td></tr>
+                <tr><td style="color:#64748b;padding:10px 0 0">Valor total</td><td style="text-align:right;font-weight:800;font-size:18px;padding:10px 0 0">${totalNice}</td></tr>
+              </table>
+              <p style="font-size:13px;color:#475569;margin:16px 0 0;line-height:1.5">Pagamento recebido diretamente pelo técnico. Emita a Fatura-Recibo no sistema de faturação e dê baixa no aviso dentro do HidroGest.</p>
+            </div>
+          </div>`;
+          const texto=`Emitir Fatura-Recibo\nOS: ${os.id}\nCliente: ${cli.nome||'—'}\n${dataTrab?'Data do servico: '+dataTrab+'\n':''}Tecnico: ${dadosBase.tecnicoNome||'—'}\nModalidade de recebimento: ${metNice}\nValor total: ${totalNice}\n\nPagamento recebido diretamente pelo tecnico. Emita a Fatura-Recibo e de baixa no aviso.`;
+          fetch('https://europe-west1-portal-localiza-f08c5.cloudfunctions.net/enviarEmailBrevo',{
+            method:'POST', headers:{'Content-Type':'application/json','api-key':cfg.brevoApiKey},
+            body:JSON.stringify({
+              sender:{name:emp.nome||'HidroGest', email:dest},
+              to:[{email:dest, name:emp.nome||'Gestão'}],
+              subject:`💶 Emitir Fatura — OS ${os.id} — ${dadosBase.tecnicoNome||''} — ${metNice}`,
+              htmlContent:html, textContent:texto
+            })
+          }).catch(()=>{});
+          try{ os.emailFaturaEnviado=true; await window.fsSetMerge('ordens', os.id, {emailFaturaEnviado:true}); const _o=(window.DB.ordens||[]).find(x=>x.id===os.id); if(_o)_o.emailFaturaEnviado=true; }catch(_){}
+        }
+      }catch(e){ console.warn('email faturação falhou:', e.message); }
     }
     try{ if(os.avisoFaturaCriado!==true){ await window.fsSetMerge('ordens', os.id, {avisoFaturaCriado:true}); os.avisoFaturaCriado=true; const _o=(window.DB.ordens||[]).find(x=>x.id===os.id); if(_o)_o.avisoFaturaCriado=true; } }catch(_e){}
   }catch(e){ console.warn('osCriarAvisoFatura falhou:', e.message); }

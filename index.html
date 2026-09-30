@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.17<br>
+      HidroGest v16.19<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.17<br>
+      HidroGest v16.19<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -7336,6 +7336,18 @@ function _repIntervalo(){
   if(period==='custom') return {de:document.getElementById('rep-from')?.value||null,ate:document.getElementById('rep-to')?.value||null};
   return {};
 }
+// v16.19 — QUEM RECEBE A RECEITA de uma OS: o 1.º técnico; exceção: se um técnico "prioritário" (Higor) estiver na OS, mesmo em 2.º, a receita é dele.
+window.HG_TEC_PRIORITARIOS = window.HG_TEC_PRIORITARIOS || ['higor'];
+window.hgTecReceita = function(o, fallbackId){
+  const ids=(o&&o.tecnicos&&o.tecnicos.length)?o.tecnicos:[];
+  if(!ids.length) return fallbackId||'__sem__';
+  const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  for(const id of ids){
+    const nome=norm(((window.DB&&window.DB.users)||[]).find(u=>u.id===id)?.name);
+    if(window.HG_TEC_PRIORITARIOS.some(t=>nome.includes(norm(t)))) return id;
+  }
+  return ids[0];
+};
 window._repTecFiltro = window._repTecFiltro || '';
 function repRenderTecnico(recs){
   // v16.16 — CONCILIAÇÃO por técnico. Base: todas as OS com data de agendamento no período (igual à Lista de OS).
@@ -7357,10 +7369,15 @@ function repRenderTecnico(recs){
   const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),tot:0,totB:0,n:0,c:Object.fromEntries(CATS.map(([k])=>[k,{v:0,n:0,b:0}]))});
   const linhas=[]; // para a lista de diferenças
   const payDate = (o,rc)=>{ const pag=o.pagamento||{}; return String(o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data||'').slice(0,10); };
+  const U={tot:0,totB:0,n:0,c:Object.fromEntries(CATS.map(([k])=>[k,{v:0,n:0,b:0}]))}; // totais únicos (cada OS uma vez)
   ordens.forEach(o=>{
     const rc=reciboDe[o.id];
-    const tid=(o.tecnicos&&o.tecnicos[0])||(rc&&rc.techId)||'__sem__';
-    if(window._repTecFiltro && tid!==window._repTecFiltro) return;
+    const todos=(o.tecnicos&&o.tecnicos.length)?o.tecnicos:[(rc&&rc.techId)||'__sem__'];
+    // v16.19 — a receita é de UM só técnico: o 1.º (ou o Higor, se estiver na OS)
+    const dono=window.hgTecReceita(o,(rc&&rc.techId)||'__sem__');
+    const ids=[dono];
+    const outroDono=window._repTecFiltro && dono!==window._repTecFiltro && todos.includes(window._repTecFiltro);
+    if(window._repTecFiltro && dono!==window._repTecFiltro && !outroDono) return;
     const pago=(o.pago===true)||(rc&&rc.status==='paid');
     const net=liq(o,rc), br=bruto(o,rc);
     const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
@@ -7372,27 +7389,30 @@ function repRenderTecnico(recs){
     else if(o.estado==='concluida'||o.estado==='os_fechada') cat=pago?'rec':'areceber';
     else if(o.estado==='em_curso') cat='curso';
     else cat='agend';
+    const tecTxt=ids.map(nomeDe).join(' + ');
+    if(outroDono){ if(dentro(o.data) && o.estado!=='cancelada' && !naoFat) linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(window._repTecFiltro),cat:'Receita vai para outro técnico',net,notas:'receita de '+nomeDe(dono)}); return; }
     if(dentro(o.data)){
-      const t=get(tid); t.c[cat].v+=net; t.c[cat].b+=br; t.c[cat].n++; t.tot+=net; t.totB+=br; t.n++;
+      ids.forEach(id=>{ const t=get(id); t.c[cat].v+=net; t.c[cat].b+=br; t.c[cat].n++; t.tot+=net; t.totB+=br; t.n++; });
+      U.c[cat].v+=net; U.c[cat].b+=br; U.c[cat].n++; U.tot+=net; U.totB+=br; U.n++;
       const notas=[];
       if((cat==='rec'||cat==='areceber') && !net) notas.push('valor 0');
-      if(tid==='__sem__') notas.push('sem técnico');
+      if(ids.includes('__sem__')) notas.push('sem técnico');
+      if(ids.length>1) notas.push('2 técnicos: conta para ambos');
       if(cat==='rec'){
         const pd=payDate(o,rc);
         if(!dentro(pd)) notas.push('pago fora do período ('+pd+')');
       }
-      if(cat!=='rec' && cat!=='areceber' || notas.length) linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:CNOME[cat],net,notas:notas.join(' · ')});
+      if(cat!=='rec' && cat!=='areceber' || notas.length) linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:tecTxt,cat:CNOME[cat],net,notas:notas.join(' · ')});
     } else if(pago && !naoFat && o.estado!=='cancelada' && dentro(payDate(o,rc))){
-      // OS de outro período, paga dentro deste → explica a diferença para o relatório "Receita por técnico"
-      linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:'Recebido no período (OS de outro período)',net,notas:'pago em '+payDate(o,rc)});
+      linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:tecTxt,cat:'Recebido no período (OS de outro período)',net,notas:'pago em '+payDate(o,rc)});
     }
   });
   const _tecOpts=(window.DB.users||[]).filter(u=>u.role==='tecnico'||Object.prototype.hasOwnProperty.call(porTec,u.id))
     .sort((a,b)=>String(a.name).localeCompare(String(b.name)))
     .map(u=>`<option value="${u.id}"${u.id===window._repTecFiltro?' selected':''}>${u.name}</option>`).join('');
   const lista=Object.values(porTec).filter(t=>t.n>0).sort((a,b)=>b.tot-a.tot);
-  const T={tot:0,totB:0,n:0,c:Object.fromEntries(CATS.map(([k])=>[k,{v:0,n:0,b:0}]))};
-  lista.forEach(t=>{ T.tot+=t.tot; T.totB+=t.totB; T.n+=t.n; CATS.forEach(([k])=>{ T.c[k].v+=t.c[k].v; T.c[k].b+=t.c[k].b; T.c[k].n+=t.c[k].n; }); });
+  const T=U;
+  const _dupOS=lista.reduce((x,t)=>x+t.n,0)-U.n;
   const th='padding:9px 10px;font-size:11px;color:#64748b;text-transform:uppercase;white-space:nowrap;';
   const td='padding:9px 10px;';
   const cel=(x,cor,b)=>`<td style="${td}text-align:right;${cor?'color:'+cor+';':''}${b?'font-weight:800;':''}">€${fmt(x.v)} <span style="font-weight:400;font-size:10px;color:#94a3b8;">(${x.n})</span></td>`;
@@ -7401,7 +7421,7 @@ function repRenderTecnico(recs){
   const difs=linhas.sort((a,b)=>String(a.cat).localeCompare(String(b.cat))||String(a.data).localeCompare(String(b.data)));
   const difTot={}; difs.forEach(l=>{ (difTot[l.cat]=difTot[l.cat]||{v:0,n:0}); difTot[l.cat].v+=l.net; difTot[l.cat].n++; });
   return `<div class="rep-card" style="grid-column:1/-1;">
-    <div class="rep-card-title">👷 Faturamento por Técnico — conciliação <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · OS do período por data de agendamento · a receita fica no 1.º técnico da OS</span>
+    <div class="rep-card-title">👷 Faturamento por Técnico — conciliação <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · OS do período por data de agendamento · a receita é do 1.º técnico da OS (ou do Higor, se estiver na OS)</span>
       <select onchange="window._repTecFiltro=this.value;renderReports()" style="float:right;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;">
         <option value="">👷 Todos os técnicos</option>${_tecOpts}
       </select></div>
@@ -7426,7 +7446,7 @@ function repRenderTecnico(recs){
           </tr>`).join('')}
         </tbody>
         <tfoot><tr style="background:#f0fdf4;border-top:2px solid #86efac;font-weight:800;">
-          <td style="${td}">TOTAL</td>
+          <td style="${td}">TOTAL (cada OS uma vez)</td>
           ${cel(T.c.rec,cores.rec,true)}${cel(T.c.areceber,cores.areceber,true)}${cel(T.c.curso,cores.curso,true)}
           ${cel(T.c.agend)}${cel(T.c.gar)}${cel(T.c.canc)}
           <td style="${td}text-align:right;border-left:2px solid #e5e7eb;">€${fmt(T.tot)} <span style="font-weight:400;font-size:10px;">(${T.n})</span></td>
@@ -7434,7 +7454,7 @@ function repRenderTecnico(recs){
       </table>
     </div>
     <div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;line-height:1.6;">
-      <b>Conciliação:</b> Recebido €${fmt(T.c.rec.v)} + A receber €${fmt(T.c.areceber.v)} + Em curso €${fmt(T.c.curso.v)} + Agendadas €${fmt(T.c.agend.v)} + Garantias €${fmt(T.c.gar.v)} + Canceladas €${fmt(T.c.canc.v)}
+      ${_dupOS>0?`<div style="color:#b45309;margin-bottom:4px;">⚠️ ${_dupOS} linha(s) de OS com 2 técnicos contam para cada um; por isso a soma das linhas dos técnicos é superior ao TOTAL.</div>`:''}<b>Conciliação:</b> Recebido €${fmt(T.c.rec.v)} + A receber €${fmt(T.c.areceber.v)} + Em curso €${fmt(T.c.curso.v)} + Agendadas €${fmt(T.c.agend.v)} + Garantias €${fmt(T.c.gar.v)} + Canceladas €${fmt(T.c.canc.v)}
       = <b>€${fmt(somaCheck)}</b> ${Math.abs(somaCheck-T.tot)<0.005?'✅ igual ao total dos agendamentos':'⚠️ diferença de €'+fmt(somaCheck-T.tot)}.<br>
       Total dos agendamentos com IVA: <b>€${fmt(T.totB)}</b> (${T.n} OS, incluindo canceladas) — na Lista de OS (mesmo período, todos os técnicos) o total "sem canceladas" é <b>€${fmt(T.totB-T.c.canc.b)}</b> c/IVA (canceladas: €${fmt(T.c.canc.b)}).<br>
       <b>Realizado</b> (recebido + a receber) = €${fmt(T.c.rec.v+T.c.areceber.v)}. &nbsp; Já recebido = OS concluída marcada como paga ou com recibo pago.
@@ -13003,10 +13023,10 @@ function osRenderLista(){
     if(fTec){
       // v16.15 — com um técnico escolhido, a receita conta só nas OS em que ele é o 1.º técnico (regra dos relatórios)
       const _ativas=os.filter(o=>o.estado!=='cancelada');
-      const _prin=_ativas.filter(o=>(o.tecnicos||[])[0]===fTec);
-      const _sec=_ativas.filter(o=>(o.tecnicos||[])[0]!==fTec);
+      const _prin=_ativas.filter(o=>window.hgTecReceita(o)===fTec);
+      const _sec=_ativas.filter(o=>window.hgTecReceita(o)!==fTec);
       const _sp=_prin.reduce((t,o)=>t+_v(o),0), _ss=_sec.reduce((t,o)=>t+_v(o),0);
-      _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · 1.º técnico: ${_prin.length} OS · €${_f(_sp)} c/IVA`+(_sec.length?` · 2.º técnico: ${_sec.length} OS · €${_f(_ss)} (a receita conta para o 1.º técnico)`:'');
+      _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · Receita dele: ${_prin.length} OS · €${_f(_sp)} c/IVA`+(_sec.length?` · receita de outro técnico: ${_sec.length} OS · €${_f(_ss)}`:'');
     } else {
       _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · €${_f(_totAtiv)} c/IVA sem canceladas`;
     }
@@ -34497,7 +34517,7 @@ window.cliHistoricoImprimir = function(cliId){
       const d = String(o.pagoEm || (recibo && (recibo.pagoEm || recibo.date)) || pag.confirmadoEm || pag.data || o.concluidoEm || o.data || '').slice(0, 10);
       if (ini && d < ini) return;
       if (fim && d > fim) return;
-      const tid = (o.tecnicos || [])[0] || (recibo && recibo.techId) || '__sem__';
+      const tid = window.hgTecReceita(o, (recibo && recibo.techId) || '__sem__');
       if (tecFiltro && tid !== tecFiltro) return;
       let net = num(o.net) || num(recibo && recibo.net);
       let total = num(o.total) || num(recibo && recibo.total);
@@ -34528,7 +34548,7 @@ window.cliHistoricoImprimir = function(cliId){
       const d = String(o.concluidoEm || o.data || '').slice(0, 10);
       if (ini && d < ini) return;
       if (fim && d > fim) return;
-      const tid = (o.tecnicos || [])[0] || '__sem__';
+      const tid = window.hgTecReceita(o, '__sem__');
       if (tecFiltro && tid !== tecFiltro) return;
       let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
       (map[tid] ??= { nome: nomeTec(tid, ''), net: 0, count: 0 });
@@ -34550,7 +34570,7 @@ window.cliHistoricoImprimir = function(cliId){
       const d = String(o.concluidoEm || o.data || '').slice(0, 10);
       if (ini && d < ini) return;
       if (fim && d > fim) return;
-      const tid = (o.tecnicos || [])[0] || '__sem__';
+      const tid = window.hgTecReceita(o, '__sem__');
       if (tecFiltro && tid !== tecFiltro) return;
       let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
       const cli = clienteById(o.clienteId);
@@ -34641,21 +34661,24 @@ window.cliHistoricoImprimir = function(cliId){
       const naoFat = (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o));
       const concl = o.estado === 'concluida' || o.estado === 'os_fechada';
       const pago = (o.pago === true) || (rc && rc.status === 'paid');
-      const meu = !tecFiltro || tid === tecFiltro;
-      if (tecFiltro && tid !== tecFiltro) {
-        // OS onde o técnico escolhido é 2.º técnico: aparece só na conciliação
-        if (ids.includes(tecFiltro) && !naoFat && (concl || o.estado === 'em_curso'))
-          diffs.push({ ...base, tecId: tecFiltro, tecnico: nomeTec(tecFiltro, ''), motivo: 'É 2.º técnico — receita vai para ' + nomeTec(tid, ''), net, total });
+      const realizado = !naoFat && (concl || o.estado === 'em_curso');
+      // v16.19 — receita de UM só técnico: o 1.º (ou o Higor, se estiver na OS)
+      const dono = window.hgTecReceita(o, (rc && rc.techId) || '__sem__');
+      const outros = ids.filter(x => x !== dono).map(x => nomeTec(x, '')).join(', ');
+      if (tecFiltro && dono !== tecFiltro) {
+        if (ids.includes(tecFiltro) && o.estado !== 'cancelada' && !naoFat)
+          diffs.push({ ...base, tecId: tecFiltro, tecnico: nomeTec(tecFiltro, ''), motivo: 'Receita vai para ' + nomeTec(dono, ''), net, total });
         return;
       }
-      if (o.estado === 'cancelada') { diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Cancelada', net, total }); return; }
-      if (naoFat)                   { diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Garantia / Orçamento (não entra)', net, total }); return; }
-      if (concl || o.estado === 'em_curso') {
-        linhas.push({ ...base, tecId: tid, tecnico: nomeTec(tid, rc && rc.tech), net, total,
+      if (realizado) {
+        linhas.push({ ...base, tecId: dono, tecnico: nomeTec(dono, rc && rc.tech), net, total, segundo: outros,
           estado: concl ? 'Concluída' : 'Em curso', pag: concl ? (pago ? 'Recebido' : 'A receber') : 'Em curso', cat: concl ? (pago ? 'rec' : 'ar') : 'ec' });
-      } else {
-        diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Ainda agendada (não realizada)', net, total });
+        return;
       }
+      const dbase = { ...base, tecId: dono, tecnico: nomeTec(dono, ''), net, total };
+      if (o.estado === 'cancelada') diffs.push({ ...dbase, motivo: 'Cancelada' });
+      else if (naoFat)              diffs.push({ ...dbase, motivo: 'Garantia / Orçamento (não entra)' });
+      else                          diffs.push({ ...dbase, motivo: 'Ainda agendada (não realizada)' });
     });
     const byTec = (a, b) => String(a.tecnico).localeCompare(String(b.tecnico)) || String(a.data).localeCompare(String(b.data)) || String(a.osId).localeCompare(String(b.osId));
     linhas.sort(byTec); diffs.sort(byTec);
@@ -34668,10 +34691,14 @@ window.cliHistoricoImprimir = function(cliId){
     const ids = Object.keys(m).sort((a, b) => String(m[a].nome).localeCompare(String(m[b].nome)));
     if (!ids.length) return `<div class="vazio">Sem serviços concluídos ou em curso no período.</div>`;
     const T = { n: 0, rec: 0, ar: 0, ec: 0, tot: 0, totB: 0 };
-    const rows = ids.map(id => { const t = m[id]; Object.keys(T).forEach(k => T[k] += t[k]);
+    const vistos = new Set(); let dup = 0;
+    linhas.forEach(l => { if (vistos.has(l.osId)) { dup++; return; } vistos.add(l.osId);
+      T.n++; T[l.cat] += l.net; T.tot += l.net; T.totB += l.total; });
+    const rows = ids.map(id => { const t = m[id];
       return `<tr><td>${esc(t.nome)}</td><td class="c">${t.n}</td><td class="num">${eur(t.rec)}</td><td class="num">${eur(t.ar)}</td><td class="num">${eur(t.ec)}</td><td class="num strong">${eur(t.tot)}</td><td class="num">${eur(t.totB)}</td></tr>`; }).join('');
     return `<table class="tb"><thead><tr><th>Técnico</th><th class="c">Nº OS</th><th class="num">Já recebido</th><th class="num">A receber</th><th class="num">Em curso</th><th class="num">Total s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
-      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${T.n}</td><td class="num">${eur(T.rec)}</td><td class="num">${eur(T.ar)}</td><td class="num">${eur(T.ec)}</td><td class="num strong">${eur(T.tot)}</td><td class="num">${eur(T.totB)}</td></tr></tfoot></table>`;
+      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL (cada OS uma só vez)</td><td class="c">${T.n}</td><td class="num">${eur(T.rec)}</td><td class="num">${eur(T.ar)}</td><td class="num">${eur(T.ec)}</td><td class="num strong">${eur(T.tot)}</td><td class="num">${eur(T.totB)}</td></tr></tfoot></table>
+      `;
   }
   function tabelaServicosDetalhe(linhas) {
     if (!linhas.length) return `<div class="vazio">Sem serviços no período.</div>`;
@@ -34682,7 +34709,7 @@ window.cliHistoricoImprimir = function(cliId){
       const rows = g.map(l => { n += l.net; t += l.total;
         return `<tr><td class="mono">${esc(l.osId)}</td><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.servico)}</td><td>${esc(l.segundo)}</td><td>${esc(l.estado)}</td><td>${esc(l.pag)}</td><td class="num strong">${eur(l.net)}</td><td class="num">${eur(l.total)}</td></tr>`; }).join('');
       html += `<h3 style="font-size:13px;margin:14px 0 4px;color:#1e293b;">👷 ${esc(g[0].tecnico)} — ${g.length} serviços</h3>
-        <table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Serviço</th><th>2.º técnico</th><th>Estado</th><th>Pagamento</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th></tr></thead>
+        <table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Serviço</th><th>Outros técnicos</th><th>Estado</th><th>Pagamento</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th></tr></thead>
         <tbody>${rows}</tbody><tfoot><tr><td colspan="7">SUBTOTAL ${esc(g[0].tecnico)}</td><td class="num strong">${eur(n)}</td><td class="num">${eur(t)}</td></tr></tfoot></table>`;
     });
     return html;
@@ -34728,7 +34755,7 @@ window.cliHistoricoImprimir = function(cliId){
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Receita por técnico</title><style>${css}</style></head><body>
       <div class="cab"><img src="${LOGO}" class="logo" onerror="this.style.display='none'"><div class="tit"><h1>Receita por técnico</h1><div class="sub">${esc(EMPRESA)}</div></div></div>
       <div class="meta"><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}${tec ? ' · <b>Técnico:</b> ' + esc(nomeTec(tec, '')) : ''} · valores <b>sem IVA</b></div>
-      <h2>Serviços por técnico — concluídos e em curso (por data do agendamento)</h2>${secSvResumo}
+      <h2>Serviços por técnico — concluídos e em curso (por data do agendamento) — receita do 1.º técnico (ou do Higor, se estiver na OS)</h2>${secSvResumo}
       ${secSvDet}
       <h2>Diferenças para a Lista de OS (não entram acima)</h2>${secDif}
       <h2 style="margin-top:28px;border-top:2px solid #1e3a8a;padding-top:12px;">Dinheiro recebido no período (por data de pagamento)</h2>

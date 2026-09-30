@@ -36423,11 +36423,17 @@ window.abrirApresentacaoGrupo = function(){
   }
   const fmtSeg = s => { s=Math.floor(s); const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); };
 
+  // Preços da OS; se a OS não os tiver gravados, usa os do serviço (igual ao email ao cliente)
+  function precoOS(os){
+    const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const n=(v,fb)=>{ const x=parseFloat(v); return (v!=null&&v!==''&&!isNaN(x))?x:fb; };
+    return {h1:n(os.h1,n(srv.h1,0)), haddV:n(os.haddV,n(srv.hadd,0))};
+  }
   // Valor: usa as condições definidas no agendamento
   function valorFixo(os){
     try{ if(typeof osServicoValorFixo==='function' && osServicoValorFixo(os)) return true; }catch(e){}
     if((parseFloat(os.medidaQtd)||0)>0) return true;
-    if(!(parseFloat(os.h1)>0)) return true;
+    if(!(precoOS(os).h1>0)) return true;
     return false;
   }
   function calcValor(os, minutos){
@@ -36436,7 +36442,7 @@ window.abrirApresentacaoGrupo = function(){
       return {net:+(os.net||0), ivaV:+(os.ivaVal||0), total:+(os.total||0), hAdd:+(os.haddN||0), fixo:valorFixo(os)};
     }
     const horas=minutos/60;
-    const net=+calcNetOS(horas, parseFloat(os.h1)||0, parseFloat(os.haddV)||0).toFixed(2);
+    const net=+calcNetOS(horas, precoOS(os).h1, precoOS(os).haddV).toFixed(2);
     const ivaV=+(net*iva/100).toFixed(2);
     return {net, ivaV, total:+(net+ivaV).toFixed(2), hAdd:calcHorasAdd(horas), fixo:false};
   }
@@ -36640,8 +36646,8 @@ window.abrirApresentacaoGrupo = function(){
     if(fixo){
       h+='<div class="ofc-row"><span>Valor acordado</span><span>'+eur(os.total)+' c/IVA</span></div>';
     } else {
-      h+='<div class="ofc-row"><span>1.ª hora</span><span>'+eur(os.h1)+'</span></div>'
-        +((parseFloat(os.haddV)||0)>0?'<div class="ofc-row"><span>Tempo adicional (por bloco)</span><span>'+eur(os.haddV)+'</span></div>':'')
+      h+='<div class="ofc-row"><span>1.ª hora</span><span>'+eur(precoOS(os).h1)+'</span></div>'
+        +(precoOS(os).haddV>0?'<div class="ofc-row"><span>Tempo adicional (por bloco)</span><span>'+eur(precoOS(os).haddV)+'</span></div>':'')
         +'<div class="ofc-row"><span>IVA</span><span>'+(parseInt(os.iva)||23)+'%</span></div>';
     }
     const pg=os.pagador&&os.pagador.nome?os.pagador:null;

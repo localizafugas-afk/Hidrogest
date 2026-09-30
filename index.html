@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.16<br>
+      HidroGest v16.17<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.16<br>
+      HidroGest v16.17<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -7383,7 +7383,7 @@ function repRenderTecnico(recs){
       }
       if(cat!=='rec' && cat!=='areceber' || notas.length) linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:CNOME[cat],net,notas:notas.join(' · ')});
     } else if(pago && !naoFat && o.estado!=='cancelada' && dentro(payDate(o,rc))){
-      // OS de outro período, paga dentro deste → explica a diferença para o relatório "Recebimentos por técnico"
+      // OS de outro período, paga dentro deste → explica a diferença para o relatório "Receita por técnico"
       linhas.push({os:o.id,data:String(o.data||'').slice(0,10),cli:cliNome,tec:nomeDe(tid),cat:'Recebido no período (OS de outro período)',net,notas:'pago em '+payDate(o,rc)});
     }
   });
@@ -7441,7 +7441,7 @@ function repRenderTecnico(recs){
     </div>
     <details style="margin-top:10px;" ${difs.length?'open':''}>
       <summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1e3a5f;">🔍 Diferenças para analisar (${difs.length})</summary>
-      <div style="font-size:11px;color:#64748b;margin:6px 0;">Tudo o que não está em "Já recebido"/"A receber" sem reparo, mais alertas (valor 0, sem técnico, pago fora do período) e pagamentos de OS de outros períodos — estes explicam a diferença para o relatório "Recebimentos por técnico" (que conta pela data do pagamento).</div>
+      <div style="font-size:11px;color:#64748b;margin:6px 0;">Tudo o que não está em "Já recebido"/"A receber" sem reparo, mais alertas (valor 0, sem técnico, pago fora do período) e pagamentos de OS de outros períodos — estes explicam a diferença para o relatório "Receita por técnico" (que conta pela data do pagamento).</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${Object.entries(difTot).map(([k,v])=>`<span style="background:#f1f5f9;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:600;">${esc(k)}: ${v.n} · €${fmt(v.v)}</span>`).join('')}</div>
       <div style="overflow:auto;max-height:420px;">
       <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px;">
@@ -34458,7 +34458,7 @@ window.cliHistoricoImprimir = function(cliId){
 <!-- Recebimentos por tecnico (v2) -->
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   HidroGest — RECEBIMENTOS POR TECNICO (v2 - por OS e por modalidade)
+   HidroGest — RECEITA POR TECNICO (v2 - por OS e por modalidade)
    Colar no fim do index.html dentro de um bloco de script.
 
    Fonte de "recebido" = OS dada como paga (o.pago===true) ou com recibo pago
@@ -34620,6 +34620,82 @@ window.cliHistoricoImprimir = function(cliId){
       <tbody>${rows}</tbody><tfoot><tr><td colspan="4">TOTAL</td><td class="num strong">${eur(t)}</td></tr></tfoot></table>`;
   }
 
+  // ---- v16.17 — SERVIÇOS por técnico: todos os agendados (por data da OS) concluídos ou em curso, sem garantias ----
+  function servicosPorTecnico(ini, fim, tecFiltro) {
+    const ordens = (typeof getVisibleOrdens === 'function') ? (getVisibleOrdens() || []) : (window.DB.ordens || []);
+    const rec = {}; (window.DB.recibos || []).forEach(r => { if (r.osId && !rec[r.osId]) rec[r.osId] = r; });
+    const srvNome = id => { const x = (window.DB.servicos || []).find(v => v.id === id); return (x && x.nome) || ''; };
+    const linhas = [], diffs = [];
+    ordens.forEach(o => {
+      const d = String(o.data || '').slice(0, 10);
+      if (!d || (ini && d < ini) || (fim && d > fim)) return;
+      const rc = rec[o.id];
+      const ids = (o.tecnicos || []).length ? o.tecnicos : [(rc && rc.techId) || '__sem__'];
+      const tid = ids[0];
+      const cli = clienteById(o.clienteId);
+      const base = { osId: o.id, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || o.clienteNome || '—',
+        servico: srvNome(o.servicoId) || o.servicoNome || '', segundo: ids.slice(1).map(x => nomeTec(x, '')).join(', ') };
+      let net = num(o.net) || num(rc && rc.net), total = num(o.total) || num(rc && rc.total);
+      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+      if (!total && net) total = net * 1.23;
+      const naoFat = (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o));
+      const concl = o.estado === 'concluida' || o.estado === 'os_fechada';
+      const pago = (o.pago === true) || (rc && rc.status === 'paid');
+      const meu = !tecFiltro || tid === tecFiltro;
+      if (tecFiltro && tid !== tecFiltro) {
+        // OS onde o técnico escolhido é 2.º técnico: aparece só na conciliação
+        if (ids.includes(tecFiltro) && !naoFat && (concl || o.estado === 'em_curso'))
+          diffs.push({ ...base, tecId: tecFiltro, tecnico: nomeTec(tecFiltro, ''), motivo: 'É 2.º técnico — receita vai para ' + nomeTec(tid, ''), net, total });
+        return;
+      }
+      if (o.estado === 'cancelada') { diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Cancelada', net, total }); return; }
+      if (naoFat)                   { diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Garantia / Orçamento (não entra)', net, total }); return; }
+      if (concl || o.estado === 'em_curso') {
+        linhas.push({ ...base, tecId: tid, tecnico: nomeTec(tid, rc && rc.tech), net, total,
+          estado: concl ? 'Concluída' : 'Em curso', pag: concl ? (pago ? 'Recebido' : 'A receber') : 'Em curso', cat: concl ? (pago ? 'rec' : 'ar') : 'ec' });
+      } else {
+        diffs.push({ ...base, tecId: tid, tecnico: nomeTec(tid, ''), motivo: 'Ainda agendada (não realizada)', net, total });
+      }
+    });
+    const byTec = (a, b) => String(a.tecnico).localeCompare(String(b.tecnico)) || String(a.data).localeCompare(String(b.data)) || String(a.osId).localeCompare(String(b.osId));
+    linhas.sort(byTec); diffs.sort(byTec);
+    return { linhas, diffs };
+  }
+  function tabelaServicosResumo(linhas) {
+    const m = {};
+    linhas.forEach(l => { const t = (m[l.tecId] ??= { nome: l.tecnico, n: 0, rec: 0, ar: 0, ec: 0, tot: 0, totB: 0 });
+      t.n++; t[l.cat] += l.net; t.tot += l.net; t.totB += l.total; });
+    const ids = Object.keys(m).sort((a, b) => String(m[a].nome).localeCompare(String(m[b].nome)));
+    if (!ids.length) return `<div class="vazio">Sem serviços concluídos ou em curso no período.</div>`;
+    const T = { n: 0, rec: 0, ar: 0, ec: 0, tot: 0, totB: 0 };
+    const rows = ids.map(id => { const t = m[id]; Object.keys(T).forEach(k => T[k] += t[k]);
+      return `<tr><td>${esc(t.nome)}</td><td class="c">${t.n}</td><td class="num">${eur(t.rec)}</td><td class="num">${eur(t.ar)}</td><td class="num">${eur(t.ec)}</td><td class="num strong">${eur(t.tot)}</td><td class="num">${eur(t.totB)}</td></tr>`; }).join('');
+    return `<table class="tb"><thead><tr><th>Técnico</th><th class="c">Nº OS</th><th class="num">Já recebido</th><th class="num">A receber</th><th class="num">Em curso</th><th class="num">Total s/ IVA</th><th class="num">Total c/ IVA</th></tr></thead>
+      <tbody>${rows}</tbody><tfoot><tr><td>TOTAL</td><td class="c">${T.n}</td><td class="num">${eur(T.rec)}</td><td class="num">${eur(T.ar)}</td><td class="num">${eur(T.ec)}</td><td class="num strong">${eur(T.tot)}</td><td class="num">${eur(T.totB)}</td></tr></tfoot></table>`;
+  }
+  function tabelaServicosDetalhe(linhas) {
+    if (!linhas.length) return `<div class="vazio">Sem serviços no período.</div>`;
+    let html = '';
+    const grupos = {}; linhas.forEach(l => (grupos[l.tecId] ??= []).push(l));
+    Object.keys(grupos).sort((a, b) => String(grupos[a][0].tecnico).localeCompare(String(grupos[b][0].tecnico))).forEach(id => {
+      const g = grupos[id]; let n = 0, t = 0;
+      const rows = g.map(l => { n += l.net; t += l.total;
+        return `<tr><td class="mono">${esc(l.osId)}</td><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.servico)}</td><td>${esc(l.segundo)}</td><td>${esc(l.estado)}</td><td>${esc(l.pag)}</td><td class="num strong">${eur(l.net)}</td><td class="num">${eur(l.total)}</td></tr>`; }).join('');
+      html += `<h3 style="font-size:13px;margin:14px 0 4px;color:#1e293b;">👷 ${esc(g[0].tecnico)} — ${g.length} serviços</h3>
+        <table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Serviço</th><th>2.º técnico</th><th>Estado</th><th>Pagamento</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th></tr></thead>
+        <tbody>${rows}</tbody><tfoot><tr><td colspan="7">SUBTOTAL ${esc(g[0].tecnico)}</td><td class="num strong">${eur(n)}</td><td class="num">${eur(t)}</td></tr></tfoot></table>`;
+    });
+    return html;
+  }
+  function tabelaDiferencas(diffs) {
+    if (!diffs.length) return `<div class="vazio">Sem diferenças: todos os agendamentos do período estão acima.</div>`;
+    const res = {}; diffs.forEach(d => { const r = (res[d.motivo.split(' — ')[0]] ??= { n: 0, net: 0, total: 0 }); r.n++; r.net += d.net; r.total += d.total; });
+    const resHtml = Object.entries(res).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="c">${v.n}</td><td class="num">${eur(v.net)}</td><td class="num">${eur(v.total)}</td></tr>`).join('');
+    const rows = diffs.map(d => `<tr><td class="mono">${esc(d.osId)}</td><td>${esc(fmtData(d.data))}</td><td>${esc(d.cliente)}</td><td>${esc(d.tecnico)}</td><td>${esc(d.motivo)}</td><td class="num">${eur(d.net)}</td><td class="num">${eur(d.total)}</td></tr>`).join('');
+    return `<table class="tb"><thead><tr><th>Motivo</th><th class="c">Nº OS</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th></tr></thead><tbody>${resHtml}</tbody></table>
+      <table class="tb"><thead><tr><th>Nº OS</th><th>Data</th><th>Cliente</th><th>Técnico</th><th>Motivo</th><th class="num">S/ IVA</th><th class="num">C/ IVA</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
   function gerar() {
     const ini = document.getElementById('rcb-ini').value;
     const fim = document.getElementById('rcb-fim').value;
@@ -34633,6 +34709,10 @@ window.cliHistoricoImprimir = function(cliId){
     const secOS  = tabelaDetalheOS(lista);
     const secAR  = tabelaAReceber(aReceberPorTecnico(ini, fim, tec));
     const secARdet = tabelaDetalheAReceber(aReceberLista(ini, fim, tec));
+    const sv = servicosPorTecnico(ini, fim, tec);
+    const secSvResumo = tabelaServicosResumo(sv.linhas);
+    const secSvDet = tabelaServicosDetalhe(sv.linhas);
+    const secDif = tabelaDiferencas(sv.diffs);
 
     const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;padding:24px 26px;}
       .cab{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1e3a8a;padding-bottom:12px;}
@@ -34645,9 +34725,13 @@ window.cliHistoricoImprimir = function(cliId){
       table.tb tfoot td{background:#dbe4f3;font-weight:bold;}.vazio{padding:12px;color:#64748b;font-size:12px;}
       .nota{margin-top:16px;font-size:10px;color:#94a3b8;}@media print{body{padding:12mm;}}`;
 
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Recebimentos por técnico</title><style>${css}</style></head><body>
-      <div class="cab"><img src="${LOGO}" class="logo" onerror="this.style.display='none'"><div class="tit"><h1>Recebimentos</h1><div class="sub">${esc(EMPRESA)}</div></div></div>
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Receita por técnico</title><style>${css}</style></head><body>
+      <div class="cab"><img src="${LOGO}" class="logo" onerror="this.style.display='none'"><div class="tit"><h1>Receita por técnico</h1><div class="sub">${esc(EMPRESA)}</div></div></div>
       <div class="meta"><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}${tec ? ' · <b>Técnico:</b> ' + esc(nomeTec(tec, '')) : ''} · valores <b>sem IVA</b></div>
+      <h2>Serviços por técnico — concluídos e em curso (por data do agendamento)</h2>${secSvResumo}
+      ${secSvDet}
+      <h2>Diferenças para a Lista de OS (não entram acima)</h2>${secDif}
+      <h2 style="margin-top:28px;border-top:2px solid #1e3a8a;padding-top:12px;">Dinheiro recebido no período (por data de pagamento)</h2>
       <h2>Recebidos — resumo por técnico</h2>${secTec}
       <h2>Recebidos — por modalidade de pagamento</h2>${secMod}
       <h2>Recebidos — detalhe por OS</h2>${secOS}
@@ -34675,8 +34759,8 @@ window.cliHistoricoImprimir = function(cliId){
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:99999;';
     ov.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:22px;width:min(440px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif;">
-        <h2 style="margin:0 0 4px;font-size:18px;color:#1e3a8a;">💰 Recebimentos por técnico</h2>
-        <p style="margin:0 0 16px;font-size:12px;color:#64748b;">Por OS e por modalidade — valores sem IVA.</p>
+        <h2 style="margin:0 0 4px;font-size:18px;color:#1e3a8a;">💰 Receita por técnico</h2>
+        <p style="margin:0 0 16px;font-size:12px;color:#64748b;">Serviços concluídos e em curso por técnico, e recebimentos — valores sem IVA.</p>
         <label style="font-size:12px;font-weight:bold;">Técnico (opcional)</label>
         <select id="rcb-tec" style="width:100%;padding:9px;margin:4px 0 12px;border:1px solid #cbd5e1;border-radius:8px;"><option value="">— Todos os técnicos —</option>${opts}</select>
         <div style="display:flex;gap:10px;">
@@ -34701,7 +34785,7 @@ window.cliHistoricoImprimir = function(cliId){
     if (document.getElementById('ni-receb')) return;
     const div = document.createElement('div');
     div.className = 'ni'; div.id = 'ni-receb';
-    div.innerHTML = '<span class="ico">💰</span> Recebimentos por técnico';
+    div.innerHTML = '<span class="ico">💰</span> Receita por técnico';
     div.onclick = window.recebimentosAbrir;
     nav.appendChild(div);
   }

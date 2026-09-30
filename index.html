@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.24<br>
+      HidroGest v16.25<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.24<br>
+      HidroGest v16.25<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6920,6 +6920,7 @@ function _fechoTodasOS(){
     const rc=reciboDe[o.id];
     let net=num(o.net)||num(rc&&rc.net);
     if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
+    if(!net) net=window.hgNetReserva(o);
     if(!net) return;
     const pago=(o.pago===true)||!!(rc&&rc.status==='paid');
     const pag=o.pagamento||{};
@@ -7493,6 +7494,7 @@ window.hgReceitaPeriodo = function(dentro){
     const rc=reciboDe[o.id];
     let net=num(o.net)||num(rc&&rc.net);
     if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
+    if(!net) net=window.hgNetReserva(o);
     const pago=(o.pago===true)||(rc&&rc.status==='paid');
     const id=window.hgTecReceita(o,(rc&&rc.techId)||'__sem__');
     const nome=id==='__sem__'?'Sem técnico':((users.find(u=>u.id===id)||{}).name||id);
@@ -7515,7 +7517,7 @@ function repRenderTecnico(recs){
   const dentro = d => { d=String(d||'').slice(0,10); if(!d) return false;
     if(iv.dias) return iv.dias.includes(d); if(iv.de && d<iv.de) return false; if(iv.ate && d>iv.ate) return false; return true; };
   const reciboDe = {}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
-  const liq = (o,rc)=>{ let net=num(o.net)||num(rc&&rc.net); if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; } return net; };
+  const liq = (o,rc)=>{ let net=num(o.net)||num(rc&&rc.net); if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; } if(!net) net=window.hgNetReserva(o); return net; };
   const bruto = (o,rc)=> num(o.total)||num(rc&&rc.total);
   const ordens = (typeof getVisibleOrdens==='function') ? (getVisibleOrdens()||[]) : (window.DB.ordens||[]);
   const CATS=[['rec','Recebido'],['areceber','A receber'],['curso','Em curso'],['agend','Agendadas'],['gar','Garantias / Orçam.'],['canc','Canceladas']];
@@ -9071,6 +9073,12 @@ function osServicoValorFixo(o){
 }
 
 // ── Fração e valor cobrado a partir do tempo AGENDADO ──
+
+// v16.25 — valor líquido de reserva para OS sem net/total gravados (ex.: recuperação de tubagem em curso, valor fixo)
+window.hgNetReserva=function(o){
+  try{ if(typeof osFracaoInfo==='function'){ const f=osFracaoInfo(o); const n=parseFloat(f&&f.net); return isNaN(n)?0:n; } }catch(e){}
+  return 0;
+};
 function osFracaoInfo(o){
   const srv=(window.DB.servicos||[]).find(s=>s.id===o.servicoId)||{};
   // v16.07 — respeitar o valor GRAVADO na OS mesmo quando é 0 (0 é um preço válido, ex.: valor fechado sem hora adicional).
@@ -34684,7 +34692,7 @@ window.cliHistoricoImprimir = function(cliId){
       if (tecFiltro && tid !== tecFiltro) return;
       let net = num(o.net) || num(recibo && recibo.net);
       let total = num(o.total) || num(recibo && recibo.total);
-      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; } if (!net) net = window.hgNetReserva(o);
       if (!total && net) total = net * 1.23;
       const met = pag.metodo || (recibo && recibo.pay) || '';
       const cli = clienteById(o.clienteId);
@@ -34713,7 +34721,7 @@ window.cliHistoricoImprimir = function(cliId){
       if (fim && d > fim) return;
       const tid = window.hgTecReceita(o, '__sem__');
       if (tecFiltro && tid !== tecFiltro) return;
-      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
+      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; } if (!net) net = window.hgNetReserva(o);
       (map[tid] ??= { nome: nomeTec(tid, ''), net: 0, count: 0 });
       map[tid].net += net; map[tid].count++;
     });
@@ -34735,7 +34743,7 @@ window.cliHistoricoImprimir = function(cliId){
       if (fim && d > fim) return;
       const tid = window.hgTecReceita(o, '__sem__');
       if (tecFiltro && tid !== tecFiltro) return;
-      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; }
+      let net = num(o.net); if (!net) { const t = num(o.total); const taxa = num(o.iva) || 23; net = t ? t / (1 + taxa / 100) : 0; } if (!net) net = window.hgNetReserva(o);
       const cli = clienteById(o.clienteId);
       out.push({ osId: o.id, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || o.clienteNome || '—', tecnico: nomeTec(tid, ''), net });
     });
@@ -34819,7 +34827,7 @@ window.cliHistoricoImprimir = function(cliId){
       const base = { osId: o.id, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || o.clienteNome || '—',
         servico: srvNome(o.servicoId) || o.servicoNome || '', segundo: ids.slice(1).map(x => nomeTec(x, '')).join(', ') };
       let net = num(o.net) || num(rc && rc.net), total = num(o.total) || num(rc && rc.total);
-      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+      if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; } if (!net) net = window.hgNetReserva(o);
       if (!total && net) total = net * 1.23;
       const naoFat = (typeof osServicoNaoFaturavel === 'function' && osServicoNaoFaturavel(o));
       const concl = o.estado === 'concluida' || o.estado === 'os_fechada';
@@ -35031,7 +35039,7 @@ window.cliHistoricoImprimir = function(cliId){
           const met = pag.metodo || (reciboEx && reciboEx.pay) || '';
           let net = num(o.net) || num(reciboEx && reciboEx.net);
           let total = num(o.total) || num(reciboEx && reciboEx.total);
-          if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; }
+          if (!net) { const taxa = num(o.iva) || 23; net = total ? total / (1 + taxa / 100) : 0; } if (!net) net = window.hgNetReserva(o);
           faltam.push({ o, reciboEx, data: d, cliente: (cli && cli.nome) || o.clienteNomeSnapshot || '—', tecnico: nomeTec(o), met, metLabel: payLabel(met), net, total });
         }
       } else if (pag.confirmadoEm && o.pago !== true && !temReciboPago) {

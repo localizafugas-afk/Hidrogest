@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.08<br>
+      HidroGest v16.10<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.08<br>
+      HidroGest v16.10<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -1936,6 +1936,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
         <input class="fi" id="os-filter-local" placeholder="📍 Localidade..." style="width:130px;font-size:13px;" oninput="osRenderLista()">
         <button class="btn btn-sm" style="background:#fff;color:#475569;border:1.5px solid #e2e8f0;font-weight:600;" onclick="osLimparFiltros()">↺ Limpar</button>
         <span id="os-lista-resumo" style="font-size:12px;color:#475569;font-weight:600;"></span>
+        <button class="btn btn-sm" style="background:#fff;color:#475569;border:1.5px solid #e2e8f0;font-weight:600;" onclick="osImprimirLista()">🖨️ Imprimir</button>
         <button class="btn btn-primary btn-sm" onclick="osOpenModal()">+ Nova OS</button>
       </div>
     </div>
@@ -7327,64 +7328,80 @@ function repRenderDia(recs, ordens, de, ate){
   </div>`;
 }
 
+// v16.09 — intervalo [de,ate] (YYYY-MM-DD) do período escolhido no relatório; null = sem limite
+function _repIntervalo(){
+  const pad=n=>String(n).padStart(2,'0'), f=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const now=new Date();
+  if(_repDiasEspecificos && _repDiasEspecificos.length) return {dias:_repDiasEspecificos};
+  const period=document.getElementById('rep-period')?.value;
+  if(period==='week'){const w=new Date();w.setDate(w.getDate()-7);return {de:f(w),ate:f(now)};}
+  if(period==='month') return {de:`${now.getFullYear()}-${pad(now.getMonth()+1)}-01`,ate:f(now)};
+  if(period==='quarter') return {de:f(new Date(now.getFullYear(),Math.floor(now.getMonth()/3)*3,1)),ate:f(now)};
+  if(period==='year') return {de:`${now.getFullYear()}-01-01`,ate:f(now)};
+  if(period==='custom') return {de:document.getElementById('rep-from')?.value||null,ate:document.getElementById('rep-to')?.value||null};
+  return {};
+}
 function repRenderTecnico(recs){
   const tecnicos = window.DB.users||[];
+  const num = v => { const n=parseFloat(String(v==null?0:v).replace(',','.')); return isNaN(n)?0:n; };
+  const nomeDe = id => id==='__sem__' ? 'Sem técnico atribuído' : (tecnicos.find(u=>u.id===id)?.name || id);
   const porTec = {};
-  const _fnum = v => { const n=parseFloat(String(v==null?0:v).replace(',','.')); return isNaN(n)?0:n; };
-  // v16.06 — o técnico vem da OS (recibo.osId → os.tecnicos), não do texto livre r.tech
-  // (que podia ter o nome de quem deu baixa, vários nomes juntos, ou estar vazio).
-  // Valor = líquido (sem IVA), igual ao Dashboard; OS com 2+ técnicos divide-se em partes iguais.
-  recs.forEach(r=>{
-    const os = r.osId ? (window.DB.ordens||[]).find(o=>o.id===r.osId) : null;
-    let ids = (os && os.tecnicos && os.tecnicos.length) ? os.tecnicos.slice() : (r.techId ? [r.techId] : []);
-    const val = _fnum(r.net) || (_fnum(r.total)/1.23);
-    if(!ids.length){ ids=['__sem__']; }
-    ids.forEach(id=>{
-      const nome = id==='__sem__' ? (r.tech ? 'Sem técnico na OS ('+r.tech+')' : 'Sem técnico atribuído')
-                 : ((window.DB.users||[]).find(u=>u.id===id)?.name || id);
-      if(!porTec[nome]) porTec[nome]={total:0,count:0,horas:0,nome};
-      porTec[nome].total += val/ids.length;
-      porTec[nome].count++;
-      porTec[nome].horas += _fnum(r.hours)/ids.length;
-    });
-  });
-  const lista = Object.values(porTec).sort((a,b)=>b.total-a.total);
-  const maxTotal = Math.max(1,...lista.map(t=>t.total));
+  const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),os:0,fat:0,rec:0,horas:0});
+  const iv = _repIntervalo();
+  const dentro = d => { d=String(d||'').slice(0,10); if(!d) return false;
+    if(iv.dias) return iv.dias.includes(d); if(iv.de && d<iv.de) return false; if(iv.ate && d>iv.ate) return false; return true; };
+  const recPorOS = {}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId) (recPorOS[r.osId]=recPorOS[r.osId]||[]).push(r); });
 
+  // FATURADO = OS concluídas no período (pagas ou não), líquido sem IVA, dividido pelos técnicos da OS
+  (window.DB.ordens||[]).forEach(o=>{
+    if(o.estado!=='concluida' && o.estado!=='os_fechada') return;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
+    if(!dentro(o.concluidoEm||o.data)) return;
+    const rc=(recPorOS[o.id]||[])[0];
+    const tot=num(o.total)||num(o.valorTotal)||num(rc?.total);
+    const net=num(o.net)||num(rc?.net)||(tot/1.23);
+    const ids=(o.tecnicos&&o.tecnicos.length)?o.tecnicos:['__sem__'];
+    ids.forEach(id=>{ const t=get(id); t.os++; t.fat+=net/ids.length; });
+  });
+  // RECEBIDO = recibos pagos no período (os mesmos do Dashboard), técnico vindo da OS
+  recs.forEach(r=>{
+    const os=r.osId?(window.DB.ordens||[]).find(o=>o.id===r.osId):null;
+    const ids=(os&&os.tecnicos&&os.tecnicos.length)?os.tecnicos:(r.techId?[r.techId]:['__sem__']);
+    const val=num(r.net)||(num(r.total)/1.23);
+    ids.forEach(id=>{ const t=get(id); t.rec+=val/ids.length; t.horas+=num(r.hours)/ids.length; });
+  });
+  const lista=Object.values(porTec).sort((a,b)=>b.fat-a.fat);
+  const T=lista.reduce((s,t)=>({os:s.os+t.os,fat:s.fat+t.fat,rec:s.rec+t.rec}),{os:0,fat:0,rec:0});
+  const th='padding:10px 12px;font-size:11px;color:#64748b;text-transform:uppercase;';
+  const td='padding:10px 12px;';
   return `<div class="rep-card" style="grid-column:1/-1;">
-    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· líquido (sem IVA), recebimentos do período · OS com 2+ técnicos dividida em partes iguais</span></div>
+    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · OS com 2+ técnicos dividida em partes iguais</span></div>
     <div style="overflow:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e5e7eb;">
-          <th style="padding:10px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Técnico</th>
-          <th style="padding:10px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Serviços</th>
-          <th style="padding:10px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Horas</th>
-          <th style="padding:10px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Ticket Médio</th>
-          <th style="padding:10px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Barra</th>
-          <th style="padding:10px 12px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Total</th>
+          <th style="${th}text-align:left;">Técnico</th>
+          <th style="${th}text-align:center;">OS concluídas</th>
+          <th style="${th}text-align:right;">Faturado</th>
+          <th style="${th}text-align:right;">Recebido</th>
+          <th style="${th}text-align:right;">Por receber</th>
         </tr></thead>
         <tbody>
-          ${lista.map((t,i)=>{
-            const tec = tecnicos.find(u=>u.name===t.nome||u.id===t.nome);
-            const cor = tec?.cor||'#1a6ff5';
-            const pct = (t.total/maxTotal*100).toFixed(1);
-            return `<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
-              <td style="padding:10px 12px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <div style="width:28px;height:28px;border-radius:50%;background:${cor};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;">${t.nome.split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
-                  <span style="font-weight:600;">${t.nome}</span>
-                </div>
-              </td>
-              <td style="padding:10px 12px;text-align:center;"><span style="background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;">${t.count}</span></td>
-              <td style="padding:10px 12px;text-align:center;color:#64748b;">${t.horas.toFixed(1)}h</td>
-              <td style="padding:10px 12px;text-align:center;font-weight:600;">€${fmt(t.count?t.total/t.count:0)}</td>
-              <td style="padding:10px 12px;min-width:100px;"><div style="background:#e5e7eb;border-radius:4px;height:8px;"><div style="background:${cor};border-radius:4px;height:8px;width:${pct}%;"></div></div></td>
-              <td style="padding:10px 12px;text-align:right;font-weight:800;font-size:14px;color:${cor};">€${fmt(t.total)}</td>
-            </tr>`;
-          }).join('')}
+          ${lista.map((t,i)=>`<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
+            <td style="${td}font-weight:600;">${t.nome}</td>
+            <td style="${td}text-align:center;">${t.os}</td>
+            <td style="${td}text-align:right;font-weight:800;color:var(--accent);">€${fmt(t.fat)}</td>
+            <td style="${td}text-align:right;font-weight:700;color:#15803d;">€${fmt(t.rec)}</td>
+            <td style="${td}text-align:right;color:#d97706;">€${fmt(Math.max(0,t.fat-t.rec))}</td>
+          </tr>`).join('')}
         </tbody>
+        <tfoot><tr style="background:#f0fdf4;border-top:2px solid #86efac;font-weight:800;">
+          <td style="${td}">TOTAL</td><td style="${td}text-align:center;">${T.os}</td>
+          <td style="${td}text-align:right;">€${fmt(T.fat)}</td><td style="${td}text-align:right;">€${fmt(T.rec)}</td>
+          <td style="${td}text-align:right;">€${fmt(Math.max(0,T.fat-T.rec))}</td>
+        </tr></tfoot>
       </table>
     </div>
+    <div style="font-size:11px;color:#64748b;margin-top:8px;">Faturado = OS concluídas no período (pagas ou não). Recebido = recibos pagos no período (igual ao Dashboard). Uma OS concluída num mês e paga noutro pode fazer o Recebido diferir do Faturado por técnico.</div>
   </div>`;
 }
 
@@ -22352,13 +22369,66 @@ function rpImprimirLista(){
     </div>
     ${clone.outerHTML}
     <div class="rodape">${emp.nome||'Localiza Fugas'} · Gerado automaticamente em ${new Date().toLocaleString('pt-PT')}</div>
-    <script>window.onload=()=>{ window.print(); window.onafterprint=()=>window.close(); }<\/script>
   </body></html>`;
+  hgImprimirHTML(html);
+}
 
-  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
-  const win  = window.open(url, '_blank', 'width=1000,height=700');
-  if(!win) toast('Active popups para imprimir','⚠️');
+// v16.10 — imprime HTML através de um iframe invisível (não depende de pop-ups, funciona no telemóvel)
+function hgImprimirHTML(html){
+  const old=document.getElementById('hg-print-frame'); if(old) old.remove();
+  const f=document.createElement('iframe');
+  f.id='hg-print-frame';
+  f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  const d=f.contentWindow.document;
+  d.open(); d.write(html); d.close();
+  setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){ toast('Não foi possível imprimir','⚠️'); } },400);
+}
+
+// v16.10 — Imprimir a lista de OS (respeita os filtros e a pesquisa ativos)
+function osImprimirLista(){
+  const tb=document.getElementById('os-lista-tbody');
+  const tabela=tb&&tb.closest('table');
+  if(!tabela||!tb.querySelector('tr')){ toast('Nenhuma OS para imprimir','⚠️'); return; }
+  const clone=tabela.cloneNode(true);
+  // remover a coluna "Acções" (última) e botões/inputs
+  clone.querySelectorAll('tr').forEach(tr=>{ const c=tr.querySelectorAll('th,td'); if(c.length) c[c.length-1].remove(); });
+  clone.querySelectorAll('button,input,select').forEach(e=>e.remove());
+  const total=clone.querySelectorAll('tbody tr').length;
+  const g=id=>document.getElementById(id);
+  const selTxt=id=>{ const e=g(id); return e&&e.value ? (e.options?e.options[e.selectedIndex].text:e.value) : ''; };
+  const filtros=[
+    selTxt('os-filter-estado')&&'Estado: '+selTxt('os-filter-estado'),
+    selTxt('os-filter-tec')&&'Técnico: '+selTxt('os-filter-tec'),
+    g('os-filter-de')?.value&&'De: '+g('os-filter-de').value,
+    g('os-filter-ate')?.value&&'Até: '+g('os-filter-ate').value,
+    g('os-filter-local')?.value&&'Local: '+g('os-filter-local').value,
+    g('os-search')?.value&&'Pesquisa: "'+g('os-search').value+'"'
+  ].filter(Boolean).join(' · ')||'Todos';
+  const dataHoje=new Date().toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const emp=(typeof getEmpDados==='function'?getEmpDados():{})||{};
+  const resumo=g('os-lista-resumo')?.textContent||'';
+  const html=`<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Lista de OS — ${dataHoje}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#1e293b;background:#fff;padding:16px;}
+    @page{size:A4 landscape;margin:10mm 12mm;}
+    h1{font-size:16px;font-weight:800;color:#1e3a5f;margin-bottom:4px;}
+    .sub{font-size:11px;color:#64748b;margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap;}
+    table{width:100%;border-collapse:collapse;font-size:10.5px;}
+    thead tr{background:#1e3a5f;color:#fff;}
+    thead th{padding:7px 8px;text-align:left;font-weight:700;}
+    tbody tr{border-bottom:1px solid #e5e7eb;page-break-inside:avoid;}
+    tbody tr:nth-child(even){background:#f8fafc;}
+    tbody td{padding:6px 8px;vertical-align:top;}
+    .rodape{margin-top:14px;font-size:10px;color:#94a3b8;text-align:center;border-top:1px solid #e5e7eb;padding-top:8px;}
+  </style></head><body>
+  <h1>📋 Lista de Ordens de Serviço</h1>
+  <div class="sub"><span>📅 ${dataHoje}</span><span>Filtros: <strong>${filtros}</strong></span><span>Total: <strong>${total} OS</strong></span>${resumo?`<span>${resumo}</span>`:''}</div>
+  ${clone.outerHTML}
+  <div class="rodape">${emp.nome||'Localiza Fugas'} · Gerado em ${new Date().toLocaleString('pt-PT')}</div>
+  </body></html>`;
+  hgImprimirHTML(html);
 }
 
 // ── Controlo de colunas e filtros de relatórios ─────────────

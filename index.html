@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.19<br>
+      HidroGest v16.22<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.19<br>
+      HidroGest v16.22<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -7337,17 +7337,58 @@ function _repIntervalo(){
   return {};
 }
 // v16.19 — QUEM RECEBE A RECEITA de uma OS: o 1.º técnico; exceção: se um técnico "prioritário" (Higor) estiver na OS, mesmo em 2.º, a receita é dele.
-window.HG_TEC_PRIORITARIOS = window.HG_TEC_PRIORITARIOS || ['higor'];
+window.HG_TEC_PRIORITARIOS = window.HG_TEC_PRIORITARIOS || ['higor'];   // se estiver na OS (em qualquer posição) fica com a receita
+window.HG_TEC_SEM_RECEITA_EM_DUPLA = window.HG_TEC_SEM_RECEITA_EM_DUPLA || ['aldo'];  // numa OS com 2 técnicos, a receita é sempre do outro
+window.HG_TEC_REDIRECIONA  = window.HG_TEC_REDIRECIONA  || {};  // (vazio) opcional: {nome:'outro'} manda TODA a receita de 'nome' para 'outro'
 window.hgTecReceita = function(o, fallbackId){
+  const users=((window.DB&&window.DB.users)||[]);
+  const norm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  const nomeDe=id=>norm((users.find(u=>u.id===id)||{}).name);
   const ids=(o&&o.tecnicos&&o.tecnicos.length)?o.tecnicos:[];
-  if(!ids.length) return fallbackId||'__sem__';
-  const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  for(const id of ids){
-    const nome=norm(((window.DB&&window.DB.users)||[]).find(u=>u.id===id)?.name);
-    if(window.HG_TEC_PRIORITARIOS.some(t=>nome.includes(norm(t)))) return id;
+  let dono;
+  if(!ids.length) dono=fallbackId||'__sem__';
+  else {
+    // em OS com 2+ técnicos, quem está na lista "sem receita em dupla" (Aldo) nunca fica com a receita
+    const cand = ids.length>1 ? ids.filter(id=>!window.HG_TEC_SEM_RECEITA_EM_DUPLA.some(t=>nomeDe(id).includes(norm(t)))) : ids;
+    const base = cand.length ? cand : ids;
+    dono = base.find(id=>window.HG_TEC_PRIORITARIOS.some(t=>nomeDe(id).includes(norm(t)))) || base[0];
   }
-  return ids[0];
+  // redireciona (ex.: trabalhos do Hamza → Higor; o Hamza fica sem receita)
+  const nd=nomeDe(dono);
+  for(const de in window.HG_TEC_REDIRECIONA){
+    if(nd.includes(norm(de))){
+      const alvo=users.find(u=>norm(u.name).includes(norm(window.HG_TEC_REDIRECIONA[de])));
+      if(alvo) return alvo.id;
+    }
+  }
+  return dono;
 };
+// v16.20 — FATURAÇÃO do período (mesma base de "Receita por técnico"): OS concluídas + em curso, por data de agendamento,
+// sem garantias/orçamentos nem canceladas; valores sem IVA; cada OS pertence a UM técnico (hgTecReceita).
+window.hgReceitaPeriodo = function(dentro){
+  const num=v=>{const n=parseFloat(String(v==null?0:v).replace(',','.'));return isNaN(n)?0:n;};
+  const users=window.DB.users||[];
+  const reciboDe={}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
+  const ordens=(typeof getVisibleOrdens==='function')?(getVisibleOrdens()||[]):(window.DB.ordens||[]);
+  const por={}, T={n:0,fat:0,rec:0,ar:0,ec:0,horas:0};
+  ordens.forEach(o=>{
+    if(!dentro(o.data)) return;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
+    const concl=(o.estado==='concluida'||o.estado==='os_fechada');
+    if(!concl && o.estado!=='em_curso') return;
+    const rc=reciboDe[o.id];
+    let net=num(o.net)||num(rc&&rc.net);
+    if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
+    const pago=(o.pago===true)||(rc&&rc.status==='paid');
+    const id=window.hgTecReceita(o,(rc&&rc.techId)||'__sem__');
+    const nome=id==='__sem__'?'Sem técnico':((users.find(u=>u.id===id)||{}).name||id);
+    const x=por[id]||(por[id]={id,nome,n:0,fat:0,rec:0,ar:0,ec:0});
+    const cat=!concl?'ec':(pago?'rec':'ar');
+    x.n++; x.fat+=net; x[cat]+=net; T.n++; T.fat+=net; T[cat]+=net;
+  });
+  return {por,T};
+};
+
 window._repTecFiltro = window._repTecFiltro || '';
 function repRenderTecnico(recs){
   // v16.16 — CONCILIAÇÃO por técnico. Base: todas as OS com data de agendamento no período (igual à Lista de OS).
@@ -8211,18 +8252,25 @@ function renderReports(){
   const totGross=recs.reduce((a,r)=>a+(r.total||0),0);
   const totHoras=recs.reduce((a,r)=>a+(r.hours||0),0);
 
+  // v16.20 — bloco principal = FATURAÇÃO (OS concluídas + em curso do período, sem garantias), igual a "Receita por técnico"
+  const _ivG=_repIntervalo();
+  const _dentroG=d=>{ d=String(d||'').slice(0,10); if(!d) return false; if(_ivG.dias) return _ivG.dias.includes(d); if(_ivG.de && d<_ivG.de) return false; if(_ivG.ate && d>_ivG.ate) return false; return true; };
+  const RP=window.hgReceitaPeriodo(_dentroG);
   statsEl.innerHTML=[
-    ['Receita Líquida',`€${fmt(totNet)}`,'var(--green)'],
-    ['IVA Cobrado',`€${fmt(totIva)}`,'var(--yellow)'],
-    ['Receita Bruta',`€${fmt(totGross)}`,'var(--accent)'],
-    ['Horas de Serviço',`${totHoras.toFixed(1)}h`,'var(--purple)'],
-    ['Nº Serviços',`${recs.length}`,'var(--orange)'],
-    ['Recebimentos pendentes',`${pending.length}`,'var(--red)'],
-  ].map(([label,val,cor])=>`
+    ['Faturação do período (s/ IVA)',`€${fmt(RP.T.fat)}`,'var(--accent)','OS concluídas + em curso · '+RP.T.n+' OS · sem garantias'],
+    ['Já recebido',`€${fmt(RP.T.rec)}`,'var(--green)','OS concluídas e pagas'],
+    ['A receber',`€${fmt(RP.T.ar)}`,'var(--yellow)','OS concluídas ainda não pagas'],
+    ['OS em curso',`€${fmt(RP.T.ec)}`,'var(--purple)','ainda por concluir'],
+    ['Recibos pagos — líquido',`€${fmt(totNet)}`,'var(--text2)','só recibos emitidos e pagos no período ('+recs.length+') · valor contabilístico, NÃO é a faturação'],
+    ['IVA dos recibos pagos',`€${fmt(totIva)}`,'var(--text2)','recibos pagos no período'],
+    ['Horas de Serviço',`${totHoras.toFixed(1)}h`,'var(--text2)','dos recibos pagos'],
+    ['Recibos pendentes',`${pending.length}`,'var(--red)','recibos por pagar'],
+  ].map(([label,val,cor,sub])=>`
     <div class="sc">
       <div class="sc-glow" style="background:${cor}"></div>
       <div class="sc-label">${label}</div>
       <div class="sc-val" style="color:${cor}">${val}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${sub||''}</div>
     </div>`).join('');
 
   // Breakdown por técnico
@@ -8237,13 +8285,14 @@ function renderReports(){
 
   gridEl.innerHTML=`
     <div class="rep-card">
-      <div class="rep-card-title">💰 Receita por Técnico</div>
-      ${Object.entries(byTech).sort((a,b)=>b[1].net-a[1].net).map(([tech,v])=>`
+      <div class="rep-card-title">💰 Receita por Técnico <span style="font-weight:400;font-size:10px;color:var(--text3);">· faturação s/IVA (concluídas + em curso)</span></div>
+      ${(()=>{ const L=Object.values(RP.por).sort((a,b)=>b.fat-a.fat); const mx=Math.max(1,...L.map(x=>x.fat));
+        return L.map(x=>`
         <div class="bar-row">
-          <div class="bar-label" title="${tech}">${tech.split(' ')[0]}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${(v.net/techMax*100).toFixed(1)}%;background:var(--accent)"></div></div>
-          <div class="bar-val">€${fmt(v.net)}</div>
-        </div>`).join('')||'<div style="color:var(--text3);font-size:12px;">Sem dados</div>'}
+          <div class="bar-label" title="${x.nome}">${String(x.nome).split(' ')[0]}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(x.fat/mx*100).toFixed(1)}%;background:var(--accent)"></div></div>
+          <div class="bar-val">€${fmt(x.fat)}</div>
+        </div>`).join('')||'<div style="color:var(--text3);font-size:12px;">Sem dados</div>'; })()}
     </div>
     <div class="rep-card">
       <div class="rep-card-title">🔧 Receita por Serviço</div>

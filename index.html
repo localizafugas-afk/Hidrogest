@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.10<br>
+      HidroGest v16.14<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.10<br>
+      HidroGest v16.14<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -1540,18 +1540,13 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <div class="sh">
         <div class="sh-title">📊 Relatórios Financeiros</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <!-- Botões rápidos de período -->
+          <!-- v16.14: botões rápidos removidos — o período escolhe-se no calendário -->
           <div style="display:flex;gap:4px;flex-wrap:wrap;">
-            <button onclick="repPeriodoRapido('hoje')"    class="rep-periodo-btn" id="rpb-hoje"     style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;">Hoje</button>
-            <button onclick="repPeriodoRapido('semana')"  class="rep-periodo-btn" id="rpb-semana"   style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;">Semana</button>
-            <button onclick="repPeriodoRapido('mes')"     class="rep-periodo-btn" id="rpb-mes"      style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--accent);background:var(--accent);font-size:12px;font-weight:600;cursor:pointer;color:#fff;">Mês</button>
-            <button onclick="repPeriodoRapido('quinzena')" class="rep-periodo-btn" id="rpb-quinzena" style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;">Quinzena</button>
-            <button onclick="repPeriodoRapido('trimestre')" class="rep-periodo-btn" id="rpb-trimestre" style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;">Trimestre</button>
-            <button onclick="repPeriodoRapido('ano')"     class="rep-periodo-btn" id="rpb-ano"      style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#475569;">Ano</button>
             <button onclick="repAbrirCalendario()"        class="rep-periodo-btn" id="rpb-dias"     style="padding:5px 10px;border-radius:6px;border:1.5px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer;color:#7c3aed;">📅 Dias específicos</button>
           </div>
           <!-- Intervalo de datas (sempre visível) -->
           <div style="display:flex;gap:6px;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;">
+            <span style="font-size:12px;font-weight:700;color:#475569;">📅 Período</span>
             <input type="date" id="rep-from" onchange="repDataAlterada()" style="border:none;background:transparent;font-size:12px;font-weight:600;color:#1e293b;cursor:pointer;">
             <span style="color:#94a3b8;font-size:12px;">→</span>
             <input type="date" id="rep-to" onchange="repDataAlterada()" style="border:none;background:transparent;font-size:12px;font-weight:600;color:#1e293b;cursor:pointer;">
@@ -7341,67 +7336,81 @@ function _repIntervalo(){
   if(period==='custom') return {de:document.getElementById('rep-from')?.value||null,ate:document.getElementById('rep-to')?.value||null};
   return {};
 }
+window._repTecFiltro = window._repTecFiltro || '';
 function repRenderTecnico(recs){
+  // v16.11 — MESMAS regras do relatório "Recebimentos por técnico":
+  //  • técnico = principal da OS (tecnicos[0]); valores sem IVA
+  //  • pago = OS marcada paga (o.pago) OU recibo pago; data do pagamento = pagoEm/recibo/confirmação
+  //  • Faturado = OS concluídas no período (Garantia/Orçamento fora)
+  //  • Recebido no período = pagamentos que entraram no período (podem ser de OS de meses anteriores)
   const tecnicos = window.DB.users||[];
   const num = v => { const n=parseFloat(String(v==null?0:v).replace(',','.')); return isNaN(n)?0:n; };
   const nomeDe = id => id==='__sem__' ? 'Sem técnico atribuído' : (tecnicos.find(u=>u.id===id)?.name || id);
   const porTec = {};
-  const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),os:0,fat:0,rec:0,horas:0});
+  const get = id => porTec[id] || (porTec[id]={id,nome:nomeDe(id),os:0,fat:0,pagas:0,porRec:0,recPer:0,nRecPer:0});
   const iv = _repIntervalo();
   const dentro = d => { d=String(d||'').slice(0,10); if(!d) return false;
     if(iv.dias) return iv.dias.includes(d); if(iv.de && d<iv.de) return false; if(iv.ate && d>iv.ate) return false; return true; };
-  const recPorOS = {}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId) (recPorOS[r.osId]=recPorOS[r.osId]||[]).push(r); });
-
-  // FATURADO = OS concluídas no período (pagas ou não), líquido sem IVA, dividido pelos técnicos da OS
-  (window.DB.ordens||[]).forEach(o=>{
-    if(o.estado!=='concluida' && o.estado!=='os_fechada') return;
+  const reciboDe = {}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
+  const liq = (o,rc)=>{ let net=num(o.net)||num(rc&&rc.net); if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; } return net; };
+  const ordens = (typeof getVisibleOrdens==='function') ? (getVisibleOrdens()||[]) : (window.DB.ordens||[]);
+  ordens.forEach(o=>{
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
-    if(!dentro(o.concluidoEm||o.data)) return;
-    const rc=(recPorOS[o.id]||[])[0];
-    const tot=num(o.total)||num(o.valorTotal)||num(rc?.total);
-    const net=num(o.net)||num(rc?.net)||(tot/1.23);
-    const ids=(o.tecnicos&&o.tecnicos.length)?o.tecnicos:['__sem__'];
-    ids.forEach(id=>{ const t=get(id); t.os++; t.fat+=net/ids.length; });
+    const rc=reciboDe[o.id];
+    const pago=(o.pago===true)||(rc&&rc.status==='paid');
+    const tid=(o.tecnicos&&o.tecnicos[0])||(rc&&rc.techId)||'__sem__';
+    const net=liq(o,rc);
+    if(window._repTecFiltro && tid!==window._repTecFiltro) return;
+    if((o.estado==='concluida'||o.estado==='os_fechada') && dentro(o.concluidoEm||o.data)){
+      const t=get(tid); t.os++; t.fat+=net; if(pago) t.pagas+=net; else t.porRec+=net;
+    }
+    if(pago){
+      const pag=o.pagamento||{};
+      const d=o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data;
+      if(dentro(d)){ const t=get(tid); t.recPer+=net; t.nRecPer++; }
+    }
   });
-  // RECEBIDO = recibos pagos no período (os mesmos do Dashboard), técnico vindo da OS
-  recs.forEach(r=>{
-    const os=r.osId?(window.DB.ordens||[]).find(o=>o.id===r.osId):null;
-    const ids=(os&&os.tecnicos&&os.tecnicos.length)?os.tecnicos:(r.techId?[r.techId]:['__sem__']);
-    const val=num(r.net)||(num(r.total)/1.23);
-    ids.forEach(id=>{ const t=get(id); t.rec+=val/ids.length; t.horas+=num(r.hours)/ids.length; });
-  });
-  const lista=Object.values(porTec).sort((a,b)=>b.fat-a.fat);
-  const T=lista.reduce((s,t)=>({os:s.os+t.os,fat:s.fat+t.fat,rec:s.rec+t.rec}),{os:0,fat:0,rec:0});
+  const _tecOpts=(window.DB.users||[]).filter(u=>u.role==='tecnico'||Object.prototype.hasOwnProperty.call(porTec,u.id))
+    .sort((a,b)=>String(a.name).localeCompare(String(b.name)))
+    .map(u=>`<option value="${u.id}"${u.id===window._repTecFiltro?' selected':''}>${u.name}</option>`).join('');
+  const lista=Object.values(porTec).filter(t=>t.os>0).sort((a,b)=>b.fat-a.fat);
+  const T=lista.reduce((s,t)=>({os:s.os+t.os,fat:s.fat+t.fat,pagas:s.pagas+t.pagas,porRec:s.porRec+t.porRec}),{os:0,fat:0,pagas:0,porRec:0});
   const th='padding:10px 12px;font-size:11px;color:#64748b;text-transform:uppercase;';
   const td='padding:10px 12px;';
   return `<div class="rep-card" style="grid-column:1/-1;">
-    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · OS com 2+ técnicos dividida em partes iguais</span></div>
+    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· valores sem IVA · 1.º técnico da OS recebe a receita</span>
+      <select onchange="window._repTecFiltro=this.value;renderReports()" style="float:right;font-size:12px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;">
+        <option value="">👷 Todos os técnicos</option>${_tecOpts}
+      </select></div>
     <div style="overflow:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e5e7eb;">
           <th style="${th}text-align:left;">Técnico</th>
-          <th style="${th}text-align:center;">OS concluídas</th>
+          <th style="${th}text-align:center;">OS realizadas</th>
           <th style="${th}text-align:right;">Faturado</th>
           <th style="${th}text-align:right;">Recebido</th>
-          <th style="${th}text-align:right;">Por receber</th>
+          <th style="${th}text-align:right;">A receber</th>
         </tr></thead>
         <tbody>
           ${lista.map((t,i)=>`<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
             <td style="${td}font-weight:600;">${t.nome}</td>
             <td style="${td}text-align:center;">${t.os}</td>
             <td style="${td}text-align:right;font-weight:800;color:var(--accent);">€${fmt(t.fat)}</td>
-            <td style="${td}text-align:right;font-weight:700;color:#15803d;">€${fmt(t.rec)}</td>
-            <td style="${td}text-align:right;color:#d97706;">€${fmt(Math.max(0,t.fat-t.rec))}</td>
+            <td style="${td}text-align:right;font-weight:700;color:#15803d;">€${fmt(t.pagas)}</td>
+            <td style="${td}text-align:right;font-weight:700;color:#d97706;">€${fmt(t.porRec)}</td>
           </tr>`).join('')}
         </tbody>
         <tfoot><tr style="background:#f0fdf4;border-top:2px solid #86efac;font-weight:800;">
           <td style="${td}">TOTAL</td><td style="${td}text-align:center;">${T.os}</td>
-          <td style="${td}text-align:right;">€${fmt(T.fat)}</td><td style="${td}text-align:right;">€${fmt(T.rec)}</td>
-          <td style="${td}text-align:right;">€${fmt(Math.max(0,T.fat-T.rec))}</td>
+          <td style="${td}text-align:right;">€${fmt(T.fat)}</td><td style="${td}text-align:right;">€${fmt(T.pagas)}</td>
+          <td style="${td}text-align:right;">€${fmt(T.porRec)}</td>
         </tr></tfoot>
       </table>
     </div>
-    <div style="font-size:11px;color:#64748b;margin-top:8px;">Faturado = OS concluídas no período (pagas ou não). Recebido = recibos pagos no período (igual ao Dashboard). Uma OS concluída num mês e paga noutro pode fazer o Recebido diferir do Faturado por técnico.</div>
+    <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">
+      <b>Faturado</b> = trabalho realizado no período. &nbsp;<b>Recebido</b> = realizado e já recebido. &nbsp;<b>A receber</b> = realizado e ainda não recebido. &nbsp;(Faturado = Recebido + A receber.)<br>
+      Conta como recebido quando a OS está marcada como paga ou tem recibo pago. Garantias e orçamentos ficam de fora.
+    </div>
   </div>`;
 }
 
@@ -12948,7 +12957,11 @@ function osRenderLista(){
   const _resumo=document.getElementById('os-lista-resumo');
   if(_resumo){
     const _tot=os.reduce((s,o)=>s+(parseFloat(String(o.total||0).replace(',','.'))||0),0);
-    _resumo.textContent=`${os.length} OS · €${(typeof osFmt==='function'?osFmt(_tot):_tot.toFixed(2))}`;
+    // v16.11 — o total exclui canceladas (não são faturação); mostra quantas são
+    const _canc=os.filter(o=>o.estado==='cancelada');
+    const _totAtiv=_tot-_canc.reduce((s,o)=>s+(parseFloat(String(o.total||0).replace(',','.'))||0),0);
+    const _f=v=>(typeof osFmt==='function'?osFmt(v):v.toFixed(2));
+    _resumo.textContent=`${os.length} OS${_canc.length?` (${_canc.length} canceladas)`:''} · €${_f(_totAtiv)} c/IVA sem canceladas`;
   }
 }
 

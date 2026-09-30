@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.22<br>
+      HidroGest v16.24<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.22<br>
+      HidroGest v16.24<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6896,6 +6896,119 @@ function renderMinhaComissao(){
   </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════
+// v16.24 — FECHO DE COMISSÕES DO MÊS (dia 30)
+//  • Comissão do mês = 5% × (RECEBIDO + A RECEBER + EM CURSO) das OS agendadas nesse mês (sem IVA, sem garantias/orçamentos/canceladas)
+//  • A OS pertence a UM técnico (hgTecReceita): 1.º técnico, ou o Higor se estiver na OS, Aldo nunca em dupla
+//  • DESCONTO: OS do mês anterior que, até ao último dia desse mês, ainda não estavam pagas (a receber ou em curso)
+//    → 5% delas é descontado neste fecho, com a origem indicada OS a OS
+//  • REPOSIÇÃO: OS de meses anteriores que tinham sido descontadas e foram recebidas neste mês → 5% volta a ser somado
+// ══════════════════════════════════════════════════════════════
+window.HG_COMISSAO_TAXA = window.HG_COMISSAO_TAXA || 0.05;
+function _fechoMesAnterior(periodo){
+  const [y,m]=periodo.split('-').map(Number); const d=new Date(y,m-2,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+function _fechoTodasOS(){
+  const num=v=>{const n=parseFloat(String(v==null?0:v).replace(',','.'));return isNaN(n)?0:n;};
+  const reciboDe={}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
+  const out=[];
+  (window.DB.ordens||[]).forEach(o=>{
+    const est=o.estado;
+    if(est!=='concluida' && est!=='os_fechada' && est!=='em_curso') return;
+    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
+    const rc=reciboDe[o.id];
+    let net=num(o.net)||num(rc&&rc.net);
+    if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
+    if(!net) return;
+    const pago=(o.pago===true)||!!(rc&&rc.status==='paid');
+    const pag=o.pagamento||{};
+    const dPag=pago?String(o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data||'').slice(0,10):'';
+    out.push({id:o.id, data:String(o.data||'').slice(0,10), mes:String(o.data||'').slice(0,7),
+      cliente:o.clienteNomeSnapshot||o.clienteNome||((window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{}).nome||'',
+      owner:window.hgTecReceita(o,(rc&&rc.techId)||'__sem__'), net,
+      estado:(est==='em_curso')?'curso':'concl', pago, dPag});
+  });
+  return out;
+}
+function hgFechoComissoes(periodo){
+  const ant=_fechoMesAnterior(periodo), taxa=window.HG_COMISSAO_TAXA;
+  const todas=_fechoTodasOS();
+  const tecs=(window.DB.funcionarios||[]).filter(f=>f.role==='tecnico');
+  const fimMes=m=>m+'-31';
+  const linhas=tecs.map(t=>{
+    const u=(window.DB.users||[]).find(x=>x.name===t.name); const uid=u&&u.id;
+    const mine=todas.filter(e=>e.owner===uid);
+    const doMes=mine.filter(e=>e.mes===periodo);
+    const rec=doMes.filter(e=>e.estado==='concl' && e.pago).reduce((a,e)=>a+e.net,0);
+    const ar =doMes.filter(e=>e.estado==='concl' && !e.pago).reduce((a,e)=>a+e.net,0);
+    const ec =doMes.filter(e=>e.estado==='curso').reduce((a,e)=>a+e.net,0);
+    const base=rec+ar+ec, comissao=base*taxa;
+    // desconto: OS do mês anterior sem pagamento até ao fim desse mês
+    const desc=mine.filter(e=>e.mes===ant && !(e.pago && e.dPag<=fimMes(ant)))
+      .map(e=>({...e, com:e.net*taxa, hoje:(e.estado==='concl'&&e.pago)?('recebida em '+e.dPag):(e.estado==='curso'?'ainda em curso':'ainda por receber')}));
+    const deducao=desc.reduce((a,e)=>a+e.com,0);
+    // reposição: OS de meses anteriores sem pagamento no fim do seu mês, recebidas neste mês
+    const repo=mine.filter(e=>e.mes<periodo && e.estado==='concl' && e.pago && e.dPag>fimMes(e.mes) && e.dPag.slice(0,7)===periodo)
+      .map(e=>({...e, com:e.net*taxa}));
+    const reposicao=repo.reduce((a,e)=>a+e.com,0);
+    return {t,uid,rec,ar,ec,base,comissao,desc,deducao,repo,reposicao,total:comissao-deducao+reposicao};
+  });
+  return {periodo,ant,taxa,linhas};
+}
+function hgFechoHtml(periodo, paraImprimir){
+  const F=hgFechoComissoes(periodo);
+  const nomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const lbl=p=>{const [y,m]=p.split('-').map(Number);return nomes[m-1]+' '+y;};
+  const E=v=>'€'+fmt(v), pct=Math.round(F.taxa*1000)/10;
+  const fd=d=>{const x=String(d).split('-');return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:d;};
+  const T={rec:0,ar:0,ec:0,base:0,com:0,ded:0,rep:0,tot:0};
+  const th='padding:8px 10px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;';
+  const rows=F.linhas.map((l,i)=>{ T.rec+=l.rec; T.ar+=l.ar; T.ec+=l.ec; T.base+=l.base; T.com+=l.comissao; T.ded+=l.deducao; T.rep+=l.reposicao; T.tot+=l.total;
+    return `<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
+      <td style="padding:9px 10px;font-weight:700;">${l.t.name}</td>
+      <td style="padding:9px 10px;text-align:right;">${E(l.rec)}</td>
+      <td style="padding:9px 10px;text-align:right;">${E(l.ar)}</td>
+      <td style="padding:9px 10px;text-align:right;">${E(l.ec)}</td>
+      <td style="padding:9px 10px;text-align:right;font-weight:700;">${E(l.base)}</td>
+      <td style="padding:9px 10px;text-align:right;font-weight:700;color:#15803d;">${E(l.comissao)}</td>
+      <td style="padding:9px 10px;text-align:right;color:#b45309;">${l.deducao>0?'− '+E(l.deducao)+`<br><span style="font-size:10px;color:#64748b;">${l.desc.length} OS</span>`:E(0)}</td>
+      <td style="padding:9px 10px;text-align:right;color:#0369a1;">${l.reposicao>0?'+ '+E(l.reposicao)+`<br><span style="font-size:10px;color:#64748b;">${l.repo.length} OS</span>`:E(0)}</td>
+      <td style="padding:9px 10px;text-align:right;font-weight:800;font-size:14px;color:#1e3a8a;">${E(l.total)}</td></tr>`; }).join('');
+  const det=F.linhas.filter(l=>l.desc.length||l.repo.length).map(l=>`
+    <div style="margin:10px 0 4px;font-weight:800;">${l.t.name}</div>
+    ${l.desc.length?`<div style="font-size:11px;color:#b45309;font-weight:700;margin-top:4px;">Desconto — comissão de ${lbl(F.ant)} sobre OS não pagas até ao fim de ${lbl(F.ant)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><thead><tr style="background:#fffbeb;"><th style="padding:4px 6px;text-align:left;">OS</th><th style="padding:4px 6px;text-align:left;">Data</th><th style="padding:4px 6px;text-align:left;">Cliente</th><th style="padding:4px 6px;text-align:left;">Situação no fim de ${lbl(F.ant)}</th><th style="padding:4px 6px;text-align:left;">Hoje</th><th style="padding:4px 6px;text-align:right;">Valor s/IVA</th><th style="padding:4px 6px;text-align:right;">Desconto ${pct}%</th></tr></thead><tbody>
+    ${l.desc.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">${e.estado==='curso'?'em curso':'a receber'}</td><td style="padding:4px 6px;">${e.hoje}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#b45309;">− ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}
+    ${l.repo.length?`<div style="font-size:11px;color:#0369a1;font-weight:700;margin-top:4px;">Reposição — OS de meses anteriores (comissão já descontada) recebidas em ${lbl(periodo)}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><tbody>
+    ${l.repo.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">recebida em ${fd(e.dPag)}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#0369a1;">+ ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}`).join('');
+  return `<div class="comm-card" style="margin-bottom:22px;border:2px solid #1e3a8a;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="font-weight:800;font-size:15px;color:#1e3a8a;">📅 Fecho do mês — comissões a pagar · ${lbl(periodo)}</div>
+      ${paraImprimir?'':`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="hgFechoImprimir('${periodo}')">🖨️ Imprimir</button>`}
+    </div>
+    <div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px;">
+      <thead><tr style="background:#f1f5f9;">
+        <th style="${th}text-align:left;">Técnico</th><th style="${th}">Recebido</th><th style="${th}">A receber</th><th style="${th}">Em curso</th>
+        <th style="${th}">Total (base)</th><th style="${th}">Comissão ${pct}%</th><th style="${th}">Desconto ${lbl(F.ant)}</th><th style="${th}">Reposição</th><th style="${th}">TOTAL A PAGAR</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="background:#eef2ff;font-weight:800;border-top:2px solid #1e3a8a;"><td style="padding:10px;">TOTAL</td>
+        <td style="padding:10px;text-align:right;">${E(T.rec)}</td><td style="padding:10px;text-align:right;">${E(T.ar)}</td><td style="padding:10px;text-align:right;">${E(T.ec)}</td>
+        <td style="padding:10px;text-align:right;">${E(T.base)}</td><td style="padding:10px;text-align:right;">${E(T.com)}</td>
+        <td style="padding:10px;text-align:right;">− ${E(T.ded)}</td><td style="padding:10px;text-align:right;">+ ${E(T.rep)}</td>
+        <td style="padding:10px;text-align:right;font-size:15px;color:#1e3a8a;">${E(T.tot)}</td></tr></tfoot>
+    </table></div>
+    <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">
+      <b>Comissão do mês</b> = ${pct}% × (recebido + a receber + em curso) das OS agendadas em ${lbl(periodo)}, sem IVA, sem garantias/orçamentos; cada OS conta para um só técnico.<br>
+      <b>Desconto</b> = ${pct}% das OS de ${lbl(F.ant)} que não estavam pagas até ao fim desse mês. <b>Reposição</b> = ${pct}% das OS que já tinham sido descontadas e foram recebidas em ${lbl(periodo)}.
+      ${det?`<details style="margin-top:6px;" open><summary style="cursor:pointer;font-weight:700;color:#1e3a5f;">Origem dos descontos e reposições</summary>${det}</details>`:''}
+    </div></div>`;
+}
+function hgFechoImprimir(periodo){
+  const css='body{font-family:Arial,sans-serif;padding:18px;color:#1e293b}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1}.comm-card{border:none!important}@page{size:A4 landscape;margin:10mm}';
+  hgImprimirHTML('<!doctype html><html><head><meta charset="utf-8"><title>Fecho de comissões</title><style>'+css+'</style></head><body>'+hgFechoHtml(periodo,true)+'</body></html>');
+}
 function renderComissoes(){
   const container = document.getElementById('comm-list');
 
@@ -7008,8 +7121,9 @@ function renderComissoes(){
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
       <span style="font-size:13px;font-weight:700;color:var(--text2);">📅 Período:</span>
       <input type="month" value="${_commPeriodo}" onchange="_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--text);">
-      <span style="font-size:11px;color:var(--text3);">Comissões calculadas sobre os recibos pagos deste mês.</span>
+      <span style="font-size:11px;color:var(--text3);">O quadro azul é o fecho do mês: 5% sobre recebido + a receber + em curso, menos o desconto das OS não pagas do mês anterior. Os cartões abaixo são o método antigo (só recibos pagos) e já não servem para pagar.</span>
     </div>
+    ${hgFechoHtml(_periodoC)}
     <!-- Técnicos -->
     <div style="margin-bottom:24px;">
       <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;display:flex;align-items:center;gap:8px;">

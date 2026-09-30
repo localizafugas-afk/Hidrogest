@@ -2,6 +2,7 @@
 <html lang="pt">
 <head>
 <script>
+// v16.08 — Relatório 'Faturamento por Técnico': técnico vem da OS (recibo.osId → os.tecnicos), valor líquido sem IVA, igual ao Dashboard.
 // v16.02 — Notificações seguras no telemóvel: o Android não deixa usar "window.hgNotificar()";
 // nesse caso a notificação é mostrada pelo service worker (showNotification), sem erro.
 // v16.03 — hgNotificar: nunca dá erro. No telemóvel usa o service worker; se falhar, ignora.
@@ -1308,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.07<br>
+      HidroGest v16.08<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1333,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.07<br>
+      HidroGest v16.08<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -7329,18 +7330,29 @@ function repRenderDia(recs, ordens, de, ate){
 function repRenderTecnico(recs){
   const tecnicos = window.DB.users||[];
   const porTec = {};
+  const _fnum = v => { const n=parseFloat(String(v==null?0:v).replace(',','.')); return isNaN(n)?0:n; };
+  // v16.06 — o técnico vem da OS (recibo.osId → os.tecnicos), não do texto livre r.tech
+  // (que podia ter o nome de quem deu baixa, vários nomes juntos, ou estar vazio).
+  // Valor = líquido (sem IVA), igual ao Dashboard; OS com 2+ técnicos divide-se em partes iguais.
   recs.forEach(r=>{
-    const k = r.tech||r.techId||'—';
-    if(!porTec[k]) porTec[k]={total:0,count:0,horas:0,nome:k};
-    porTec[k].total += parseFloat(r.total||0);
-    porTec[k].count++;
-    porTec[k].horas += parseFloat(r.hours||0);
+    const os = r.osId ? (window.DB.ordens||[]).find(o=>o.id===r.osId) : null;
+    let ids = (os && os.tecnicos && os.tecnicos.length) ? os.tecnicos.slice() : (r.techId ? [r.techId] : []);
+    const val = _fnum(r.net) || (_fnum(r.total)/1.23);
+    if(!ids.length){ ids=['__sem__']; }
+    ids.forEach(id=>{
+      const nome = id==='__sem__' ? (r.tech ? 'Sem técnico na OS ('+r.tech+')' : 'Sem técnico atribuído')
+                 : ((window.DB.users||[]).find(u=>u.id===id)?.name || id);
+      if(!porTec[nome]) porTec[nome]={total:0,count:0,horas:0,nome};
+      porTec[nome].total += val/ids.length;
+      porTec[nome].count++;
+      porTec[nome].horas += _fnum(r.hours)/ids.length;
+    });
   });
   const lista = Object.values(porTec).sort((a,b)=>b.total-a.total);
   const maxTotal = Math.max(1,...lista.map(t=>t.total));
 
   return `<div class="rep-card" style="grid-column:1/-1;">
-    <div class="rep-card-title">👷 Faturamento por Técnico</div>
+    <div class="rep-card-title">👷 Faturamento por Técnico <span style="font-weight:400;font-size:11px;color:#64748b;">· líquido (sem IVA), recebimentos do período · OS com 2+ técnicos dividida em partes iguais</span></div>
     <div style="overflow:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e5e7eb;">

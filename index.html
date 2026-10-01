@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.25<br>
+      HidroGest v16.29<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.25<br>
+      HidroGest v16.29<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6904,7 +6904,24 @@ function renderMinhaComissao(){
 //    → 5% delas é descontado neste fecho, com a origem indicada OS a OS
 //  • REPOSIÇÃO: OS de meses anteriores que tinham sido descontadas e foram recebidas neste mês → 5% volta a ser somado
 // ══════════════════════════════════════════════════════════════
+// Configuração editável no ecrã (guardada na coleção 'meta'): % de comissão, redução por garantia e mês de início
 window.HG_COMISSAO_TAXA = window.HG_COMISSAO_TAXA || 0.05;
+window.HG_COMISSAO_INICIO = '2026-09';   // 1.º mês a contar; nada de meses anteriores é abatido
+function hgComissaoTaxa(){ const v=parseFloat(window.DB&&window.DB.comissaoTaxaPct); return (isFinite(v)&&v>=0&&v<=100)?v/100:window.HG_COMISSAO_TAXA; }
+function hgComissaoGarantiaPct(){ const v=parseFloat(window.DB&&window.DB.comissaoGarantiaPct); return (isFinite(v)&&v>=0&&v<=100)?v/100:1; }
+async function hgComissaoGuardarConfig(){
+  const t=parseFloat(String(document.getElementById('fecho-taxa')?.value).replace(',','.'));
+  const g=parseFloat(String(document.getElementById('fecho-garantia')?.value).replace(',','.'));
+  if(!isFinite(t)||t<0||t>100){ toast('Percentagem de comissão inválida (0 a 100)','⚠️'); return; }
+  if(!isFinite(g)||g<0||g>100){ toast('Redução por garantia inválida (0 a 100)','⚠️'); return; }
+  try{
+    window.DB.comissaoTaxaPct=t; window.DB.comissaoGarantiaPct=g;
+    await window.fsMeta('comissaoTaxaPct',t); await window.fsMeta('comissaoGarantiaPct',g);
+    toast('Percentagens guardadas ✅','💾');
+  }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
+  if(typeof renderComissoes==='function') renderComissoes();
+}
+window.hgComissaoGuardarConfig=hgComissaoGuardarConfig;
 function _fechoMesAnterior(periodo){
   const [y,m]=periodo.split('-').map(Number); const d=new Date(y,m-2,1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
@@ -6917,6 +6934,7 @@ function _fechoTodasOS(){
     const est=o.estado;
     if(est!=='concluida' && est!=='os_fechada' && est!=='em_curso') return;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
+    if(o.garantia===true && !o.garantiaComCobranca) return;
     const rc=reciboDe[o.id];
     let net=num(o.net)||num(rc&&rc.net);
     if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
@@ -6932,40 +6950,83 @@ function _fechoTodasOS(){
   });
   return out;
 }
-function hgFechoComissoes(periodo){
-  const ant=_fechoMesAnterior(periodo), taxa=window.HG_COMISSAO_TAXA;
+function hgFechoComissoes(periodo, opts){
+  opts=opts||{};
+  const ant=_fechoMesAnterior(periodo), taxa=hgComissaoTaxa(), garPct=hgComissaoGarantiaPct();
+  const inicio=window.HG_COMISSAO_INICIO||'2026-09';
   const todas=_fechoTodasOS();
+  // garantias do mês: reduzem a comissão da OS original (uma só vez por OS original)
+  const garantias=(window.DB.ordens||[]).filter(o=>o.garantia===true && o.estado!=='cancelada' && o.osOriginalId && String(o.data||'').slice(0,7)===periodo && periodo>=inicio);
   const tecs=(window.DB.funcionarios||[]).filter(f=>f.role==='tecnico');
   const fimMes=m=>m+'-31';
   const linhas=tecs.map(t=>{
     const u=(window.DB.users||[]).find(x=>x.name===t.name); const uid=u&&u.id;
     const mine=todas.filter(e=>e.owner===uid);
-    const doMes=mine.filter(e=>e.mes===periodo);
+    const doMes=mine.filter(e=>e.mes===periodo && (!opts.de||e.data>=opts.de) && (!opts.ate||e.data<=opts.ate));
     const rec=doMes.filter(e=>e.estado==='concl' && e.pago).reduce((a,e)=>a+e.net,0);
     const ar =doMes.filter(e=>e.estado==='concl' && !e.pago).reduce((a,e)=>a+e.net,0);
     const ec =doMes.filter(e=>e.estado==='curso').reduce((a,e)=>a+e.net,0);
     const base=rec+ar+ec, comissao=base*taxa;
     // desconto: OS do mês anterior sem pagamento até ao fim desse mês
-    const desc=mine.filter(e=>e.mes===ant && !(e.pago && e.dPag<=fimMes(ant)))
+    const desc=((ant<inicio||opts.semExtras)?[]:mine.filter(e=>e.mes===ant && !(e.pago && e.dPag<=fimMes(ant))))
       .map(e=>({...e, com:e.net*taxa, hoje:(e.estado==='concl'&&e.pago)?('recebida em '+e.dPag):(e.estado==='curso'?'ainda em curso':'ainda por receber')}));
     const deducao=desc.reduce((a,e)=>a+e.com,0);
     // reposição: OS de meses anteriores sem pagamento no fim do seu mês, recebidas neste mês
-    const repo=mine.filter(e=>e.mes<periodo && e.estado==='concl' && e.pago && e.dPag>fimMes(e.mes) && e.dPag.slice(0,7)===periodo)
+    const repo=(opts.semExtras?[]:mine).filter(e=>e.mes>=inicio && e.mes<periodo && e.estado==='concl' && e.pago && e.dPag>fimMes(e.mes) && e.dPag.slice(0,7)===periodo)
       .map(e=>({...e, com:e.net*taxa}));
     const reposicao=repo.reduce((a,e)=>a+e.com,0);
-    return {t,uid,rec,ar,ec,base,comissao,desc,deducao,repo,reposicao,total:comissao-deducao+reposicao};
+    // garantia: a OS original (deste técnico) perde garPct% da sua comissão
+    const gar=[]; const _vistas={};
+    (opts.semExtras?[]:garantias).forEach(g=>{
+      const orig=todas.find(e=>e.id===g.osOriginalId);
+      if(!orig || orig.owner!==uid || _vistas[orig.id]) return;
+      _vistas[orig.id]=1;
+      gar.push({...orig, garId:g.id, garData:String(g.data||'').slice(0,10), com:orig.net*taxa*garPct});
+    });
+    const reducaoGar=gar.reduce((a,e)=>a+e.com,0);
+    return {t,uid,rec,ar,ec,base,comissao,desc,deducao,repo,reposicao,gar,reducaoGar,total:comissao-deducao+reposicao-reducaoGar};
   });
-  return {periodo,ant,taxa,linhas};
+  return {periodo,ant,taxa,garPct,inicio,linhas};
 }
+// Filtros do ecrã: técnico e período (mês ou intervalo de datas)
+window._commTec = window._commTec || '';
+window._commDe = window._commDe || '';
+window._commAte = window._commAte || '';
+function hgFechoIntervalo(periodo){
+  const F0=window._commDe && window._commAte && window._commDe<=window._commAte;
+  if(!F0) return hgFechoComissoes(periodo);
+  const de=window._commDe, ate=window._commAte;
+  const meses=[]; let [y,m]=de.slice(0,7).split('-').map(Number); const fim=ate.slice(0,7);
+  for(let k=0;k<60;k++){ const mm=y+'-'+String(m).padStart(2,'0'); meses.push(mm); if(mm>=fim) break; m++; if(m>12){m=1;y++;} }
+  const res=meses.map(mm=>{
+    const cheio = de<=mm+'-01' && ate>=mm+'-31';
+    return hgFechoComissoes(mm,{de,ate,semExtras:!cheio});
+  });
+  const base=res[0];
+  const linhas=base.linhas.map((l,i)=>{
+    const M={...l, rec:0,ar:0,ec:0,base:0,comissao:0,desc:[],deducao:0,repo:[],reposicao:0,gar:[],reducaoGar:0,total:0};
+    res.forEach(r=>{ const x=r.linhas[i];
+      ['rec','ar','ec','base','comissao','deducao','reposicao','reducaoGar','total'].forEach(k=>M[k]+=x[k]);
+      M.desc=M.desc.concat(x.desc); M.repo=M.repo.concat(x.repo); M.gar=M.gar.concat(x.gar); });
+    return M;
+  });
+  return {periodo, ant:base.ant, taxa:base.taxa, garPct:base.garPct, inicio:base.inicio, linhas, multi:true, de, ate,
+          avisoParcial: res.some(r=>false)};
+}
+function _commSetFiltro(k,v){ window[k]=v; renderComissoes(); }
+window._commSetFiltro=_commSetFiltro;
 function hgFechoHtml(periodo, paraImprimir){
-  const F=hgFechoComissoes(periodo);
+  const F=hgFechoIntervalo(periodo);
+  if(window._commTec) F.linhas=F.linhas.filter(l=>(l.uid||l.t.name)===window._commTec||l.t.name===window._commTec);
+  const _fd=d=>{const x=String(d).split('-');return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:d;};
   const nomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const lbl=p=>{const [y,m]=p.split('-').map(Number);return nomes[m-1]+' '+y;};
+  const LP=F.multi?(_fd(F.de)+' a '+_fd(F.ate)):lbl(periodo), LA=F.multi?'meses anteriores':lbl(F.ant);
   const E=v=>'€'+fmt(v), pct=Math.round(F.taxa*1000)/10;
   const fd=d=>{const x=String(d).split('-');return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:d;};
-  const T={rec:0,ar:0,ec:0,base:0,com:0,ded:0,rep:0,tot:0};
+  const T={rec:0,ar:0,ec:0,base:0,com:0,ded:0,rep:0,gar:0,tot:0};
   const th='padding:8px 10px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;';
-  const rows=F.linhas.map((l,i)=>{ T.rec+=l.rec; T.ar+=l.ar; T.ec+=l.ec; T.base+=l.base; T.com+=l.comissao; T.ded+=l.deducao; T.rep+=l.reposicao; T.tot+=l.total;
+  const rows=F.linhas.map((l,i)=>{ T.rec+=l.rec; T.ar+=l.ar; T.ec+=l.ec; T.base+=l.base; T.com+=l.comissao; T.ded+=l.deducao; T.rep+=l.reposicao; T.gar+=l.reducaoGar; T.tot+=l.total;
     return `<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
       <td style="padding:9px 10px;font-weight:700;">${l.t.name}</td>
       <td style="padding:9px 10px;text-align:right;">${E(l.rec)}</td>
@@ -6975,34 +7036,45 @@ function hgFechoHtml(periodo, paraImprimir){
       <td style="padding:9px 10px;text-align:right;font-weight:700;color:#15803d;">${E(l.comissao)}</td>
       <td style="padding:9px 10px;text-align:right;color:#b45309;">${l.deducao>0?'− '+E(l.deducao)+`<br><span style="font-size:10px;color:#64748b;">${l.desc.length} OS</span>`:E(0)}</td>
       <td style="padding:9px 10px;text-align:right;color:#0369a1;">${l.reposicao>0?'+ '+E(l.reposicao)+`<br><span style="font-size:10px;color:#64748b;">${l.repo.length} OS</span>`:E(0)}</td>
+      <td style="padding:9px 10px;text-align:right;color:#b91c1c;">${l.reducaoGar>0?'− '+E(l.reducaoGar)+`<br><span style="font-size:10px;color:#64748b;">${l.gar.length} OS</span>`:E(0)}</td>
       <td style="padding:9px 10px;text-align:right;font-weight:800;font-size:14px;color:#1e3a8a;">${E(l.total)}</td></tr>`; }).join('');
-  const det=F.linhas.filter(l=>l.desc.length||l.repo.length).map(l=>`
+  const det=F.linhas.filter(l=>l.desc.length||l.repo.length||l.gar.length).map(l=>`
     <div style="margin:10px 0 4px;font-weight:800;">${l.t.name}</div>
-    ${l.desc.length?`<div style="font-size:11px;color:#b45309;font-weight:700;margin-top:4px;">Desconto — comissão de ${lbl(F.ant)} sobre OS não pagas até ao fim de ${lbl(F.ant)}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><thead><tr style="background:#fffbeb;"><th style="padding:4px 6px;text-align:left;">OS</th><th style="padding:4px 6px;text-align:left;">Data</th><th style="padding:4px 6px;text-align:left;">Cliente</th><th style="padding:4px 6px;text-align:left;">Situação no fim de ${lbl(F.ant)}</th><th style="padding:4px 6px;text-align:left;">Hoje</th><th style="padding:4px 6px;text-align:right;">Valor s/IVA</th><th style="padding:4px 6px;text-align:right;">Desconto ${pct}%</th></tr></thead><tbody>
+    ${l.desc.length?`<div style="font-size:11px;color:#b45309;font-weight:700;margin-top:4px;">Desconto — comissão de ${LA} sobre OS não pagas até ao fim de ${LA}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><thead><tr style="background:#fffbeb;"><th style="padding:4px 6px;text-align:left;">OS</th><th style="padding:4px 6px;text-align:left;">Data</th><th style="padding:4px 6px;text-align:left;">Cliente</th><th style="padding:4px 6px;text-align:left;">Situação no fim de ${LA}</th><th style="padding:4px 6px;text-align:left;">Hoje</th><th style="padding:4px 6px;text-align:right;">Valor s/IVA</th><th style="padding:4px 6px;text-align:right;">Desconto ${pct}%</th></tr></thead><tbody>
     ${l.desc.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">${e.estado==='curso'?'em curso':'a receber'}</td><td style="padding:4px 6px;">${e.hoje}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#b45309;">− ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}
-    ${l.repo.length?`<div style="font-size:11px;color:#0369a1;font-weight:700;margin-top:4px;">Reposição — OS de meses anteriores (comissão já descontada) recebidas em ${lbl(periodo)}</div>
+    ${l.gar.length?`<div style="font-size:11px;color:#b91c1c;font-weight:700;margin-top:4px;">Garantias — comissão reduzida (${Math.round(F.garPct*100)}%) nas OS originais com garantia aberta em ${LP}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><tbody>
+    ${l.gar.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">garantia ${e.garId} (${fd(e.garData)})</td><td style="padding:4px 6px;text-align:right;color:#b91c1c;">− ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}
+    ${l.repo.length?`<div style="font-size:11px;color:#0369a1;font-weight:700;margin-top:4px;">Reposição — OS de meses anteriores (comissão já descontada) recebidas em ${LP}</div>
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><tbody>
     ${l.repo.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">recebida em ${fd(e.dPag)}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#0369a1;">+ ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}`).join('');
   return `<div class="comm-card" style="margin-bottom:22px;border:2px solid #1e3a8a;">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-      <div style="font-weight:800;font-size:15px;color:#1e3a8a;">📅 Fecho do mês — comissões a pagar · ${lbl(periodo)}</div>
+      <div style="font-weight:800;font-size:15px;color:#1e3a8a;">📅 Fecho do mês — comissões a pagar · ${LP}</div>
       ${paraImprimir?'':`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="hgFechoImprimir('${periodo}')">🖨️ Imprimir</button>`}
     </div>
-    <div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px;">
+    ${paraImprimir?'':`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+      <div><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;">Percentagem de comissão (%)</div>
+        <input id="fecho-taxa" type="number" step="0.1" min="0" max="100" value="${pct}" style="width:110px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-weight:700;"></div>
+      <div><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;">Redução por garantia (% da comissão da OS)</div>
+        <input id="fecho-garantia" type="number" step="1" min="0" max="100" value="${Math.round(F.garPct*100)}" style="width:110px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-weight:700;"></div>
+      <button class="btn btn-sm" style="background:#1e3a8a;color:#fff;" onclick="hgComissaoGuardarConfig()">💾 Guardar percentagens</button>
+      <div style="font-size:11px;color:#64748b;">Cálculos a partir de ${lbl(F.inicio)}. Alterar a percentagem recalcula todos os meses.</div></div>`}
+    <div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;">
       <thead><tr style="background:#f1f5f9;">
         <th style="${th}text-align:left;">Técnico</th><th style="${th}">Recebido</th><th style="${th}">A receber</th><th style="${th}">Em curso</th>
-        <th style="${th}">Total (base)</th><th style="${th}">Comissão ${pct}%</th><th style="${th}">Desconto ${lbl(F.ant)}</th><th style="${th}">Reposição</th><th style="${th}">TOTAL A PAGAR</th></tr></thead>
+        <th style="${th}">Total (base)</th><th style="${th}">Comissão ${pct}%</th><th style="${th}">Desconto ${LA}</th><th style="${th}">Reposição</th><th style="${th}">Garantias</th><th style="${th}">TOTAL A PAGAR</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="background:#eef2ff;font-weight:800;border-top:2px solid #1e3a8a;"><td style="padding:10px;">TOTAL</td>
         <td style="padding:10px;text-align:right;">${E(T.rec)}</td><td style="padding:10px;text-align:right;">${E(T.ar)}</td><td style="padding:10px;text-align:right;">${E(T.ec)}</td>
         <td style="padding:10px;text-align:right;">${E(T.base)}</td><td style="padding:10px;text-align:right;">${E(T.com)}</td>
-        <td style="padding:10px;text-align:right;">− ${E(T.ded)}</td><td style="padding:10px;text-align:right;">+ ${E(T.rep)}</td>
+        <td style="padding:10px;text-align:right;">− ${E(T.ded)}</td><td style="padding:10px;text-align:right;">+ ${E(T.rep)}</td><td style="padding:10px;text-align:right;">− ${E(T.gar)}</td>
         <td style="padding:10px;text-align:right;font-size:15px;color:#1e3a8a;">${E(T.tot)}</td></tr></tfoot>
     </table></div>
     <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">
-      <b>Comissão do mês</b> = ${pct}% × (recebido + a receber + em curso) das OS agendadas em ${lbl(periodo)}, sem IVA, sem garantias/orçamentos; cada OS conta para um só técnico.<br>
-      <b>Desconto</b> = ${pct}% das OS de ${lbl(F.ant)} que não estavam pagas até ao fim desse mês. <b>Reposição</b> = ${pct}% das OS que já tinham sido descontadas e foram recebidas em ${lbl(periodo)}.
+      <b>Comissão do mês</b> = ${pct}% × (recebido + a receber + em curso) das OS agendadas em ${LP}, sem IVA, sem garantias/orçamentos; cada OS conta para um só técnico.<br>
+      <b>Garantias</b> = a comissão da OS original (do técnico que a fez) é reduzida em ${Math.round(F.garPct*100)}% quando é aberta uma garantia nesse mês. ${(!F.multi&&F.ant<F.inicio)?'<br><i>Não há desconto de '+LA+': os cálculos começam em '+lbl(F.inicio)+'.</i>':''}<br><b>Desconto</b> = ${pct}% das OS de ${LA} que não estavam pagas até ao fim desse mês. <b>Reposição</b> = ${pct}% das OS que já tinham sido descontadas e foram recebidas em ${LP}.
       ${det?`<details style="margin-top:6px;" open><summary style="cursor:pointer;font-weight:700;color:#1e3a5f;">Origem dos descontos e reposições</summary>${det}</details>`:''}
     </div></div>`;
 }
@@ -7012,133 +7084,22 @@ function hgFechoImprimir(periodo){
 }
 function renderComissoes(){
   const container = document.getElementById('comm-list');
-
-  // ── Comissões de Técnicos (limiar Sal×10 · taxa Normal variável por atrasos · CIPP/Imperm fixos) ──
   const _periodoC = _commPeriodo;
-  const tecnicos = window.DB.funcionarios.filter(f=>f.role==='tecnico');
-  const secTec = tecnicos.map(t=>{
-    const u = (window.DB.users||[]).find(x=>x.name===t.name); const uid=u?.id;
-    const c = _commCalcularTecnico(t, uid, _periodoC);
-    return `<div class="comm-card">
-      <div class="comm-header">
-        <div class="av tecnico">${t.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
-        <div>
-          <div style="font-weight:700;font-size:15px;">${t.name}</div>
-          <div style="font-size:11px;color:var(--text3);">${roleName(t.role)} · Salário bruto: €${fmt(t.salary)}</div>
-        </div>
-        <div style="margin-left:auto;"><span class="badge badge-green">💎 €${fmt(c.total)}</span></div>
-      </div>
-      <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(c.netOut)} − €${fmt(c.limiar)}) ×${Math.round(c.taxaNormal*100)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(c.comNormal)}</div></div>
-        <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(c.netCipp)}) ×5%</div><div class="cm-val" style="color:var(--accent)">€${fmt(c.comCipp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(c.netImp)}) ×3%</div><div class="cm-val" style="color:var(--accent)">€${fmt(c.comImp)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(c.limiar)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Relatórios atrasados (+5 dias úteis)</div><div class="cm-val" style="color:${c.lateCount>0?'var(--red)':'inherit'}">${c.lateCount}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:var(--green)">€${fmt(c.total)}</div></div>
-      </div>
-      ${c.lateCount>9?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${c.lateCount} relatórios atrasados este mês — a comissão Normal fica a 0%. CIPP e Impermeabilização mantêm-se.</div>`
-        :c.lateCount>0?`<div style="margin-top:10px;font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px;">${c.lateCount} relatório(s) atrasado(s) este mês — taxa Normal reduzida para ${Math.round(c.taxaNormal*100)}%.</div>`:''}
-    </div>`;
-  }).join('') || `<div class="empty">Sem técnicos registados</div>`;
-
-  // ── Comissões de Comerciais (baseado em agendadoPor nas OS) ─
-  const comerciais = (window.DB.users||[]).filter(u=>['comercial','gerente','admin','supervisor'].includes(u.role)&&u.active);
-  const ordens = window.DB.ordens||[];
-  const recibos = window.DB.recibos||[];
-
-  const secCom = comerciais.map(com=>{
-    // OS agendadas por este comercial
-    const osComercial = ordens.filter(o=>o.agendadoPor===com.id);
-    const osConc      = osComercial.filter(o=>o.estado==='concluida');
-    const osPend      = osComercial.filter(o=>o.estado!=='concluida'&&o.estado!=='cancelada');
-    const osCancelada = osComercial.filter(o=>o.estado==='cancelada');
-
-    // Total facturado (OS concluídas com recibo)
-    const totalFact = osConc.reduce((s,o)=>{
-      const r = recibos.find(r=>r.osId===o.id);
-      return s + (r?.total||o.total||0);
-    },0);
-    const totalLiq = osConc.reduce((s,o)=>{
-      const r = recibos.find(r=>r.osId===o.id);
-      return s + (r?.net||o.net||0);
-    },0);
-
-    // Taxa de conversão
-    const taxa = osComercial.length>0 ? Math.round(osConc.length/osComercial.length*100) : 0;
-
-    // Comissão comercial: 3% da receita líquida gerada
-    const comissao = totalLiq * 0.03;
-
-    if(osComercial.length===0) return ''; // não mostrar se sem OS
-
-    return `<div class="comm-card" style="border-left:4px solid var(--accent);">
-      <div class="comm-header">
-        <div class="av comercial">${com.name.split(' ').slice(0,2).map(w=>w[0]).join('')}</div>
-        <div>
-          <div style="font-weight:700;font-size:15px;">${com.name}</div>
-          <div style="font-size:11px;color:var(--text3);">${roleName(com.role)} · ${osComercial.length} OS agendadas</div>
-        </div>
-        <div style="margin-left:auto;">
-          ${totalLiq>0
-            ?`<span class="badge badge-green">💶 Comissão: €${fmt(comissao)}</span>`
-            :`<span class="badge" style="background:var(--s2);color:var(--text3);">Sem OS concluídas</span>`}
-        </div>
-      </div>
-      <div class="comm-body">
-        <div class="comm-metric"><div class="cm-label">OS Agendadas</div><div class="cm-val" style="color:var(--accent)">${osComercial.length}</div></div>
-        <div class="comm-metric"><div class="cm-label">Concluídas</div><div class="cm-val" style="color:var(--green)">${osConc.length}</div></div>
-        <div class="comm-metric"><div class="cm-label">Pendentes</div><div class="cm-val" style="color:var(--yellow)">${osPend.length}</div></div>
-        <div class="comm-metric"><div class="cm-label">Canceladas</div><div class="cm-val" style="color:var(--red)">${osCancelada.length}</div></div>
-        <div class="comm-metric"><div class="cm-label">Total facturado</div><div class="cm-val" style="color:var(--accent)">€${fmt(totalFact)}</div></div>
-        <div class="comm-metric"><div class="cm-label">Comissão (3%)</div><div class="cm-val" style="color:var(--purple)">€${fmt(comissao)}</div></div>
-      </div>
-      <div style="margin-top:12px;font-size:11px;color:var(--text3);padding:8px;background:var(--s2);border-radius:6px;">
-        📊 Taxa de conversão: ${taxa}% · Receita líquida gerada: €${fmt(totalLiq)} × 3% = <strong style="color:var(--green)">€${fmt(comissao)}</strong>
-      </div>
-      <!-- OS detalhadas -->
-      ${osComercial.length?`
-      <details style="margin-top:10px;">
-        <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);padding:6px 0;">Ver OS (${osComercial.length})</summary>
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
-          ${osComercial.slice(0,20).map(o=>{
-            const cli = (window.DB.clientes||[]).find(x=>x.id===o.clienteId);
-            const cor = o.estado==='concluida'?'var(--green)':o.estado==='cancelada'?'var(--red)':'var(--yellow)';
-            const recOS = recibos.find(r=>r.osId===o.id);
-            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--s2);border-radius:6px;font-size:12px;">
-              <span style="font-family:monospace;color:var(--text3);font-size:11px;">${o.id}</span>
-              <span style="flex:1;font-weight:600;">${cli?.nome||'—'}</span>
-              <span style="font-size:11px;color:var(--text3);">${fmtDate(o.data)}</span>
-              <span style="font-family:monospace;font-weight:700;">€${osFmt(recOS?.total||o.total||0)}</span>
-              <span style="font-size:10px;font-weight:700;color:${cor};">${{agendada:'📅',em_curso:'🔧',concluida:'✅',cancelada:'❌'}[o.estado]||''} ${o.estado}</span>
-            </div>`;
-          }).join('')}
-          ${osComercial.length>20?`<div style="font-size:11px;color:var(--text3);text-align:center;padding:4px;">... e mais ${osComercial.length-20}</div>`:''}
-        </div>
-      </details>`:''}
-    </div>`;
-  }).filter(Boolean).join('') || `<div style="color:var(--text3);font-size:13px;padding:16px;">Nenhum comercial com OS agendadas.</div>`;
 
   container.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
-      <span style="font-size:13px;font-weight:700;color:var(--text2);">📅 Período:</span>
-      <input type="month" value="${_commPeriodo}" onchange="_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;color:var(--text);">
-      <span style="font-size:11px;color:var(--text3);">O quadro azul é o fecho do mês: 5% sobre recebido + a receber + em curso, menos o desconto das OS não pagas do mês anterior. Os cartões abaixo são o método antigo (só recibos pagos) e já não servem para pagar.</span>
+    <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
+      <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">👷 Técnico</div>
+        <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${(window.DB.funcionarios||[]).filter(f=>f.role==='tecnico').map(t=>{const u=(window.DB.users||[]).find(x=>x.name===t.name);const id=(u&&u.id)||t.name;return `<option value="${id}" ${window._commTec===id?'selected':''}>${t.name}</option>`;}).join('')}</select></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">📅 Mês</div>
+        <input type="month" value="${_commPeriodo}" onchange="window._commDe='';window._commAte='';_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;"></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">ou período: de</div>
+        <input type="date" value="${window._commDe}" onchange="_commSetFiltro('_commDe',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;"></div>
+      <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">até</div>
+        <input type="date" value="${window._commAte}" onchange="_commSetFiltro('_commAte',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;"></div>
+      ${(window._commDe||window._commAte)?`<button class="btn btn-ghost btn-sm" onclick="window._commDe='';window._commAte='';renderComissoes()">✕ Limpar período</button>`:''}
+      <span style="font-size:11px;color:var(--text3);flex-basis:100%;">Fecho: percentagem × (recebido + a receber + em curso), menos descontos de OS não pagas e garantias. Num período personalizado, descontos e garantias só entram nos meses completos incluídos.</span>
     </div>
     ${hgFechoHtml(_periodoC)}
-    <!-- Técnicos -->
-    <div style="margin-bottom:24px;">
-      <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e3a5f;display:flex;align-items:center;gap:8px;">
-        👷 Comissões de Técnicos <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Fórmula: Sal. × 8 vs Receita Líquida → diferença × 5%</span>
-      </div>
-      ${secTec}
-    </div>
-    <!-- Comerciais -->
-    <div>
-      <div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#1e3a5f;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #2563eb;display:flex;align-items:center;gap:8px;">
-        🧑‍💼 Comissões de Comerciais <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">Baseado no campo "Agendado por" de cada OS → 3% da receita líquida</span>
-      </div>
-      ${secCom}
-    </div>
   `;
 }
 
@@ -30654,9 +30615,10 @@ function _propostaProxNumero(){
   const dd  = String(now.getDate()).padStart(2,'0');
   const mm  = String(now.getMonth()+1).padStart(2,'0');
   const prefixo = `ORC-${ano}-${dd}-${mm}-`;
-  // Contar propostas do dia para sequencial diário
-  const existentes = (window.DB.propostas||[]).filter(p=>p.id&&p.id.startsWith(prefixo));
-  const seq = String(existentes.length + 1).padStart(3,'0');
+  // Sequencial diário = maior número já usado + 1 (nunca repete, mesmo que se apague uma proposta)
+  const existentes = (window.DB.propostas||[]).filter(p=>p.id&&String(p.id).startsWith(prefixo));
+  const maxSeq = existentes.reduce((m,p)=>{ const n=parseInt(String(p.id).slice(prefixo.length),10); return isNaN(n)?m:Math.max(m,n); },0);
+  const seq = String(Math.max(existentes.length,maxSeq) + 1).padStart(3,'0');
   return `${prefixo}${seq}`;
 }
 
@@ -31210,11 +31172,11 @@ function propostaAbrir(clienteId){
     <!-- Destinatario -->
     <div style="background:var(--s2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;">
       <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">👤 Destinatário</div>
-      <div class="fg" style="margin:0;"><label style="font-size:12px;">Cliente cadastrado (opcional)</label>
-        <select class="fs" id="prop-cli-select" onchange="propostaCliSelect(this)">
-          <option value="">— Sem cadastro / preencher manualmente —</option>
-          ${(window.DB.clientes||[]).filter(c=>c.nome).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'','pt')).map(c=>`<option value="${c.id}" ${c.id===clienteId?'selected':''}>${c.nome}${c.email?' · '+c.email:''}</option>`).join('')}
-        </select>
+      <div class="fg" style="margin:0;position:relative;"><label style="font-size:12px;">🔍 Procurar cliente já cadastrado</label>
+        <input class="fi" id="prop-cli-busca" autocomplete="off" placeholder="Escreva parte do nome, telefone, email, NIF ou morada…"
+          oninput="propostaCliBusca(this.value)" onfocus="propostaCliBusca(this.value)">
+        <div id="prop-cli-res" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:#fff;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:300px;overflow-y:auto;margin-top:2px;"></div>
+        <div id="prop-cli-sel" style="display:none;margin-top:6px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="fg" style="margin:0;"><label style="font-size:12px;">Nome do destinatário *</label>
@@ -31228,6 +31190,9 @@ function propostaAbrir(clienteId){
         <div class="fg" style="margin:0;"><label style="font-size:12px;">Morada / Local de serviço</label>
           <input class="fi" id="prop-morada" value="${cli.morada||''}" placeholder="Rua, n.º, cidade"></div>
       </div>
+      <label id="prop-novo-cli-wrap" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;cursor:pointer;">
+        <input type="checkbox" id="prop-novo-cli" style="width:16px;height:16px;"> ➕ Guardar este destinatário como novo cliente ao gravar/enviar
+      </label>
     </div>
 
     <!-- Selecionar Serviço -->
@@ -31338,6 +31303,14 @@ function propostaAbrir(clienteId){
       <textarea class="fi fta" id="prop-descritivo" rows="6" style="resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;"></textarea>
     </div>
 
+    <!-- Tempo estimado + Observação (aparecem na proposta enviada ao cliente) -->
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
+      <div class="fg" style="margin:0;"><label style="font-weight:700;">⏱ Tempo de trabalho estimado</label>
+        <input class="fi" id="prop-tempo" placeholder="Ex.: até 3 horas de trabalho · 2 dias · 1 manhã"></div>
+      <div class="fg" style="margin:0;"><label style="font-weight:700;">📝 Observação <span style="font-weight:400;color:var(--text3);font-size:11px;">(aparece na proposta, no PDF e no email)</span></label>
+        <textarea class="fi fta" id="prop-observacao" rows="3" style="resize:vertical;font-size:13px;" placeholder="Ex.: Se o trabalho terminar antes das 3 horas, será descontado €40 por cada 30 minutos a menos."></textarea></div>
+    </div>
+
     <!-- Condições -->
     <div class="fg">
       <label style="font-weight:700;">Condições gerais <span style="font-weight:400;color:var(--text3);font-size:11px;">(editável)</span></label>
@@ -31412,12 +31385,13 @@ function propostaEditar(propId){
     set('prop-email', p.email);
     set('prop-tel', p.tel);
     set('prop-morada', p.morada);
+    if(p.cliId){ const _cc=(window.DB.clientes||[]).find(c=>c.id===p.cliId); const _s=document.getElementById('prop-cli-sel'); if(_s&&_cc){ _s.style.display='block'; _s.innerHTML='✅ Cliente: '+String(_cc.nome).replace(/</g,'&lt;')+' <span onclick="propostaCliLimpar()" style="cursor:pointer;margin-left:8px;color:#b91c1c;">✕ limpar</span>'; } }
 
     const selSrv = document.getElementById('prop-servico');
     if(selSrv && p.servicoId){ selSrv.value = p.servicoId; }
     { const _pp=document.getElementById('prop-peritagem'); if(_pp) _pp.value=p.peritagemPor||''; if(window._propTogglePeritagem) _propTogglePeritagem(); }
     if(typeof propostaCarregarModelo==='function' && selSrv && selSrv.value){
-      propostaCarregarModelo();
+      try{ propostaCarregarModelo(); }catch(e){ console.warn('modelo:',e); }
     }
 
     setTimeout(()=>{
@@ -31435,6 +31409,8 @@ function propostaEditar(propId){
       set('prop-intro', p.intro);
       set('prop-descritivo', p.descritivo);
       set('prop-obs', p.obs);
+      set('prop-tempo', p.tempoEstimado);
+      set('prop-observacao', p.observacao);
       if(p.procedimento){
         const pw=document.getElementById('prop-procedimento-wrap');
         if(pw) pw.style.display='';
@@ -31443,6 +31419,79 @@ function propostaEditar(propId){
       if(typeof propostaCalcTotal==='function') propostaCalcTotal();
     }, 120);
   }, 150);
+}
+
+
+// ── Pesquisa rápida de clientes na proposta ──────────────────
+function _propNorm(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+function _propCliMorada(c){
+  if(!c) return '';
+  return c.morada || [c.srvRua||c.rua, c.srvCp||c.cp, c.srvLocalidade||c.localidade].filter(Boolean).join(', ');
+}
+function propostaCliBusca(txt){
+  const box=document.getElementById('prop-cli-res'); if(!box) return;
+  const q=_propNorm(txt);
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  const partes=q.split(/\s+/).filter(Boolean);
+  const lista=(window.DB.clientes||[]).filter(c=>c && c.nome && !c._eliminado && !c._arquivado).map(c=>{
+    const campo=_propNorm([c.nome,c.email,c.tel,c.telef,c.nif,c.rua,c.localidade,c.morada,c.cp,c.id].join(' '));
+    return {c, ok: partes.every(w=>campo.includes(w)), ini:_propNorm(c.nome).startsWith(q)};
+  }).filter(x=>x.ok).sort((a,b)=>(b.ini-a.ini)||String(a.c.nome).localeCompare(String(b.c.nome),'pt')).slice(0,8);
+  const esc=t=>String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  let h=lista.map(({c})=>`<div onclick="propostaCliEscolher('${String(c.id).replace(/'/g,"\\'")}')" style="padding:9px 12px;border-bottom:1px solid #e2e8f0;cursor:pointer;color:#0f172a;">
+      <div style="font-weight:700;font-size:13px;">${esc(c.nome)}</div>
+      <div style="font-size:11px;color:#64748b;">${esc([c.tel||c.telef,c.email,_propCliMorada(c)].filter(Boolean).join(' · '))}</div></div>`).join('');
+  if(!lista.length) h+=`<div style="padding:9px 12px;font-size:12px;color:#64748b;">Nenhum cliente encontrado para "${esc(txt)}".</div>`;
+  h+=`<div onclick="propostaCliNovo(decodeURIComponent('${encodeURIComponent(String(txt).trim())}'))" style="padding:10px 12px;cursor:pointer;background:#f0fdf4;color:#166534;font-weight:700;font-size:13px;">➕ Criar novo cliente «${esc(String(txt).trim())}»</div>`;
+  box.innerHTML=h; box.style.display='block';
+}
+function propostaCliEscolher(cliId){
+  const cli=(window.DB.clientes||[]).find(c=>c.id===cliId); if(!cli) return;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
+  set('prop-nome',cli.nome); set('prop-email',cli.email); set('prop-tel',cli.tel||cli.telef); set('prop-morada',_propCliMorada(cli));
+  const mo=document.getElementById('mo-proposta'); if(mo) mo._cliId=cli.id;
+  const chk=document.getElementById('prop-novo-cli'); if(chk) chk.checked=false;
+  const res=document.getElementById('prop-cli-res'); if(res){ res.style.display='none'; res.innerHTML=''; }
+  const b=document.getElementById('prop-cli-busca'); if(b) b.value='';
+  const sel=document.getElementById('prop-cli-sel');
+  if(sel){ sel.style.display='block'; sel.innerHTML='✅ Cliente selecionado: '+String(cli.nome).replace(/</g,'&lt;')+' <span onclick="propostaCliLimpar()" style="cursor:pointer;margin-left:8px;color:#b91c1c;">✕ limpar</span>'; }
+}
+function propostaCliNovo(txt){
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
+  set('prop-nome',txt); set('prop-email',''); set('prop-tel',''); set('prop-morada','');
+  const mo=document.getElementById('mo-proposta'); if(mo) mo._cliId=null;
+  const chk=document.getElementById('prop-novo-cli'); if(chk) chk.checked=true;
+  const res=document.getElementById('prop-cli-res'); if(res){ res.style.display='none'; res.innerHTML=''; }
+  const b=document.getElementById('prop-cli-busca'); if(b) b.value='';
+  const sel=document.getElementById('prop-cli-sel');
+  if(sel){ sel.style.display='block'; sel.innerHTML='➕ Novo cliente — preencha email, telefone e morada abaixo; será criado ao gravar.'; }
+  document.getElementById('prop-email')?.focus();
+}
+function propostaCliLimpar(){
+  ['prop-nome','prop-email','prop-tel','prop-morada'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const mo=document.getElementById('mo-proposta'); if(mo) mo._cliId=null;
+  const sel=document.getElementById('prop-cli-sel'); if(sel){ sel.style.display='none'; sel.innerHTML=''; }
+  const chk=document.getElementById('prop-novo-cli'); if(chk) chk.checked=false;
+}
+// Cria o cliente (se marcado) e devolve o id; reutiliza um cliente igual (mesmo email ou nome) se já existir
+async function _propostaGarantirCliente(nome,email,tel,morada){
+  const mo=document.getElementById('mo-proposta');
+  if(mo && mo._cliId) return mo._cliId;
+  if(!document.getElementById('prop-novo-cli')?.checked || !nome) return null;
+  const lista=window.DB.clientes||[];
+  const ja=lista.find(c=>(email && c.email && _propNorm(c.email)===_propNorm(email)) || _propNorm(c.nome)===_propNorm(nome));
+  if(ja){ if(mo) mo._cliId=ja.id; return ja.id; }
+  if(!window.DB._metaCarregado){ toast('Aguarda: os dados ainda estão a carregar.','⏳'); throw new Error('dados a carregar'); }
+  const pc=window.cliProximoId();
+  const novo={ id:pc.id, nome, email:email||'', tel:tel||'', rua:morada||'', cp:'', localidade:'', concelho:'',
+    tipo:'particular', criadoEm:new Date().toISOString(), origem:'proposta' };
+  await window.fsSet('clientes', pc.id, novo);
+  window.DB.nextCli = pc.num+1;
+  try{ await window.fsMeta('nextCli', pc.num+1); }catch(e){}
+  if(!(window.DB.clientes||[]).some(c=>c.id===pc.id)) (window.DB.clientes=window.DB.clientes||[]).push(novo);
+  if(mo) mo._cliId=pc.id;
+  toast('Novo cliente criado: '+nome,'👤');
+  return pc.id;
 }
 
 // ── Preencher campos ao selecionar cliente no dropdown ────────
@@ -31565,7 +31614,7 @@ function propostaCarregarModelo(){
 
   // Campo extra de corte (só para metro escalonado)
   const corteWrap = document.getElementById('prop-campo-corte-wrap');
-  if(corteWrap) corteWrap.style.display = tipo==='metro_escalonado' ? '' : 'none';
+  if(corteWrap) corteWrap.style.display = _propTipoActual==='metro_escalonado' ? '' : 'none';
 
   propostaCalcTotal();
 }
@@ -31801,7 +31850,11 @@ function propostaGerarTexto(cli){
   const _linhaTotal = (_tab.mostrarTotal !== false)
     ? `\n\n• TOTAL: ${fmt(net)} s/IVA  →  ${fmt(total)} c/IVA`
     : '';
-  const corpo=`Exmo(a). Sr(a). ${cli.nome||'Cliente'},\n\n${intro}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nPROPOSTA N.º ${numProposta} — ${dataDoc}\nSERVIÇO: ${nomeServico.toUpperCase()}\nElaborado por: ${autor}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${descritivo}\n\n${_tab.titulo}\n────────────────\n${_linhasTab}${_linhaTotal}${_notaTab}\n\nCONDIÇÕES\n─────────\n${obs}\n\nValidade desta proposta: ${validadeFmt}\n\nPara aceitar ou agendar o serviço, contacte-nos:\n📞 ${tel}\n✉️  ${emailEmp}\n\n${assinatura}`;
+  const _moradaTxt=document.getElementById('prop-morada')?.value||cli.morada||'';
+  const _tempoTxt=document.getElementById('prop-tempo')?.value||'';
+  const _observTxt=document.getElementById('prop-observacao')?.value||'';
+  const _extraCli=(_moradaTxt?`Morada: ${_moradaTxt}\n`:'')+(_tempoTxt?`Tempo de trabalho estimado: ${_tempoTxt}\n`:'');
+  const corpo=`Exmo(a). Sr(a). ${cli.nome||'Cliente'},\n\n${intro}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nPROPOSTA N.º ${numProposta} — ${dataDoc}\nCliente: ${cli.nome||'Cliente'}\n${_extraCli}SERVIÇO: ${nomeServico.toUpperCase()}\nElaborado por: ${autor}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${descritivo}\n\n${_tab.titulo}\n────────────────\n${_linhasTab}${_linhaTotal}${_notaTab}${_observTxt?`\n\nOBSERVAÇÃO\n──────────\n${_observTxt}`:''}\n\nCONDIÇÕES\n─────────\n${obs}\n\nValidade desta proposta: ${validadeFmt}\n\nPara aceitar ou agendar o serviço, contacte-nos:\n📞 ${tel}\n✉️  ${emailEmp}\n\n${assinatura}`;
   return {assunto:`Proposta de Serviço N.º ${numProposta} — ${nomeServico} — ${empresa}`, corpo};
 }
 
@@ -31861,14 +31914,19 @@ async function _gerarPdfBase64(html, numProposta){
 
     // ── Cliente ──
     pdf.setFillColor(245,245,245);
-    pdf.rect(M, y, TW, 18, 'F');
+    const _tempoTxt = String(d.tempoEstimado||'').trim() || ((d.tipoCobranca||'hora')==='hora' && parseFloat(d.horas)>0 ? ('Cerca de '+d.horas+' h de trabalho') : '');
+    const _moradaLinhas = d.morada ? pdf.splitTextToSize('Morada: '+d.morada, TW-6) : [];
+    const _boxH = 12 + _moradaLinhas.length*5 + (_tempoTxt?5:0) + 2;
+    pdf.rect(M, y, TW, _boxH, 'F');
     pdf.setTextColor(cor[0], cor[1], cor[2]);
     pdf.setFontSize(9); pdf.setFont('helvetica','bold');
     pdf.text('CLIENTE', M+3, y+5);
     pdf.setFont('helvetica','normal'); pdf.setTextColor(30,30,30);
-    pdf.text(d.nomeCliente||'', M+3, y+11);
-    if(d.morada) pdf.text(d.morada, M+3, y+16);
-    y += 22;
+    let _yc = y+11;
+    pdf.setFont('helvetica','bold'); pdf.text(d.nomeCliente||'', M+3, _yc); pdf.setFont('helvetica','normal'); _yc += 5;
+    _moradaLinhas.forEach(l=>{ pdf.text(l, M+3, _yc); _yc += 5; });
+    if(_tempoTxt){ pdf.text(pdf.splitTextToSize('Tempo de trabalho estimado: '+_tempoTxt, TW-6)[0], M+3, _yc); _yc += 5; }
+    y += _boxH + 4;
 
     // ── Serviço ──
     pdf.setFillColor(cor[0], cor[1], cor[2]);
@@ -31925,6 +31983,7 @@ async function _gerarPdfBase64(html, numProposta){
     const fmtIva = v => '€'+((v*(1+iva/100))).toFixed(2);
 
     const _tabPdf = propostaLinhasPreco(d.tipoCobranca||'hora', h1, hadd, horas, iva, d.corteMetros||0);
+    { const _dsl = +(parseFloat(d.deslocacao)||0).toFixed(2); if(_dsl>0) _tabPdf.linhas.push({label:'Deslocação', net:_dsl}); }
     const _netPdf = _tabPdf.linhas.reduce((s,l)=>s+l.net, 0);
     const _srvLowPdf = (d.nomeServico||'').toLowerCase();
     const _ehReabPdf = (_srvLowPdf.includes('spray')||_srvLowPdf.includes('epóxi')||_srvLowPdf.includes('epoxi')||_srvLowPdf.includes('cipp'));
@@ -31979,6 +32038,22 @@ async function _gerarPdfBase64(html, numProposta){
       pdf.setFont('helvetica','italic'); pdf.setFontSize(7.5); pdf.setTextColor(110,110,110);
       pdf.text('Reabilitação sem abertura de vala. Valores com IVA incluído à taxa indicada.', M+3, y+1);
       pdf.setFont('helvetica','normal'); pdf.setTextColor(30,30,30); y += 8;
+    }
+
+    // ── Observação ──
+    if(d.observacao && String(d.observacao).trim()){
+      if(y > 240){ pdf.addPage(); y = 20; }
+      pdf.setFillColor(cor[0], cor[1], cor[2]);
+      pdf.rect(M, y, TW, 6, 'F');
+      pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
+      pdf.text('OBSERVAÇÃO', M+3, y+4);
+      y += 9;
+      pdf.setTextColor(30,30,30); pdf.setFont('helvetica','normal'); pdf.setFontSize(8.5);
+      pdf.splitTextToSize(String(d.observacao), TW).forEach(line=>{
+        if(y > 278){ pdf.addPage(); y = 20; }
+        pdf.text(line, M, y); y += 4.4;
+      });
+      y += 4;
     }
 
     // ── Condições ──
@@ -32140,7 +32215,7 @@ async function propostaEnviarLivre(){
     h1:parseFloat(document.getElementById('prop-h1')?.value)||0,
     hadd:parseFloat(document.getElementById('prop-hadd')?.value)||0,
     horas:parseFloat(document.getElementById('prop-horas')?.value)||1,
-    tipoCobranca:_propTipoActual,
+    tipoCobranca:_propTipoActual, deslocacao:parseFloat(document.getElementById('prop-desloc')?.value)||0,
     corteMetros:parseFloat(document.getElementById('prop-corte-metros')?.value)||0,
     iva:parseFloat(document.getElementById('prop-iva')?.value)||23,
     valorTotal:parseFloat((document.getElementById('prop-t-total')?.textContent||'0').replace(/[^0-9.,]/g,'').replace(',','.')),
@@ -32148,7 +32223,7 @@ async function propostaEnviarLivre(){
     intro:document.getElementById('prop-intro')?.value||'',
     procedimento:(()=>{ const pw=document.getElementById('prop-procedimento-wrap'); return (pw&&pw.style.display==='none')?'':(document.getElementById('prop-procedimento')?.value||''); })(),
     descritivo:document.getElementById('prop-descritivo')?.value||'',
-    obs:document.getElementById('prop-obs')?.value||'',
+    obs:document.getElementById('prop-obs')?.value||'', tempoEstimado:document.getElementById('prop-tempo')?.value||'', observacao:document.getElementById('prop-observacao')?.value||'',
     cliId, estado:'enviada',
     criadoEm:new Date().toISOString(),
     criadoPor:autor,
@@ -32182,7 +32257,7 @@ async function propostaEnviarLivre(){
       intro:       document.getElementById('prop-intro')?.value||'',
       procedimento:(()=>{ const pw=document.getElementById('prop-procedimento-wrap'); return (pw&&pw.style.display==='none')?'':(document.getElementById('prop-procedimento')?.value||''); })(),
       descritivo:  document.getElementById('prop-descritivo')?.value||'',
-      obs:         document.getElementById('prop-obs')?.value||'',
+      obs:         document.getElementById('prop-obs')?.value||'', tempoEstimado:document.getElementById('prop-tempo')?.value||'', observacao:document.getElementById('prop-observacao')?.value||'', deslocacao:parseFloat(document.getElementById('prop-desloc')?.value)||0,
       validade:    document.getElementById('prop-validade')?.value||'',
       marca:       document.getElementById('prop-marca')?.value||'localiza',
       empresa:     emp2.nome||(window._emailCfg||{}).empresa||'Localiza Fugas',
@@ -32201,12 +32276,12 @@ async function propostaEnviarLivre(){
       h1:parseFloat(document.getElementById('prop-h1')?.value)||0,
       hadd:parseFloat(document.getElementById('prop-hadd')?.value)||0,
       horas:parseFloat(document.getElementById('prop-horas')?.value)||1,
-      tipoCobranca:_propTipoActual,
+      tipoCobranca:_propTipoActual, deslocacao:parseFloat(document.getElementById('prop-desloc')?.value)||0,
       corteMetros:parseFloat(document.getElementById('prop-corte-metros')?.value)||0,
       iva:parseFloat(document.getElementById('prop-iva')?.value)||23,
       intro:document.getElementById('prop-intro')?.value||'',
       descritivo:document.getElementById('prop-descritivo')?.value||'',
-      obs:document.getElementById('prop-obs')?.value||'',
+      obs:document.getElementById('prop-obs')?.value||'', tempoEstimado:document.getElementById('prop-tempo')?.value||'', observacao:document.getElementById('prop-observacao')?.value||'',
       validade:document.getElementById('prop-validade')?.value||'',
       marca:document.getElementById('prop-marca')?.value||'localiza',
       empresa:emp2.nome||(window._emailCfg||{}).empresa||'Localiza Fugas',
@@ -32235,6 +32310,8 @@ async function propostaEnviarLivre(){
   window._propostaPdfAnexo = null;
   // Guardar o registo da proposta e histórico
   try{
+    try{ const _cid=await _propostaGarantirCliente(nome,emailDest,_dadosProposta.tel,_dadosProposta.morada); if(_cid) _dadosProposta.cliId=_cid; }catch(e){ console.warn('criar cliente:',e); }
+    Object.keys(_dadosProposta).forEach(k=>{ if(_dadosProposta[k]===undefined) delete _dadosProposta[k]; });
     await window.fsSet('propostas', numProposta, _dadosProposta);
     _propostaUpsertLocal(_dadosProposta);
     await auditLog('proposta_enviada', `${numProposta}: ${nomeServ} para ${emailDest} (envio manual, por ${autor})`);
@@ -32278,7 +32355,7 @@ async function propostaGuardar(){
     intro:document.getElementById('prop-intro')?.value||'',
     procedimento:getProcedimento(),
     descritivo:document.getElementById('prop-descritivo')?.value||'',
-    obs:document.getElementById('prop-obs')?.value||'',
+    obs:document.getElementById('prop-obs')?.value||'', tempoEstimado:document.getElementById('prop-tempo')?.value||'', observacao:document.getElementById('prop-observacao')?.value||'',
     cliId,
     estado:_editandoId ? (_moEdit?._estadoOrig||'rascunho') : 'rascunho',
     criadoEm:_editandoId ? (_moEdit?._criadoEmOrig||new Date().toISOString()) : new Date().toISOString(),
@@ -32288,16 +32365,30 @@ async function propostaGuardar(){
     dataDoc:document.getElementById('prop-data')?.value||new Date().toLocaleDateString('pt-PT'),
   };
   if(_dadosProposta.editadoEm===undefined) delete _dadosProposta.editadoEm;
+  if(window._propGuardando) return;
+  window._propGuardando=true;
+  const _btnG=document.querySelector('#mo-proposta button[onclick="propostaGuardar()"]'); if(_btnG){ _btnG.disabled=true; _btnG.textContent='⏳ A gravar…'; }
   try{
-    await window.fsSet('propostas',numProposta,_dadosProposta);
-    _propostaUpsertLocal(_dadosProposta);
-    await auditLog(_editandoId?'proposta_editada':'proposta_gravada',`${numProposta}: ${nomeServ} para ${nome} (por ${autor})${_editandoId?' [editada]':' [rascunho]'}`);
-    toast(_editandoId?'Proposta atualizada ✅':'Proposta gravada ✅ — pode enviar mais tarde na lista de Propostas','💾');
+    // cliente novo (se marcado) — criado antes de gravar a proposta
+    try{ const _cid=await _propostaGarantirCliente(nome,_dadosProposta.email,_dadosProposta.tel,_dadosProposta.morada); if(_cid){ _dadosProposta.cliId=_cid; } }
+    catch(e){ console.warn('criar cliente:',e); toast('Não foi possível criar o cliente: '+(e.message||e),'⚠️'); }
+    // remover qualquer valor undefined (o Firestore recusa)
+    Object.keys(_dadosProposta).forEach(k=>{ if(_dadosProposta[k]===undefined) delete _dadosProposta[k]; });
+    if(!isFinite(_dadosProposta.valorTotal)) _dadosProposta.valorTotal=0;
+    _propostaUpsertLocal(_dadosProposta);                       // fica logo visível na lista
+    const _wr=window.fsSet('propostas',numProposta,_dadosProposta);
+    const _res=await Promise.race([_wr.then(()=>'ok'), new Promise(r=>setTimeout(()=>r('lento'),8000))]);
+    Promise.resolve(auditLog(_editandoId?'proposta_editada':'proposta_gravada',`${numProposta}: ${nomeServ} para ${nome} (por ${autor})${_editandoId?' [editada]':' [rascunho]'}`)).catch(()=>{});
+    if(_res==='ok') toast(_editandoId?'Proposta atualizada ✅':'Proposta gravada ✅ — pode enviar mais tarde na lista de Propostas','💾');
+    else toast('Proposta guardada neste dispositivo ✅ — vai sincronizar assim que houver ligação','📶');
     document.getElementById('mo-proposta')?.remove();
     if(typeof propostasRender==='function') propostasRender();
   }catch(err){
     console.error('Erro ao gravar proposta:',err);
-    toast('Erro ao gravar: '+err.message,'❌');
+    toast('Erro ao gravar: '+(err&&err.message||err),'❌');
+    if(_btnG){ _btnG.disabled=false; _btnG.textContent='💾 Gravar Proposta'; }
+  }finally{
+    window._propGuardando=false;
   }
 }
 
@@ -32327,12 +32418,12 @@ async function propostaEnviarRascunho(propId){
   const _linhasR=_tabR.linhas.map(l=>`• ${l.label}:    ${fmt(l.net)} s/IVA  →  ${fmt(l.net*(1+iva/100))} c/IVA`).join('\n');
   const _totalR=(_tabR.mostrarTotal!==false)?`\n\n  Subtotal s/IVA:   ${fmt(_netR)}\n  IVA (${iva}%):    ${fmt(_ivaR)}\n  ─────────────────────────────\n  TOTAL c/IVA:      ${fmt(_totR)}`:'';
   const _notaR=_tabR.notaTempo?`\n\n${_tabR.notaTempo}`:'';
-  const corpo=`Exmo(a). Sr(a). ${p.nome||'Cliente'},\n\n${p.intro||''}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nPROPOSTA N.º ${p.numero} — ${p.dataDoc||''}\nSERVIÇO: ${nomeServ.toUpperCase()}\nElaborado por: ${autor}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${p.descritivo||''}\n\n${_tabR.titulo}\n────────────────\n${_linhasR}${_totalR}${_notaR}\n\nCONDIÇÕES\n─────────\n${p.obs||''}\n\nValidade desta proposta: ${valStr}\n\nPara aceitar ou agendar o serviço, contacte-nos:\n📞 ${tel2}\n✉️  ${emailEmp2}\n\n${assinatura}`;
+  const corpo=`Exmo(a). Sr(a). ${p.nome||'Cliente'},\n\n${p.intro||''}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nPROPOSTA N.º ${p.numero} — ${p.dataDoc||''}\nCliente: ${p.nome||'Cliente'}\n${p.morada?'Morada: '+p.morada+'\n':''}${p.tempoEstimado?'Tempo de trabalho estimado: '+p.tempoEstimado+'\n':''}SERVIÇO: ${nomeServ.toUpperCase()}\nElaborado por: ${autor}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${p.descritivo||''}\n\n${_tabR.titulo}\n────────────────\n${_linhasR}${_totalR}${_notaR}${p.observacao?'\n\nOBSERVAÇÃO\n──────────\n'+p.observacao:''}\n\nCONDIÇÕES\n─────────\n${p.obs||''}\n\nValidade desta proposta: ${valStr}\n\nPara aceitar ou agendar o serviço, contacte-nos:\n📞 ${tel2}\n✉️  ${emailEmp2}\n\n${assinatura}`;
   const assunto=`Proposta de Serviço N.º ${p.numero} — ${nomeServ} — ${empresa2}`;
   // Gerar PDF anexo
   let pdfAnexo=null;
   try{
-    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,peritagem:p.peritagemPor||'',nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
+    const pdfHtml=_propostaHtmlPDF({numProposta:p.numero,dataDoc:p.dataDoc,autor,peritagem:p.peritagemPor||'',nomeCliente:p.nome,email:p.email,tel:p.tel||'',morada:p.morada||'',nomeServico:nomeServ,h1,hadd,horas,tipoCobranca:p.tipoCobranca||'hora',corteMetros:p.corteMetros||0,iva,intro:p.intro||'',procedimento:p.procedimento||'',descritivo:p.descritivo||'',obs:p.obs||'',tempoEstimado:p.tempoEstimado||'',observacao:p.observacao||'',deslocacao:p.deslocacao||0,validade:p.validade||'',marca:p.marca||'localiza',empresa:empresa2,telEmp:tel2,emailEmp:emailEmp2,moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048"});
     const pdfBase64=await new Promise(res=>{const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});const fr=new FileReader();fr.onload=()=>{const parts=fr.result.split(',');res(parts[1]||null);};fr.onerror=()=>res(null);fr.readAsDataURL(blob);});
     if(pdfBase64){
         pdfAnexo=[{content:pdfBase64,name:'Proposta_'+p.numero.replace(/[^A-Za-z0-9_-]/g,'_')+'.pdf'}];
@@ -32347,7 +32438,7 @@ async function propostaEnviarRascunho(propId){
       autor, nomeCliente:p.nome, email:p.email, tel:p.tel||'', morada:p.morada||'',
       nomeServico:nomeServ, h1, hadd, horas, tipoCobranca:p.tipoCobranca||'hora',
       corteMetros:p.corteMetros||0, iva, intro:p.intro||'', descritivo:p.descritivo||'',
-      obs:p.obs||'', validade:p.validade||'', marca:p.marca||'localiza',
+      obs:p.obs||'', tempoEstimado:p.tempoEstimado||'', observacao:p.observacao||'', deslocacao:p.deslocacao||0, validade:p.validade||'', marca:p.marca||'localiza',
       empresa:empresa2, telEmp:tel2, emailEmp:emailEmp2,
       moradaEmp:emp.morada||"Rua Vale D'Este, 40 — Braga — 4710-048",
     };
@@ -32851,6 +32942,25 @@ ${empresa} &nbsp;\u00b7&nbsp; ${telEmp} &nbsp;\u00b7&nbsp; ${emailEmp}</div>
 }
 
 function _propostaHtmlPDF(dados){
+  let html = _propostaHtmlPDF_base(dados);
+  try{
+    const esc=t=>String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const tempo=String(dados.tempoEstimado||'').trim();
+    const obsv=String(dados.observacao||'').trim();
+    if(tempo){
+      const i=html.indexOf('class="cli-table"');
+      if(i>=0){ const j=html.indexOf('</tbody>',i); if(j>0) html=html.slice(0,j)+`<tr><td>Tempo de trabalho estimado</td><td>${esc(tempo)}</td></tr>`+html.slice(j); }
+    }
+    if(obsv){
+      const bloco=`<div class="sec-hdr" style="margin-top:18px;">Observação</div><div class="sec-body" style="white-space:pre-wrap;">${esc(obsv)}</div>`;
+      let k=html.indexOf('<div class="aceite"'); if(k<0) k=html.indexOf('<div class="footer"');
+      if(k<0) k=html.lastIndexOf('</body>');
+      if(k>=0) html=html.slice(0,k)+bloco+html.slice(k);
+    }
+  }catch(e){ console.warn('injeção proposta:',e); }
+  return html;
+}
+function _propostaHtmlPDF_base(dados){
   // ── Modelos especiais de reabilitação ───────────────────────
   const _srvNomeLow = (dados.nomeServico||'').toLowerCase();
   // Só usar os modelos especiais (layout por metro linear) se a cobrança CONTINUAR a ser por metro.
@@ -33202,7 +33312,7 @@ function propostaGerarPDF(){
     deslocacao:  parseFloat(document.getElementById('prop-desloc')?.value)||0,
     intro:       document.getElementById('prop-intro')?.value||'',
     descritivo:  document.getElementById('prop-descritivo')?.value||'',
-    obs:         document.getElementById('prop-obs')?.value||'',
+    obs:         document.getElementById('prop-obs')?.value||'', tempoEstimado:document.getElementById('prop-tempo')?.value||'', observacao:document.getElementById('prop-observacao')?.value||'', deslocacao:parseFloat(document.getElementById('prop-desloc')?.value)||0,
     validade:    document.getElementById('prop-validade')?.value||'',
     marca:       document.getElementById('prop-marca')?.value||'localiza',
     empresa:     emp.nome||eCfg.empresa||'Localiza Fugas',
@@ -33236,6 +33346,7 @@ function propostaGerarPDFFromObj(p){
     intro:       p.intro||'',
     descritivo:  p.descritivo||'',
     obs:         p.obs||'',
+    tempoEstimado:p.tempoEstimado||'', observacao:p.observacao||'',
     validade:    p.validade||'',
     marca:       p.marca||'localiza',
     empresa:     emp.nome||eCfg.empresa||'Localiza Fugas',

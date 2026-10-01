@@ -1309,7 +1309,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.29<br>
+      HidroGest v16.30<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1334,7 +1334,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.29<br>
+      HidroGest v16.30<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -6950,6 +6950,14 @@ function _fechoTodasOS(){
   });
   return out;
 }
+// Lista de quem pode ter comissão: utilizadores técnicos + quem for dono de OS (ex.: admin que também trabalha)
+function hgFechoTecnicos(todas){
+  const users=window.DB.users||[]; const out={};
+  users.filter(u=>u.role==='tecnico' && u.active!==false).forEach(u=>{ out[u.id]={id:u.id,name:u.name}; });
+  (todas||_fechoTodasOS()).forEach(e=>{ if(e.owner && e.owner!=='__sem__' && !out[e.owner]){ const u=users.find(x=>x.id===e.owner); out[e.owner]={id:e.owner,name:(u&&u.name)||e.owner}; } });
+  return Object.values(out).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt'));
+}
+window.hgFechoTecnicos=hgFechoTecnicos;
 function hgFechoComissoes(periodo, opts){
   opts=opts||{};
   const ant=_fechoMesAnterior(periodo), taxa=hgComissaoTaxa(), garPct=hgComissaoGarantiaPct();
@@ -6957,10 +6965,10 @@ function hgFechoComissoes(periodo, opts){
   const todas=_fechoTodasOS();
   // garantias do mês: reduzem a comissão da OS original (uma só vez por OS original)
   const garantias=(window.DB.ordens||[]).filter(o=>o.garantia===true && o.estado!=='cancelada' && o.osOriginalId && String(o.data||'').slice(0,7)===periodo && periodo>=inicio);
-  const tecs=(window.DB.funcionarios||[]).filter(f=>f.role==='tecnico');
+  const tecs=hgFechoTecnicos(todas).map(x=>({name:x.name,id:x.id}));
   const fimMes=m=>m+'-31';
   const linhas=tecs.map(t=>{
-    const u=(window.DB.users||[]).find(x=>x.name===t.name); const uid=u&&u.id;
+    const uid=t.id;
     const mine=todas.filter(e=>e.owner===uid);
     const doMes=mine.filter(e=>e.mes===periodo && (!opts.de||e.data>=opts.de) && (!opts.ate||e.data<=opts.ate));
     const rec=doMes.filter(e=>e.estado==='concl' && e.pago).reduce((a,e)=>a+e.net,0);
@@ -7089,7 +7097,7 @@ function renderComissoes(){
   container.innerHTML = `
     <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">👷 Técnico</div>
-        <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${(window.DB.funcionarios||[]).filter(f=>f.role==='tecnico').map(t=>{const u=(window.DB.users||[]).find(x=>x.name===t.name);const id=(u&&u.id)||t.name;return `<option value="${id}" ${window._commTec===id?'selected':''}>${t.name}</option>`;}).join('')}</select></div>
+        <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${hgFechoTecnicos().map(t=>`<option value="${t.id}" ${window._commTec===t.id?'selected':''}>${t.name}</option>`).join('')}</select></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">📅 Mês</div>
         <input type="month" value="${_commPeriodo}" onchange="window._commDe='';window._commAte='';_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;"></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">ou período: de</div>

@@ -37092,7 +37092,7 @@ window.abrirApresentacaoGrupo = function(){
     // Últimos atendimentos deste cliente (sem dados de outros técnicos nem valores)
     const ult=ultimosAtendimentos(os);
     if(ult.length){
-      h+='<div class="ofc-sec"><div class="ofc-h" style="margin-bottom:8px;">📋 Últimos atendimentos deste cliente</div>'
+      h+='<div class="ofc-sec"><details><summary style="cursor:pointer;font-weight:700;font-size:14px;color:#0e7490;padding:6px 0;list-style:none;">📋 Últimos atendimentos deste cliente ('+ult.length+') — tocar para ver</summary><div style="margin-top:8px;">'
         +ult.map(a=>'<div style="border-left:3px solid #0e7490;padding:6px 0 6px 12px;margin-bottom:10px;">'
           +'<div style="font-size:13px;font-weight:700;color:#0e7490;">'+esc(fmtDate(a.data))+(a.servico?' · '+esc(a.servico):'')+'</div>'
           +(a.problema?'<div style="font-size:13.5px;margin-top:3px;"><b style="color:#64748b;font-weight:600;">Problema:</b> '+esc(a.problema)+'</div>':'')
@@ -37100,7 +37100,7 @@ window.abrirApresentacaoGrupo = function(){
           +(a.zonas?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Zonas:</b> '+esc(a.zonas)+'</div>':'')
           +(a.conclusao?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Conclusão:</b> '+esc(a.conclusao)+'</div>':'')
           +'</div>').join('')
-        +'</div>';
+        +'</div></details></div>';
     }
 
     // 1 · Tempo
@@ -37124,7 +37124,7 @@ window.abrirApresentacaoGrupo = function(){
       +'<div class="ofc-lbl">Zonas inspecionadas e itens testados *</div>'
       +'<div class="ofc-hint">Escreve a zona e escolhe. Depois, em cada zona, escreve o item testado — ao escolher, a câmara abre para a foto.</div>'
       +'<div id="ofc-zonas-itens"></div>'
-      +'<div id="ofc-meteq"></div>'
+      +'<details style="margin-top:10px;"><summary style="cursor:pointer;font-weight:700;font-size:14px;color:#0e7490;padding:6px 0;list-style:none;">🔧 Metodologias e equipamentos — já preenchido, tocar para alterar</summary><div id="ofc-meteq"></div></details>'
       +'<div class="ofc-lbl" style="display:flex;align-items:center;">Outras fotos<span class="ofc-cnt" id="ofc-fcnt"></span></div>'
       +'<div class="ofc-hint">As fotos dos itens tiram-se no próprio item. Aqui ficam outras (vista geral, danos). Mínimo 4 fotos no total.</div>'
       +'<div class="ofc-fotos" id="ofc-fotos"></div>'
@@ -37191,7 +37191,7 @@ window.abrirApresentacaoGrupo = function(){
       h+='<div class="ofc-row"><span>Valor acordado</span><span>'+eur(os.total)+' c/IVA</span></div>';
     } else {
       h+='<div class="ofc-row"><span>1.ª hora</span><span>'+eur(precoOS(os).h1)+'</span></div>'
-        +(precoOS(os).haddV>0?'<div class="ofc-row"><span>Tempo adicional (por bloco)</span><span>'+eur(precoOS(os).haddV)+'</span></div>':'')
+        +(precoOS(os).haddV>0?'<div class="ofc-row"><span>Hora adicional (cobrada em blocos de 30 min)</span><span>'+eur(precoOS(os).haddV)+'</span></div>':'')
         +'<div class="ofc-row"><span>IVA</span><span>'+(parseInt(os.iva)||23)+'%</span></div>';
     }
     const pg=os.pagador&&os.pagador.nome?os.pagador:null;
@@ -37210,6 +37210,15 @@ window.abrirApresentacaoGrupo = function(){
     const v=fechada(os)?{net:+(os.net||0),ivaV:+(os.ivaVal||0),total:+(os.total||0),fixo:valorFixo(os)}:calcValor(os, segTrabalho(os)/60);
     el.innerHTML='<div class="ofc-cond" style="background:#fff;border:1px solid #e2e8f0;">'
       +(v.fixo?'':'<div class="ofc-row"><span>Tempo contado</span><span>'+fmtSeg(segTrabalho(os)).slice(0,5)+'</span></div>')
+      +(v.fixo?'':(function(){
+          // v16.xx — mostrar o cálculo: 1.ª hora + tempo adicional (igual ao email ao cliente)
+          const pr=precoOS(os); let u=+v.hAdd||0;
+          if(!(u>0) && pr.haddV>0 && v.net>pr.h1) u=Math.round((v.net-pr.h1)/pr.haddV*2)/2; // OS agendada com hora adicional
+          let r='<div class="ofc-row"><span>1.ª hora</span><span>'+eur(pr.h1)+'</span></div>';
+          if(u>0) r+='<div class="ofc-row"><span>Tempo adicional ('+Math.round(u*60)+' min × '+eur(pr.haddV)+'/h)</span><span>'+eur(+(u*pr.haddV).toFixed(2))+'</span></div>';
+          else if(pr.haddV>0) r+='<div class="ofc-row"><span>Tempo adicional</span><span>sem tempo adicional</span></div>';
+          return r;
+        })())
       +'<div class="ofc-row"><span>Subtotal s/IVA</span><span>'+eur(v.net)+'</span></div>'
       +'<div class="ofc-row"><span>IVA '+(parseInt(os.iva)||23)+'%</span><span>'+eur(v.ivaV)+'</span></div></div>'
       +'<div class="ofc-tot"><span>Total a cobrar</span><b>'+eur(v.total)+'</b></div>';
@@ -37586,7 +37595,7 @@ window.abrirApresentacaoGrupo = function(){
         +'<div style="position:relative;width:88px;height:88px;flex-shrink:0;border-radius:9px;overflow:hidden;border:1px solid #e2e8f0;"><img src="'+esc(x.f.url||x.f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;">'
         +(!x.f.url?'<span class="ofc-up" style="position:absolute;left:3px;top:3px;font-size:9px;">a enviar</span>':'')
         +'<button type="button" onclick="ofcFotoDel('+x.i+')" style="position:absolute;top:3px;right:3px;background:rgba(15,36,71,.75);color:#fff;border:0;border-radius:6px;width:26px;height:26px;font-size:12px;">✕</button></div>'
-        +'<textarea data-fid="'+esc(x.f.fid||'')+'" data-campo="descricao" class="ofc-in ofc-fdesc'+(!(x.f.descricao||'').trim()?' falta':'')+'" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição da foto * — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
+        +'<textarea data-fid="'+esc(x.f.fid||'')+'" data-campo="descricao" class="ofc-in ofc-fdesc" style="flex:1;min-height:88px;font-size:14px;padding:9px;resize:vertical;" placeholder="Descrição (opcional) — o que se vê (ex.: humidade na base do autoclismo)" oninput="ofcFotoDesc('+x.i+',this)">'+esc(x.f.descricao||'')+'</textarea></div>').join('')
       +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\',\'camera\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 12px;font-weight:800;font-size:14px;">📷 '+(fotos.length?'Mais foto':'Câmara')+'</button>'
       +'<button type="button" onclick="ofcFotoItem(\''+t.key+'\',\'galeria\')" style="min-height:46px;border:2px dashed #0e7490;background:#fff;color:#0e7490;border-radius:10px;padding:0 12px;font-weight:800;font-size:14px;">🖼️ Galeria</button></div>'
       +'<input class="ofc-in" style="margin-top:8px;font-size:14px;padding:9px;" value="'+esc(t.obs)+'" placeholder="Observação (opcional)" oninput="ofcTeste(\''+t.key+'\',\'obs\',this.value)">'
@@ -37678,17 +37687,30 @@ window.abrirApresentacaoGrupo = function(){
         +(!f.url?'<span class="ofc-up">a enviar</span>':'')
         +'<button type="button" class="ofc-fx" onclick="ofcFotoDel('+i+')" aria-label="Apagar foto">✕</button>'
         +'<input data-fid="'+esc(f.fid||'')+'" data-campo="legenda" class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Local da foto *" oninput="ofcFotoLeg('+i+',this)">'
-        +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="'+(!(f.descricao||'').trim()?'falta':'')+'" rows="2" placeholder="Descrição da foto *" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
+        +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="" rows="2" placeholder="Descrição (opcional)" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
     }).join('');
+    // v16.xx — local da foto com um toque
+    const _idx=[]; S.fotos.forEach((f,i)=>{ if(!f.itemKey) _idx.push(i); });
+    el.querySelectorAll('.ofc-foto').forEach((box,k)=>{
+      const i=_idx[k]; const f=S.fotos[i]; if(!f||(f.legenda||'').trim()) return;
+      const w=document.createElement('div'); w.style.cssText='display:flex;flex-wrap:wrap;gap:5px;padding:6px;border-top:1px solid #e2e8f0;';
+      ['Vista geral','Zona afetada','Anomalia','Tubagem','Teto','Parede','Pavimento','Equipamento'].forEach(t=>{
+        const b=document.createElement('button'); b.type='button'; b.textContent=t;
+        b.style.cssText='border:1.5px solid #cbd5e1;background:#fff;border-radius:16px;padding:5px 10px;font-size:12.5px;font-weight:600;color:#334155;';
+        b.onclick=()=>ofcFotoLocal(i,t); w.appendChild(b);
+      });
+      box.appendChild(w);
+    });
     fotoGate();
   }
+  window.ofcFotoLocal=function(i,txt){ const f=S.fotos[i]; if(!f) return; f.legenda=txt; try{ atualizarLocal(f); }catch(e){} renderFotos(); sujo(); };
   function fotoGate(){
     const n=S.fotos.length, semLeg=S.fotos.some(f=>!f.itemKey && !(f.legenda||'').trim());
     ['ofc-fcam','ofc-fgal'].forEach(id=>{ const l=$(id); if(l) l.classList.toggle('off', semLeg); });
     const c=$('ofc-fcnt'); if(c){ c.textContent='Total '+n+' / 4'; c.style.background=n>=4?'#dcfce7':'#fee2e2'; c.style.color=n>=4?'#166534':'#b91c1c'; }
   }
   function _fotoPorRef(el,i){ const fid=el&&el.getAttribute&&el.getAttribute('data-fid'); return (fid&&S.fotos.find(f=>f.fid===fid)) || S.fotos[i]; }
-  window.ofcFotoDesc = function(i, el){ const f=_fotoPorRef(el,i); if(f){ f.descricao=el.value; atualizarLocal(f); el.classList.toggle('falta', !el.value.trim()); sujo(); } };
+  window.ofcFotoDesc = function(i, el){ const f=_fotoPorRef(el,i); if(f){ f.descricao=el.value; atualizarLocal(f); sujo(); } };
   window.ofcFotoLeg = function(i, el){ const f=_fotoPorRef(el,i); if(f){ f.legenda=el.value; atualizarLocal(f); el.classList.toggle('falta', !el.value.trim()); fotoGate(); sujo(); } };
   // Antes de validar/gravar, absorve o que estiver escrito nas caixas visíveis (evita perder texto ao mudar de ecrã)
   function absorverCamposFoto(){
@@ -37810,7 +37832,6 @@ window.abrirApresentacaoGrupo = function(){
     if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
     absorverCamposFoto();
     if(S.fotos.some(x=>!(x.legenda||'').trim())) f.push('local em todas as fotos');
-    if(S.fotos.some(x=>!(x.descricao||'').trim())) f.push('descrição em todas as fotos');
     if(!(c.metodologias||[]).length) f.push('metodologias');
     const naoFat=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
     if(!naoFat && !S.pag) f.push('forma de pagamento');

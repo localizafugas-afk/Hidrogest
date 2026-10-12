@@ -2,6 +2,14 @@
 <html lang="pt">
 <head>
 <script>
+// v16.09 — Relatório do técnico simplificado: 1 linha por teste (🔴🟢⚪), foto/nota só quando precisa, 'Tudo sem anomalia' por grupo, contador, 1 botão de enviar.
+// v16.16 — 'Onde aparece o problema' e locais inspecionados: o técnico escreve (sem botões pré-definidos).
+// v16.15 — 'Fração inspecionada' + lista alargada de locais inspecionáveis.
+// v16.14 — Botões e avisos flutuantes passam a ser arrastáveis (posição guardada; duplo toque repõe).
+// v16.13 — Sem 'Impermeabilização' nos locais; títulos: 'Onde aparece o problema' e 'Local onde foram realizados os testes'; fotos sem etiquetas pré-definidas (técnico escreve).
+// v16.12 — Local onde se manifesta (não tipo de problema); sem zonas/itens duplicados; 'Observação para a administração' (retorno rastreador químico por defeito) visível à gestão.
+// v16.11 — Ecrã de campo: tipo de imóvel, anomalia, onde se manifesta, zonas e itens agora com botões de toque (sem escrever); nota comercial recolhida; 'Fechar OS' mostra quantas coisas faltam.
+// v16.10 — Ecrã de campo: metodologias e equipamentos visíveis (toque), sem pré-preenchimento, ambos obrigatórios para fechar.
 // v16.08 — Relatório 'Faturamento por Técnico': técnico vem da OS (recibo.osId → os.tecnicos), valor líquido sem IVA, igual ao Dashboard.
 // v16.02 — Notificações seguras no telemóvel: o Android não deixa usar "window.hgNotificar()";
 // nesse caso a notificação é mostrada pelo service worker (showNotification), sem erro.
@@ -23470,6 +23478,8 @@ function rpAbrirFormulario(osId, preserveTemp){
   // Guardar flag global para uso no formulário e no salvamento
   window._rpFormIsTecnico = _isTecnico;
   if(_isTecnico){ return rpTecFormAbrir(osId, preserveTemp); }
+  // gestão: repor rodapé normal (o do técnico esconde botões e muda o "Guardar")
+  try{ document.querySelectorAll('#mo-relat-pesquisa .mf > button').forEach(b=>{ b.style.display=''; }); const _p=document.querySelector('#mo-relat-pesquisa [data-rptec-save]'); if(_p){ _p.removeAttribute('data-rptec-save'); _p.onclick=null; _p.setAttribute('onclick','rpSalvarRelatorio()'); _p.textContent='✅ Guardar e voltar à OS'; } }catch(_e){}
   // ─────────────────────────────────────────────────────────────────────────
 
   window._rpEditOsId  = osId;
@@ -23997,6 +24007,7 @@ function rpRecolherCampos(){
   const plantaVal = document.querySelector('input[name="rp-planta"]:checked')?.value || existing.planta || 'nao';
   return {
     // Campos do mobile (formato unificado)
+    obsAdmin:     existing.obsAdmin||'', pedeRetorno: !!existing.pedeRetorno,
     reclamacao:   gc('rp-reclamacao')  || existing.reclamacao  || '',
     trabalho:     gc('rp-trabalho')    || existing.trabalho    || '',
     metodologias: temControlo('rp-met')  ? getChecked('rp-met')  : (existing.metodologias||[]),
@@ -24276,7 +24287,6 @@ function _rpTecInitEstado(c, anom){
 }
 
 window._rpTecFind=function(key){ return (window._rpTecTestes||[]).find(x=>x.key===key); };
-window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(t){ t.status=(t.status===st?'':st); window._rpTecScrollNext = t.status ? key : null; rpTecFormAbrir(window._rpEditOsId,true); } };
 window.rpTecMin=function(key,val){ const t=window._rpTecFind(key); if(t) t.min=parseInt(val)||0; };
 window._rpTecSetNome=function(key,val){ const t=window._rpTecFind(key); if(t) t.nome=val; };
 window._rpTecTesteObs=function(key,val){ const t=window._rpTecFind(key); if(t) t.obs=val; };
@@ -24317,50 +24327,91 @@ window._rpTecAddFoto=async function(inputEl,key){
   if(!nome){ if(typeof toast==='function') toast('Escreve primeiro o local testado.','📍',4000); else alert('Escreve primeiro o local testado.'); inputEl.value=''; return; }
   const files=[...inputEl.files]; inputEl.value=''; if(!files.length) return;
   for(const f of files){ if(!f.type||!f.type.startsWith('image/')) continue; try{ const d=await _rpTecComprimir(f); (window._rpFotosTemp=window._rpFotosTemp||[]).push({dataUrl:d, legenda:nome}); }catch(e){ console.warn('rpTec foto falhou:',e); } }
-  rpTecFormAbrir(window._rpEditOsId,true);
+  (window._rpTecOpen=window._rpTecOpen||new Set()).add(key); _rpTecRefreshRow(key);
 };
 
+/* ═══ v16.09 — FORMULÁRIO DO TÉCNICO SIMPLIFICADO ═══
+   • 1 linha por teste: nome + 🔴 🟢 ⚪ (um toque). Tempo/foto/nota só quando precisa.
+   • Tocar num resultado atualiza SÓ essa linha (sem recarregar o ecrã, sem saltos).
+   • "Tudo sem anomalia" por grupo, contador de progresso, 1 botão de enviar.
+   • Mesmos dados de antes (window._rpTecTestes) — PDF/Word/gestão não mudam. */
 function _rpTecStatusBtns(t){
-  const opt=[['anomalia','🔴 Anomalia detetada','#dc2626','#fef2f2','#fecaca'],['sem','🟢 Sem anomalia','#16a34a','#f0fdf4','#bbf7d0'],['na','⚪ Não se aplica','#64748b','#f8fafc','#e2e8f0']];
-  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">'+opt.map(function(o){
+  const opt=[['anomalia','🔴','Anomalia','#dc2626','#fef2f2'],['sem','🟢','Sem anomalia','#16a34a','#f0fdf4'],['na','⚪','Não se aplica','#64748b','#f1f5f9']];
+  return '<div style="display:flex;gap:6px;flex-shrink:0;">'+opt.map(function(o){
     const on=t.status===o[0];
-    return '<button type="button" onclick="rpTecStatus(\''+t.key+'\',\''+o[0]+'\')" style="flex:1;min-width:100px;border:1.5px solid '+(on?o[2]:o[4])+';background:'+(on?o[3]:'#fff')+';color:'+(on?o[2]:'#64748b')+';border-radius:9px;padding:9px 8px;font-size:12.5px;font-weight:700;cursor:pointer;">'+o[1]+'</button>';
+    return '<button type="button" aria-label="'+o[2]+'" title="'+o[2]+'" onclick="rpTecStatus(\''+t.key+'\',\''+o[0]+'\')" style="width:46px;height:46px;border-radius:12px;font-size:20px;line-height:1;cursor:pointer;border:2px solid '+(on?o[3]:'#e2e8f0')+';background:'+(on?o[4]:'#fff')+';opacity:'+(on||!t.status?1:.45)+';">'+o[1]+'</button>';
   }).join('')+'</div>';
 }
 
-function _rpTecCard(t){
-  const bc=t.dano?'#f59e0b':(t.status==='anomalia'?'#dc2626':(t.status==='sem'?'#16a34a':(t.status==='na'?'#cbd5e1':'#e2e8f0')));
-  const vtag=(t.tipo==='visual')?'<span style="display:inline-block;font-size:9px;font-weight:700;color:#6d28d9;background:#f3e8ff;border-radius:4px;padding:2px 6px;margin-right:6px;vertical-align:1px;">Visual</span>':'';
-  const _ph=t.dano?'Local do dano (ex: teto do WC, parede do quarto...)':'Escreve o local testado (ex: cozinha, garagem, terraço...)';
-  const nomeHTML=(t.custom||t.dano)
-    ? '<div style="display:flex;align-items:center;gap:8px;"><input type="text" value="'+_rpTecEscAttr(t.nome||'')+'" oninput="_rpTecSetNome(\''+t.key+'\',this.value)" placeholder="'+_ph+'" style="flex:1;font-size:15px;font-weight:600;color:#0f2447;border:none;border-bottom:1.5px solid #cbd5e1;background:transparent;outline:none;padding:3px 0;"><button type="button" onclick="rpTecRemLocal(\''+t.key+'\')" title="Remover" style="background:#fee2e2;border:none;border-radius:7px;width:30px;height:30px;color:#dc2626;cursor:pointer;font-size:15px;flex-shrink:0;">🗑</button></div>'
-    : '<div style="font-size:15px;font-weight:600;color:#0f2447;">'+vtag+_rpTecEsc(t.nome)+'</div>';
-  const tempo=(t.tipo==='tempo' && !t.dano)
-    ? '<div style="display:flex;align-items:center;gap:7px;margin-top:9px;background:#ecfeff;border-radius:9px;padding:6px 8px;width:max-content;"><span style="font-size:10px;font-weight:700;color:#0e7490;text-transform:uppercase;">Tempo</span><input type="number" min="1" max="120" value="'+(t.min!=null?t.min:5)+'" oninput="rpTecMin(\''+t.key+'\',this.value)" style="width:44px;text-align:center;border:1px solid #a5d8e0;border-radius:6px;padding:5px 2px;font-size:14px;font-weight:700;"><span style="font-size:11px;color:#475569;">min</span></div>'
-    : '';
-  const nm=(t.nome||'').trim();
-  let fotosHTML='';
-  if(nm){
-    (window._rpFotosTemp||[]).forEach((f,gi)=>{
-      if((f.legenda||'')!==nm) return;
-      fotosHTML+='<div style="position:relative;width:66px;height:66px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;"><img src="'+(f.url||f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;"><button onclick="window._rpFotosTemp.splice('+gi+',1);rpTecFormAbrir(window._rpEditOsId,true)" style="position:absolute;top:2px;right:2px;background:rgba(220,38,38,.85);border:none;border-radius:50%;width:18px;height:18px;color:#fff;cursor:pointer;font-size:11px;line-height:1;">×</button></div>';
-    });
-  }
-  const addFoto='<label style="display:inline-flex;align-items:center;gap:6px;border:1.5px dashed #94a3b8;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;color:#0f2447;font-size:12.5px;flex-shrink:0;">📷 Foto<input type="file" accept="image/*" multiple style="display:none;" onchange="_rpTecAddFoto(this,\''+t.key+'\')"></label>';
-  const obsHTML='<textarea oninput="_rpTecTesteObs(\''+t.key+'\',this.value)" rows="2" placeholder="'+(t.dano?'Observação do dano (opcional)':'Observação deste teste (opcional)')+'" style="width:100%;margin-top:10px;font-size:13px;min-height:44px;resize:vertical;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">'+_rpTecEsc(t.obs||'')+'</textarea>';
-  return '<div data-tec-card="'+t.key+'" style="border:1.5px solid '+bc+';border-radius:11px;padding:11px 12px;margin-bottom:9px;">'
-    +nomeHTML+tempo+(t.dano?'':_rpTecStatusBtns(t))
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'+fotosHTML+addFoto+'</div>'
-    +obsHTML+'</div>';
+function _rpTecFotosDe(t){
+  const nm=(t.nome||'').trim(); if(!nm) return [];
+  const r=[]; (window._rpFotosTemp||[]).forEach((f,gi)=>{ if((f.legenda||'')===nm) r.push({f,gi}); }); return r;
 }
+
+function _rpTecCard(t){
+  window._rpTecOpen = window._rpTecOpen || new Set();
+  const fotos=_rpTecFotosDe(t);
+  const temExtra = !!((t.obs||'').trim()) || fotos.length>0;
+  const aberto = t.dano || t.status==='anomalia' || temExtra || window._rpTecOpen.has(t.key);
+  const bc=t.dano?'#f59e0b':(t.status==='anomalia'?'#dc2626':(t.status==='sem'?'#86efac':'#e2e8f0'));
+  const bg=t.status==='anomalia'?'#fffafa':'#fff';
+  const vtag=(t.tipo==='visual')?'<span style="font-size:10px;font-weight:700;color:#6d28d9;background:#f3e8ff;border-radius:4px;padding:1px 5px;margin-left:6px;">visual</span>':'';
+  const _ph=t.dano?'Onde está o dano? (ex: teto do WC)':'Local testado (ex: cozinha, garagem...)';
+  const nomeHTML=(t.custom||t.dano)
+    ? '<input type="text" value="'+_rpTecEscAttr(t.nome||'')+'" oninput="_rpTecSetNome(\''+t.key+'\',this.value)" placeholder="'+_ph+'" style="flex:1;min-width:0;font-size:15px;font-weight:600;color:#0f2447;border:none;border-bottom:1.5px solid #cbd5e1;background:transparent;outline:none;padding:6px 0;">'
+    : '<div style="flex:1;min-width:0;font-size:15px;font-weight:600;color:#0f2447;line-height:1.25;">'+_rpTecEsc(t.nome)+vtag+'</div>';
+  const botoes = t.dano ? '' : _rpTecStatusBtns(t);
+  const del=(t.custom||t.dano)?'<button type="button" onclick="rpTecRemLocal(\''+t.key+'\')" aria-label="Remover" style="background:#fee2e2;border:none;border-radius:10px;width:36px;height:46px;color:#dc2626;cursor:pointer;font-size:15px;flex-shrink:0;">🗑</button>':'';
+  let det='';
+  if(aberto){
+    const tempo=(t.tipo==='tempo' && !t.dano && (t.status==='anomalia'||t.status==='sem'))
+      ? '<label style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;border-radius:9px;padding:5px 9px;font-size:12px;font-weight:700;color:#0e7490;">⏱ Tempo <input type="number" inputmode="numeric" min="1" max="120" value="'+(t.min!=null?t.min:5)+'" oninput="rpTecMin(\''+t.key+'\',this.value)" style="width:48px;text-align:center;border:1px solid #a5d8e0;border-radius:6px;padding:5px 2px;font-size:14px;font-weight:700;"> min</label>' : '';
+    const thumbs=fotos.map(x=>'<div style="position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;flex-shrink:0;"><img src="'+(x.f.url||x.f.dataUrl||'')+'" style="width:100%;height:100%;object-fit:cover;display:block;"><button type="button" onclick="_rpTecDelFoto(\''+t.key+'\','+x.gi+')" style="position:absolute;top:1px;right:1px;background:rgba(220,38,38,.9);border:none;border-radius:50%;width:20px;height:20px;color:#fff;font-size:12px;line-height:1;cursor:pointer;">×</button></div>').join('');
+    const addFoto='<label style="display:inline-flex;align-items:center;gap:5px;border:1.5px dashed #94a3b8;border-radius:9px;padding:9px 12px;cursor:pointer;font-weight:700;color:#0f2447;font-size:13px;">📷 Foto<input type="file" accept="image/*" multiple style="display:none;" onchange="_rpTecAddFoto(this,\''+t.key+'\')"></label>';
+    det='<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+tempo+thumbs+addFoto+'</div>'
+      +'<textarea oninput="_rpTecTesteObs(\''+t.key+'\',this.value)" rows="2" placeholder="Nota (opcional)" style="width:100%;box-sizing:border-box;font-size:14px;min-height:44px;resize:vertical;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;">'+_rpTecEsc(t.obs||'')+'</textarea>'
+      +'</div>';
+  } else {
+    det='<button type="button" onclick="rpTecDet(\''+t.key+'\')" style="margin-top:4px;background:none;border:none;color:#64748b;font-size:12px;font-weight:600;cursor:pointer;padding:4px 0;">＋ foto / nota</button>';
+  }
+  return '<div data-tec-card="'+t.key+'" style="border:1.5px solid '+bc+';background:'+bg+';border-radius:12px;padding:8px 10px;margin-bottom:7px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;">'+nomeHTML+botoes+del+'</div>'+det+'</div>';
+}
+
+window._rpTecOpen=window._rpTecOpen||new Set();
+window.rpTecDet=function(key){ window._rpTecOpen.add(key); _rpTecRefreshRow(key); };
+window._rpTecDelFoto=function(key,gi){ (window._rpFotosTemp||[]).splice(gi,1); _rpTecRefreshRow(key); };
+function _rpTecRefreshRow(key){
+  const t=window._rpTecFind(key); const el=document.querySelector('#rp-modal-body [data-tec-card="'+key+'"]');
+  if(t&&el){ const tmp=document.createElement('div'); tmp.innerHTML=_rpTecCard(t); el.replaceWith(tmp.firstChild); }
+  _rpTecProgresso();
+}
+function _rpTecVisiveis(){
+  const verTodos=window._rpVerTodosTecTestes===true;
+  const anom=window._rpTecAnom||'';
+  const temLista=!!(anom&&RP_TEC_LISTA_ANOMALIA[anom]);
+  return (window._rpTecTestes||[]).filter(t=>!t.custom&&!t.dano&&(verTodos||temLista||!!t.status||(t.obs&&t.obs.trim())||_rpTecGrupoRelevante(t.grupo,anom)));
+}
+function _rpTecProgresso(){
+  const vis=_rpTecVisiveis(), feitos=vis.filter(t=>t.status).length, anoms=(window._rpTecTestes||[]).filter(t=>t.status==='anomalia').length;
+  const el=document.getElementById('rp-tec-prog');
+  if(el) el.innerHTML='<b>'+feitos+' de '+vis.length+'</b> testes marcados'+(anoms?' · <span style="color:#dc2626;font-weight:800;">🔴 '+anoms+' anomalia'+(anoms>1?'s':'')+'</span>':'');
+  const bar=document.getElementById('rp-tec-bar'); if(bar) bar.style.width=(vis.length?Math.round(feitos*100/vis.length):0)+'%';
+}
+window.rpTecStatus=function(key,st){ const t=window._rpTecFind(key); if(!t) return; t.status=(t.status===st?'':st); _rpTecRefreshRow(key); };
+window.rpTecGrupoSem=function(idx){
+  const g=(window._rpTecGrupos||[])[idx]; if(!g) return;
+  g.forEach(k=>{ const t=window._rpTecFind(k); if(t&&!t.status) t.status='sem'; });
+  g.forEach(k=>_rpTecRefreshRow(k));
+};
 
 function rpTecFormAbrir(osId, preserveTemp){
   osId=osId||window._rpEditOsId;
   const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   window._rpEditOsId=osId;
-  // Guardar a posição do ecrã antes de reconstruir (senão volta ao topo)
   const _scrollKeep = preserveTemp ? (document.querySelector('#mo-relat-pesquisa .md')?.scrollTop||0) : 0;
-  if(!preserveTemp) window._rpVerTodosTecTestes=false;
+  if(!preserveTemp){ window._rpVerTodosTecTestes=false; window._rpTecOpen=new Set(); }
   const rel=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
   const c=rel.campos||{};
   if(!preserveTemp){
@@ -24373,82 +24424,74 @@ function rpTecFormAbrir(osId, preserveTemp){
   const EQUIPS_DEFAULT=['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
   const EQUIPS=(window.DB&&window.DB.empresaConfig&&window.DB.empresaConfig.equipamentosRelatorio&&window.DB.empresaConfig.equipamentosRelatorio.length)?window.DB.empresaConfig.equipamentosRelatorio:EQUIPS_DEFAULT;
 
-  let grupoAtual='', testesHTML='';
   const _tecVerTodos = window._rpVerTodosTecTestes===true;
   const _tecAnom = window._rpTecAnom || _rpAnomDoServico(os);
-  const _anomTemLista = !!(_tecAnom && RP_TEC_LISTA_ANOMALIA[_tecAnom]);
-  (window._rpTecTestes||[]).filter(t=>!t.custom && !t.dano).forEach(t=>{
-    // Mostra o teste se: "ver todos", a anomalia tem lista própria, já tem resultado/observação, ou o grupo é relevante para a anomalia.
-    const _mostra = _tecVerTodos || _anomTemLista || !!t.status || (t.obs&&t.obs.trim()) || _rpTecGrupoRelevante(t.grupo, _tecAnom);
-    if(!_mostra) return;
-    if(t.grupo!==grupoAtual){ grupoAtual=t.grupo; testesHTML+='<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#0e7490;margin:16px 4px 8px;">'+_rpTecEsc(t.grupo)+'</div>'; }
-    testesHTML+=_rpTecCard(t);
+  // Lista agrupada (cada grupo com botão "Tudo sem anomalia")
+  const vis=_rpTecVisiveis(); const grupos=[]; const ordem=[];
+  vis.forEach(t=>{ if(!grupos[t.grupo]){ grupos[t.grupo]=[]; ordem.push(t.grupo); } grupos[t.grupo].push(t); });
+  window._rpTecGrupos=ordem.map(g=>grupos[g].map(t=>t.key));
+  let testesHTML='';
+  ordem.forEach((g,i)=>{
+    testesHTML+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:16px 2px 8px;"><div style="font-size:11.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:#0e7490;">'+_rpTecEsc(g)+'</div>'
+      +'<button type="button" onclick="rpTecGrupoSem('+i+')" style="flex-shrink:0;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">🟢 Tudo sem anomalia</button></div>';
+    grupos[g].forEach(t=>{ testesHTML+=_rpTecCard(t); });
   });
-  const _tecToggleTestes='<button type="button" onclick="window._rpVerTodosTecTestes=!window._rpVerTodosTecTestes;rpTecFormAbrir(window._rpEditOsId,true)" style="margin:6px 2px 0;background:none;border:none;color:#0e7490;font-size:12.5px;font-weight:700;cursor:pointer;padding:6px 0;">'+(_tecVerTodos?'➖ Mostrar só os relevantes':'➕ Mostrar todos os testes')+'</button>';
+  if(!ordem.length) testesHTML='<div style="font-size:13px;color:#64748b;padding:8px 2px;">Escolhe a anomalia acima para ver os testes.</div>';
+  const _tecToggle='<button type="button" onclick="window._rpVerTodosTecTestes=!window._rpVerTodosTecTestes;rpTecFormAbrir(window._rpEditOsId,true)" style="margin:2px 2px 0;background:none;border:none;color:#0e7490;font-size:13px;font-weight:700;cursor:pointer;padding:8px 0;">'+(_tecVerTodos?'➖ Só os relevantes':'➕ Ver todos os testes')+'</button>';
 
+  const _sec=(t)=>'<div style="font-size:14px;font-weight:800;color:#0f2447;margin:22px 2px 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;">'+t+'</div>';
   const customs=(window._rpTecTestes||[]).filter(t=>t.custom && !t.dano);
-  const _sec=(t)=>'<div style="font-size:13px;font-weight:800;color:#0f2447;margin:20px 2px 10px;padding-bottom:6px;border-bottom:2px solid #e2e8f0;">'+t+'</div>';
-  let outrosHTML=_sec('Outros locais testados')
-    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Escreve o local que testaste e marca o resultado (podes juntar foto e observação).</div>'
-    +customs.map(_rpTecCard).join('')
-    +'<button type="button" onclick="rpTecAddLocal()" style="width:100%;min-height:46px;border:1.5px dashed #0e7490;background:#fff;color:#0e7490;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar local testado</button>';
-
+  const outrosHTML=_sec('Outros locais testados')+customs.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddLocal()" style="width:100%;min-height:46px;border:1.5px dashed #0e7490;background:#fff;color:#0e7490;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar local</button>';
   const danos=(window._rpTecTestes||[]).filter(t=>t.dano);
-  let danosHTML=_sec('Danos observados')
-    +'<div style="font-size:12.5px;color:#64748b;margin:0 2px 10px;">Indica o local onde aparecem os danos e junta as fotos dos mesmos.</div>'
-    +danos.map(_rpTecCard).join('')
-    +'<button type="button" onclick="rpTecAddDano()" style="width:100%;min-height:46px;border:1.5px dashed #f59e0b;background:#fff;color:#b45309;border-radius:11px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar dano</button>';
+  const danosHTML=_sec('Danos observados')+danos.map(_rpTecCard).join('')
+    +'<button type="button" onclick="rpTecAddDano()" style="width:100%;min-height:46px;border:1.5px dashed #f59e0b;background:#fff;color:#b45309;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">＋ Adicionar dano</button>';
 
   const ANOM=['Fuga de água','Fuga em piscina','Fuga em rede de incêndio','Infiltração','Entupimento','Rotura','Humidade','Outro'];
-  const anomBloco=_sec('Anomalia')
-    +'<select id="rp-tipo-anomalia" onchange="rpTecAnomIn(this.value);rpTecFormAbrir(window._rpEditOsId,true)" style="width:100%;font-size:15px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f2447;"><option value="">— Seleciona a anomalia —</option>'
+  const anomBloco='<div style="font-size:13px;font-weight:800;color:#0f2447;margin:0 2px 6px;">Tipo de anomalia</div>'
+    +'<select id="rp-tipo-anomalia" onchange="rpTecAnomIn(this.value);rpTecFormAbrir(window._rpEditOsId,true)" style="width:100%;font-size:16px;padding:12px;border:1.5px solid '+(_tecAnom?'#cbd5e1':'#f59e0b')+';border-radius:12px;background:#fff;color:#0f2447;"><option value="">— Seleciona —</option>'
     +ANOM.map(a=>'<option value="'+_rpTecEscAttr(a)+'" '+(window._rpTecAnom===a?'selected':'')+'>'+_rpTecEsc(a)+'</option>').join('')+'</select>';
 
-  const equipsHTML=EQUIPS.map(e=>{
+  // Equipamentos: chips (checkbox real escondido → rpRecolherCampos continua a funcionar)
+  const equipsHTML='<div style="display:flex;flex-wrap:wrap;gap:8px;">'+EQUIPS.map(e=>{
     const ck=window._rpTecEquips&&window._rpTecEquips.has(e);
-    return '<label style="display:flex;align-items:center;gap:11px;padding:9px 6px;border-top:1px solid #eef2f7;cursor:pointer;"><input type="checkbox" name="rp-eq" value="'+_rpTecEscAttr(e)+'" '+(ck?'checked':'')+' onchange="rpTecEquip(this.value,this.checked)" style="width:20px;height:20px;accent-color:#0e7490;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#0f2447;">'+_rpTecEsc(e)+'</span></label>';
-  }).join('');
+    return '<label class="rp-chip"><input type="checkbox" name="rp-eq" value="'+_rpTecEscAttr(e)+'" '+(ck?'checked':'')+' onchange="rpTecEquip(this.value,this.checked)"><span>'+_rpTecEsc(e)+'</span></label>';
+  }).join('')+'</div>';
+  const nEq=(window._rpTecEquips||new Set()).size;
 
-  // Atendimentos anteriores do cliente (para o técnico saber o diagnóstico anterior)
-  const _histTec = (typeof tecHistoricoCliente==='function') ? tecHistoricoCliente(os.clienteId, osId) : [];
-  const histHTML = !_histTec.length ? '' :
-    '<div style="background:#f0f9ff;border:2px solid #7dd3fc;border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
-    +'<div style="font-size:13px;font-weight:800;color:#0369a1;margin-bottom:8px;">📋 Atendimentos anteriores deste cliente</div>'
-    +_histTec.map(h=>'<div style="background:#fff;border-radius:8px;padding:9px 11px;margin-bottom:7px;border:1px solid #e0f2fe;">'
-      +'<div style="font-size:11px;font-weight:700;color:#0369a1;margin-bottom:3px;">📅 '+fmtDate(h.data)+(h.servico?' · '+_rpTecEsc(h.servico):'')+'</div>'
-      +(h.reclamacao?'<div style="font-size:12px;color:#334155;margin-bottom:2px;"><strong>Reclamação:</strong> '+_rpTecEsc(h.reclamacao)+'</div>':'')
-      +(h.conclusao?'<div style="font-size:12px;color:#334155;"><strong>Diagnóstico anterior:</strong> '+_rpTecEsc(h.conclusao)+'</div>':'')
-      +'</div>').join('')
-    +'</div>';
+  const _histTec=(typeof tecHistoricoCliente==='function')?tecHistoricoCliente(os.clienteId, osId):[];
+  const histHTML=!_histTec.length?'':
+    '<details style="background:#f0f9ff;border:1.5px solid #7dd3fc;border-radius:12px;padding:10px 12px;margin-bottom:14px;"><summary style="font-size:13px;font-weight:800;color:#0369a1;cursor:pointer;">📋 Atendimentos anteriores ('+_histTec.length+')</summary><div style="margin-top:8px;">'
+    +_histTec.map(h=>'<div style="background:#fff;border-radius:8px;padding:8px 10px;margin-bottom:6px;border:1px solid #e0f2fe;font-size:12px;color:#334155;"><b style="color:#0369a1;">'+fmtDate(h.data)+(h.servico?' · '+_rpTecEsc(h.servico):'')+'</b>'
+      +(h.reclamacao?'<div><b>Reclamação:</b> '+_rpTecEsc(h.reclamacao)+'</div>':'')+(h.conclusao?'<div><b>Diagnóstico:</b> '+_rpTecEsc(h.conclusao)+'</div>':'')+'</div>').join('')+'</div></details>';
 
   document.getElementById('rp-modal-body').innerHTML=
-    '<div style="margin-bottom:12px;"><button type="button" onclick="rpTecVoltar()" style="display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;color:#0f2447;cursor:pointer;">← Voltar à OS</button></div>'
-    +'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12.5px;color:#1e3a5f;line-height:1.5;">📋 <strong>Testes realizados.</strong> Em cada teste marca 🔴/🟢/⚪, indica o tempo, junta foto e escreve observação se precisares. O relatório é depois elaborado pela gestão a partir daqui.</div>'
+    '<style>.rp-chip{position:relative;cursor:pointer}.rp-chip input{position:absolute;opacity:0;pointer-events:none}.rp-chip span{display:block;padding:9px 13px;border:1.5px solid #cbd5e1;border-radius:999px;font-size:13px;font-weight:600;color:#475569;background:#fff}.rp-chip input:checked+span{background:#0e7490;border-color:#0e7490;color:#fff}</style>'
     +histHTML
     +anomBloco
-    +_sec('Testes realizados')+testesHTML+_tecToggleTestes
-    +outrosHTML
-    +danosHTML
-    +_sec('Equipamentos utilizados')+'<div style="border:1px solid #e2e8f0;border-radius:11px;padding:2px 10px;">'+equipsHTML+'</div>'
-    +_sec('O que observou durante a pesquisa (geral)')
-    +'<div style="font-size:12.5px;color:#475569;margin:0 2px 8px;line-height:1.45;">Resumo geral do que viste. Não precisas de redigir — a gestão faz o relatório a partir daqui.</div>'
-    +'<textarea class="fta" id="rp-reclamacao" rows="6" oninput="rpTecObsIn(this.value)" placeholder="Ex.: Mancha de humidade no teto do WC do 1.º esq. Testei a base de duche e o lavatório com corante — apareceu no teto. Não consegui aceder à varanda (estore preso)." style="width:100%;font-size:14px;min-height:120px;resize:vertical;border:1px solid #cbd5e1;border-radius:10px;padding:11px 13px;">'+_rpTecEsc(window._rpTecObs)+'</textarea>';
+    +'<div style="margin:18px 2px 4px;font-size:13px;color:#334155;" id="rp-tec-prog"></div>'
+    +'<div style="height:6px;background:#e2e8f0;border-radius:6px;overflow:hidden;margin:0 2px 4px;"><div id="rp-tec-bar" style="height:100%;width:0;background:#16a34a;transition:width .25s;"></div></div>'
+    +'<div id="rp-tec-lista">'+testesHTML+'</div>'+_tecToggle
+    +outrosHTML+danosHTML
+    +_sec('Equipamentos utilizados'+(nEq?' ('+nEq+')':''))+equipsHTML
+    +_sec('Resumo do que observou')
+    +'<button type="button" onclick="rpDitar(\'rp-reclamacao\')" style="margin:0 2px 8px;background:#f0fdfa;border:1.5px solid #0d9488;color:#0d9488;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;">🎙️ Ditar por voz</button>'
+    +'<textarea class="fta" id="rp-reclamacao" rows="4" oninput="rpTecObsIn(this.value)" placeholder="Ex.: Mancha no teto do WC. Testei duche e lavatório — apareceu no teto. Varanda inacessível." style="width:100%;box-sizing:border-box;font-size:15px;min-height:100px;resize:vertical;border:1.5px solid #cbd5e1;border-radius:12px;padding:11px 13px;">'+_rpTecEsc(window._rpTecObs)+'</textarea>'
+    +'<div style="height:16px;"></div>';
+  _rpTecProgresso();
 
   openMo('mo-relat-pesquisa');
-  const _sb=document.querySelector('#mo-relat-pesquisa [data-rptec-save]')||document.querySelector('#mo-relat-pesquisa [onclick="rpSalvarRelatorio()"]')||document.querySelector('#mo-relat-pesquisa .btn-primary');
-  if(_sb){ _sb.removeAttribute('onclick'); _sb.onclick=function(){ rpTecSalvar(osId); }; _sb.textContent='📤 Enviar à gestão'; _sb.setAttribute('data-rptec-save','1'); }
+  const _mo=document.getElementById('mo-relat-pesquisa');
+  // Rodapé do técnico: só "Guardar rascunho" + "Enviar à gestão"
+  _mo.querySelectorAll('.mf > button').forEach(b=>{
+    const oc=b.getAttribute('onclick')||'';
+    b.style.display=(/_rpVoltarOS|rpPreviewFormulario/.test(oc))?'none':'';
+  });
+  const _sb=_mo.querySelector('[data-rptec-save]')||_mo.querySelector('[onclick="rpSalvarRelatorio()"]')||_mo.querySelector('.btn-primary');
+  if(_sb){ _sb.removeAttribute('onclick'); _sb.onclick=function(){ rpTecSalvar(osId); }; _sb.textContent='📤 Enviar à gestão'; _sb.setAttribute('data-rptec-save','1'); _sb.style.flex='1'; _sb.style.minHeight='48px'; }
   if(preserveTemp){
     const _md=document.querySelector('#mo-relat-pesquisa .md');
-    if(window._rpTecScrollNext){
-      const _k=window._rpTecScrollNext; window._rpTecScrollNext=null;
-      setTimeout(()=>{
-        const cards=[...document.querySelectorAll('#rp-modal-body [data-tec-card]')];
-        const i=cards.findIndex(c=>c.getAttribute('data-tec-card')===_k);
-        const next=(i>=0 && i+1<cards.length)?cards[i+1]:null;
-        if(next) next.scrollIntoView({behavior:'smooth',block:'center'});
-        else if(_md) _md.scrollTop=_scrollKeep;
-      }, 70);
-    } else if(_md){ setTimeout(()=>{ _md.scrollTop=_scrollKeep; }, 60); }
+    if(_md) setTimeout(()=>{ _md.scrollTop=_scrollKeep; }, 40);
   }
 }
 
@@ -24456,6 +24499,7 @@ async function rpTecSalvar(osId){
   osId=osId||window._rpEditOsId; if(!osId) return;
   const os=(window.DB.ordens||[]).find(x=>x.id===osId); if(!os) return;
   const existing=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===osId)||{};
+  if(!(window._rpTecTestes||[]).some(t=>t.status||(t.obs||'').trim()) && !(window._rpTecObs||'').trim()){ if(typeof toast==='function') toast('Marca pelo menos um teste ou escreve o que observaste.','⚠️',5000); return; }
   const campos=rpRecolherCampos();
   const marcados=(window._rpTecTestes||[]).filter(t=> !t.dano && (t.status || (t.custom && (t.nome||'').trim()) || (t.obs||'').trim()));
   const danosF=(window._rpTecTestes||[]).filter(t=> t.dano && ((t.nome||'').trim() || (t.obs||'').trim()));
@@ -24930,6 +24974,15 @@ function rpVerRelatorio(osId){
     avisoFotos.style.cssText='background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#92400e;';
     avisoFotos.innerHTML=`⚠️ <strong>Fotos não enviadas:</strong> O técnico submeteu o relatório mas as fotos falharam no envio (${rel.fotosPendentesMensagem||'erro desconhecido'}). Para reenviar, autorize a edição mobile na OS.`;
     document.getElementById('rp-ver-body').prepend(avisoFotos);
+  }
+
+  // Observação do técnico para a administração (não vai para o cliente)
+  if(['admin','gerente','supervisor'].includes(window.currentUser?.role) && (c.obsAdmin||'').trim()){
+    const bx=document.createElement('div');
+    bx.style.cssText='background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13.5px;color:#78350f;white-space:pre-wrap;';
+    bx.innerHTML='<strong>📌 Observação do técnico (só a administração vê)</strong>\n'+String(c.obsAdmin).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      +(c.pedeRetorno?'\n<button class="btn btn-sm" style="margin-top:8px;background:#7c3aed;color:#fff;" onclick="agendarRetornoRastreador(\''+osId+'\')">🔬 Agendar retorno</button>':'');
+    document.getElementById('rp-ver-body').prepend(bx);
   }
 
   // Botão "Enviar ao cliente" — APENAS supervisor, admin, gerente
@@ -36906,7 +36959,7 @@ window.abrirApresentacaoGrupo = function(){
 
   const TIPOLOGIAS = ['Moradia','Apartamento','Condomínio Área Comum','Loja','Indústria','Escola','Piscina'];
   const ANOMALIAS  = ['Fuga de água','Fuga em piscina','Fuga em rede de incêndio','Infiltração','Entupimento','Rotura','Humidade','Outro'];
-  const ZONAS      = ['Casa de Banho','Cozinha','Telhado / Cobertura','Terraço','Varanda','Área Externa','Garagem','Cave','Piscina','Área Comum'];
+  const ZONAS      = ['Casa de Banho','Cozinha','Sala','Quarto','Corredor / Hall','Lavandaria','Telhado / Cobertura','Terraço','Varanda','Sótão','Garagem','Cave','Arrecadação','Escadas','Área Externa','Jardim / Logradouro','Piscina','Casa das Máquinas','Área Comum'];
   const METS_DEF   = ['Teste de Estanqueidade','Inspeção Visual','Ensaio Electro-Acústico','Ensaio com Gás Traçador','Rastreador Químico','Termografia Infravermelha','Higroscopia','Alagamento com Rastreador Químico','Desentupimento'];
   const EQUIPS_DEF = ['Geofone','Câmara CCTV','Higrómetro','Lâmpada UV','Câmara Térmica FLIR','Detector de Gás Traçador Seba HL 7000','Manómetro de Pressão','Obturador Pneumático','Hidrojato Portátil','Hidrojato RidGID','Carrinha com Hidrojato','Máquina de Mola','Bomba de Pressão'];
   const LOCAIS_DEF = ['Autoclismo','Base de duche','Banheira','Lavatório','Bidé','Lava-loiça','Máquina de lavar','Contador','Esquentador / Caldeira','Terraço','Varanda','Tubagem à vista'];
@@ -36918,13 +36971,22 @@ window.abrirApresentacaoGrupo = function(){
   const ZONA_ITENS = {
     'Casa de Banho':['Autoclismo','Base de duche','Banheira','Lavatório','Bidé','Sanita','Torneiras / misturadoras','Ralo','Juntas e silicones','Tubagem embutida'],
     'Cozinha':['Lava-loiça','Torneira','Máquina de lavar loiça','Máquina de lavar roupa','Esquentador / Caldeira','Tubagem embutida','Ralo'],
-    'Telhado / Cobertura':['Telhas','Caleiras','Tubos de queda','Rufos','Clarabóias','Chaminé','Impermeabilização'],
-    'Terraço':['Impermeabilização','Ralo','Juntas do pavimento','Soleiras','Rodapés','Floreiras'],
+    'Telhado / Cobertura':['Telhas','Caleiras','Tubos de queda','Rufos','Clarabóias','Chaminé'],
+    'Terraço':['Ralo','Juntas do pavimento','Soleiras','Rodapés','Floreiras'],
     'Varanda':['Ralo','Pavimento','Soleira','Rodapé','Guarda / fixações'],
     'Área Externa':['Contador','Rede enterrada','Rede de rega','Caixas de visita','Válvulas'],
     'Garagem':['Tubagem à vista','Coluna montante','Ralos','Teto','Paredes'],
     'Cave':['Paredes enterradas','Tubagem','Drenagem','Pavimento'],
     'Piscina':['Skimmers','Bicos injetores','Aspiração','Ralo de fundo','Luminárias','Estrutura','Casa das máquinas'],
+    'Sala':['Teto','Paredes','Pavimento','Janelas / Caixilharia','Radiador','Tubagem à vista'],
+    'Quarto':['Teto','Paredes','Pavimento','Janelas / Caixilharia','Radiador','Tubagem à vista'],
+    'Corredor / Hall':['Teto','Paredes','Pavimento','Tubagem à vista','Coluna montante'],
+    'Lavandaria':['Máquina de lavar roupa','Tanque','Torneira','Ralo','Tubagem embutida'],
+    'Sótão':['Telhado (interior)','Isolamento','Tubagem à vista','Depósito de água'],
+    'Arrecadação':['Teto','Paredes','Pavimento','Tubagem à vista'],
+    'Escadas':['Patamares','Paredes','Tubos de queda','Coluna montante'],
+    'Jardim / Logradouro':['Contador','Rede enterrada','Rede de rega','Caixas de visita','Válvulas','Poço / Furo'],
+    'Casa das Máquinas':['Bombas','Depósito','Quadro elétrico','Válvulas','Tubagem à vista'],
     'Área Comum':['Coluna montante','Contadores','Tubos de queda','Caixas de visita','Escadas / patamares'],
   };
   const OUTROS='Outros itens';
@@ -37004,11 +37066,13 @@ window.abrirApresentacaoGrupo = function(){
       numeroFracao: c.numeroFracao||'',
       tipoProblema: anom,
       divisoes: [...(c.divisoes||[])],
-      metodologias: (c.metodologias&&c.metodologias.length) ? [...c.metodologias] : ['Inspeção Visual'],
+      metodologias: (c.metodologias&&c.metodologias.length) ? [...c.metodologias] : [],
       equipamentos: [...(c.equipamentos||[])],
       reclamacao: c.reclamacao||c.descritivo||'',
       conclusao: c.conclusao||'',
+      obsAdmin: c.obsAdmin||'',
     };
+    S.obsAdmTocado=!!(c.obsAdmin||'').trim();
     S.manif=Array.isArray(c.locaisManifestacao)&&c.locaisManifestacao.length ? [...c.locaisManifestacao]
       : String(c.localManifestacao||'').split(/\s*;\s*|\n+/).map(x=>x.trim()).filter(Boolean);
     S.testes=(Array.isArray(c.testes)?c.testes:[])
@@ -37016,11 +37080,24 @@ window.abrirApresentacaoGrupo = function(){
       .map(t=>({...t, key:t.key||('loc_'+Math.random().toString(36).slice(2)), nome:t.nome||'', status:t.status||'', obs:t.obs||'',
         zona: t.zona || ((S.c.divisoes||[]).includes(t.grupo)?t.grupo:OUTROS)}));
     S.testes.forEach(t=>{ if(t.zona!==OUTROS && !S.c.divisoes.includes(t.zona)) S.c.divisoes.push(t.zona); });
+    // sem duplicados: zonas iguais (maiúsculas/acentos) e itens repetidos na mesma zona
+    { const canon={}; S.c.divisoes=S.c.divisoes.filter(z=>{ const k=norm(z); if(canon[k]) return false; canon[k]=z; return true; });
+      S.testes.forEach(t=>{ if(t.zona!==OUTROS && canon[norm(t.zona)]) t.zona=canon[norm(t.zona)]; });
+      const mapa={}; window._ofcDup={};
+      S.testes=S.testes.filter(t=>{
+        if(!(t.nome||'').trim()) return true;
+        const k=norm(t.zona)+'|'+norm(t.nome); const o=mapa[k];
+        if(!o){ mapa[k]=t; return true; }
+        window._ofcDup[t.key]=o.key;
+        if(!o.status && t.status) o.status=t.status;
+        if(!(o.obs||'').trim() && (t.obs||'').trim()) o.obs=t.obs;
+        return false;
+      }); }
     let fotos=[];
     try{ fotos=(typeof rpGetFotos==='function')?rpGetFotos(id,c,rel):(c.fotos||rel.fotos||[]); }catch(e){ fotos=c.fotos||rel.fotos||[]; }
     S.fotos=(fotos||[]).map(f=> typeof f==='string' ? (/^https?:/.test(f)?{url:f,legenda:''}:{dataUrl:f,legenda:''})
       : (f.local!=null ? {...f, legenda:f.local, descricao:f.descricao||''} : {...f, descricao:f.descricao||''}));
-    S.fotos.forEach(f=>{ if(!f.fid) f.fid=novoFid(); });
+    S.fotos.forEach(f=>{ if(!f.fid) f.fid=novoFid(); if(f.itemKey && window._ofcDup && window._ofcDup[f.itemKey]) f.itemKey=window._ofcDup[f.itemKey]; });
     S.pag = (os.pagamento&&os.pagamento.metodo) || (os.pagador&&os.pagador.nome?'entidade':'');
     S.pagRef = (os.pagamento&&os.pagamento.ref)||'';
     S.tipoRel = 'preliminar'; // v15.91 — o técnico fecha sempre como PRELIMINAR; a administração valida
@@ -37084,9 +37161,8 @@ window.abrirApresentacaoGrupo = function(){
       +(os.clienteId?'<button class="ofc-act" onclick="ofcHistorico()">📚 Histórico do cliente'+(ultimosAtendimentos(os,50).length?' ('+ultimosAtendimentos(os,50).length+')':'')+'</button>':'')
       +'</div>'
       +(obsCom?'<div class="ofc-nota" style="background:#eff6ff;border-color:#93c5fd;color:#1e3a5f;"><strong>💬 Observação do comercial</strong>\n'+esc(obsCom)+'</div>':'')
-      +'<div class="ofc-nota" style="white-space:normal;"><strong>📝 Nota da equipa comercial</strong>'
-      +'<div style="font-size:12px;opacity:.8;margin:2px 0 6px;">Podes corrigir ou acrescentar — fica gravado na OS.</div>'
-      +'<textarea class="ofc-ta" style="min-height:70px;background:#fffef5;border-color:#fde047;font-size:15px;" placeholder="Sem nota. Escreve aqui se precisares." oninput="ofcNota(this.value)">'+esc(os.notaInterna||'')+'</textarea></div>'
+      +'<details class="ofc-nota" style="white-space:normal;"'+((os.notaInterna||'').trim()?' open':'')+'><summary style="cursor:pointer;font-weight:700;list-style:none;">📝 Nota da equipa comercial'+((os.notaInterna||'').trim()?'':' <span style="font-weight:500;opacity:.7;">— tocar para escrever</span>')+'</summary>'
+      +'<textarea class="ofc-ta" style="min-height:70px;background:#fffef5;border-color:#fde047;font-size:15px;" placeholder="Sem nota. Escreve aqui se precisares." oninput="ofcNota(this.value)">'+esc(os.notaInterna||'')+'</textarea></details>'
       +'</div>';
 
     // Últimos atendimentos deste cliente (sem dados de outros técnicos nem valores)
@@ -37119,12 +37195,13 @@ window.abrirApresentacaoGrupo = function(){
     // 2 · Relatório
     h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-rel"><div class="ofc-h"><span class="ofc-n" id="ofc-n2">2</span>Relatório</div>'
       +'<div id="ofc-caract"></div>'
-      +'<div class="ofc-lbl">Onde se manifesta o problema *</div>'
+      +'<div class="ofc-lbl">Onde aparece o problema *</div>'
+      +'<div class="ofc-hint">Escreve o <strong>local</strong> onde se vê o problema (ex.: teto da sala, parede do quarto) — <strong>não</strong> o tipo de problema.</div>'
       +'<div id="ofc-manif"></div>'
-      +'<div class="ofc-lbl">Zonas inspecionadas e itens testados *</div>'
-      +'<div class="ofc-hint">Escreve a zona e escolhe. Depois, em cada zona, escreve o item testado — ao escolher, a câmara abre para a foto.</div>'
+      +'<div class="ofc-lbl">Fração inspecionada *</div>'
+      +'<div class="ofc-hint">Escreve os locais da fração onde inspecionaste (ex.: casa de banho). Depois, em cada local, escolhe ou escreve o que testaste e marca o resultado e a foto.</div>'
       +'<div id="ofc-zonas-itens"></div>'
-      +'<details style="margin-top:10px;"><summary style="cursor:pointer;font-weight:700;font-size:14px;color:#0e7490;padding:6px 0;list-style:none;">🔧 Metodologias e equipamentos — já preenchido, tocar para alterar</summary><div id="ofc-meteq"></div></details>'
+      +'<div id="ofc-meteq"></div>'
       +'<div class="ofc-lbl" style="display:flex;align-items:center;">Outras fotos<span class="ofc-cnt" id="ofc-fcnt"></span></div>'
       +'<div class="ofc-hint">As fotos dos itens tiram-se no próprio item. Aqui ficam outras (vista geral, danos). Mínimo 4 fotos no total.</div>'
       +'<div class="ofc-fotos" id="ofc-fotos"></div>'
@@ -37138,6 +37215,12 @@ window.abrirApresentacaoGrupo = function(){
       +'<textarea class="ofc-ta" id="ofc-concl" oninput="ofcSet(\'conclusao\',this.value)" placeholder="Onde está a origem do problema e o que recomendas.">'+esc(S.c.conclusao)+'</textarea>'
       +'<div class="ofc-tools" style="flex-wrap:wrap;"><button type="button" id="ofc-ia-btn" onclick="ofcGerarConclusao()" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">🤖 Gerar conclusão</button><button type="button" onclick="rpDitar(\'ofc-concl\')">🎙️ Ditar</button>'
       +(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-concl\')">✨ Melhorar texto</button>':'')+'</div>'
+      +'<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px;margin-top:18px;">'
+      +'<div style="font-weight:800;font-size:15px;color:#92400e;">📌 Observação para a administração</div>'
+      +'<div class="ofc-hint" style="margin:4px 0 8px;color:#92400e;">Só a administração vê — <strong>não vai para o cliente</strong>. Escreve o que quiseres (ex.: marcar retorno, material em falta, algo a rever).</div>'
+      +'<div class="ofc-chips" style="margin-bottom:8px;"><button type="button" class="ofc-chip" onclick="ofcObsAdd()">🔬 Marcar retorno p/ leitura do rastreador químico</button></div>'
+      +'<textarea class="ofc-ta" id="ofc-obsadmin" style="min-height:80px;background:#fff;" oninput="ofcObsAdm(this.value)" placeholder="Escreve aqui o que a administração deve saber…">'+esc(S.c.obsAdmin||'')+'</textarea>'
+      +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-obsadmin\')">🎙️ Ditar</button></div></div>'
       +'</div>';
 
     // 3 · Fecho
@@ -37428,7 +37511,7 @@ window.abrirApresentacaoGrupo = function(){
         +'\nAnomalia confirmada pelo técnico: '+(S.c.tipoProblema||'—')
         +'\nTipo de imóvel: '+(S.c.tipologia||'—')+(S.c.numeroFracao?' · fração '+S.c.numeroFracao:'')
         +'\nOnde se manifesta: '+(S.manif.filter(Boolean).join('; ')||'—')
-        +'\nZonas inspecionadas: '+((S.c.divisoes||[]).join(', ')||'—')
+        +'\nLocais dos testes: '+((S.c.divisoes||[]).join(', ')||'—')
         +'\nMetodologias utilizadas: '+((S.c.metodologias||[]).join(', ')||'—')
         +'\nEquipamentos: '+((S.c.equipamentos||[]).join(', ')||'—')
         +'\nItens testados (por zona):\n'+testes
@@ -37457,7 +37540,7 @@ window.abrirApresentacaoGrupo = function(){
       const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
       const doc={id:'msg_val_'+os.id, tipo:'relatorio_validar', osId:os.id,
         clienteNome:cli.nome||os.clienteNomeSnapshot||'', tecnicoNome:window.currentUser?.name||'',
-        motivo, validado:false, lida:false, arquivado:false, criadoEm:new Date().toISOString()};
+        motivo, obsAdmin:((S.c&&S.c.obsAdmin)||'').trim(), validado:false, lida:false, arquivado:false, criadoEm:new Date().toISOString()};
       await grava('mensagens_internas', doc.id, doc);
       // Aviso também por email à gestão (Brevo — mesmo circuito já usado na app)
       try{
@@ -37468,7 +37551,7 @@ window.abrirApresentacaoGrupo = function(){
             headers:{'Content-Type':'application/json','api-key':cfgE.brevoApiKey},
             body:JSON.stringify({sender:{name:emp.nome||'HidroGest',email:dest}, to:[{email:dest,name:emp.nome||'Gestão'}],
               subject:'📋 Relatório a validar — OS '+os.id+' ('+(doc.clienteNome||'')+')',
-              textContent:'O técnico '+doc.tecnicoNome+' '+(motivo==='edicao'?'corrigiu':'fechou')+' a OS '+os.id+' ('+doc.clienteNome+').\n\nO relatório está PRELIMINAR e tem de ser validado pela administração antes de ser enviado ao cliente.\n\nNo HidroGest: menu "✅ Validar relatórios".'})
+              textContent:(doc.obsAdmin?'📌 OBSERVAÇÃO DO TÉCNICO: '+doc.obsAdmin+'\n\n':'')+'O técnico '+doc.tecnicoNome+' '+(motivo==='edicao'?'corrigiu':'fechou')+' a OS '+os.id+' ('+doc.clienteNome+').\n\nO relatório está PRELIMINAR e tem de ser validado pela administração antes de ser enviado ao cliente.\n\nNo HidroGest: menu "✅ Validar relatórios".'})
           }).catch(()=>{});
         }
       }catch(e){}
@@ -37478,7 +37561,8 @@ window.abrirApresentacaoGrupo = function(){
   }
 
   // ═══ PESQUISA: escreve → vê → escolhe (mesma lógica da pesquisa de clientes) ═══
-  const MANIF_SUG=['Teto','Parede','Pavimento','Casa de banho','Cozinha','Quarto','Sala','Garagem','Fração inferior','Fachada'];
+  const MANIF_SUG=['Teto','Parede','Pavimento','Casa de banho','Cozinha','Quarto','Sala','Corredor','Varanda','Garagem','Cave','Fração inferior','Fachada'];
+  const NAO_LOCAL=/^(fuga|infiltra|humidade|entup|rotura|mancha|bolor|degrada)/;
   const norm=x=>String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
   let _aprend=null;
   function aprendido(){
@@ -37493,14 +37577,23 @@ window.abrirApresentacaoGrupo = function(){
     return _aprend={itens, manif, zonas};
   }
   function ordenar(base, contagem, excluir){
-    const cont={}; base.forEach((n,i)=>cont[n]=(cont[n]||0)+(50-i)/1000);
-    Object.entries(contagem||{}).forEach(([n,k])=>cont[n]=(cont[n]||0)+k);
+    // junta "Casa de Banho" / "casa de banho" numa só (mantém a grafia da lista base)
+    const cont={}, nome={};
+    const add=(n,k)=>{ const q=norm(n); if(!q) return; if(!(q in nome)) nome[q]=n; cont[q]=(cont[q]||0)+k; };
+    base.forEach((n,i)=>add(n,(50-i)/1000));
+    Object.entries(contagem||{}).forEach(([n,k])=>add(n,k));
     const ex=new Set((excluir||[]).map(norm));
-    return Object.entries(cont).filter(([n])=>!ex.has(norm(n))).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+    return Object.keys(cont).filter(q=>!ex.has(q) && !/^impermeabiliza/.test(q)).sort((a,b)=>cont[b]-cont[a]).map(q=>nome[q]);
   }
   const PQ={};
+  const PQ_CHIPS=/^(tipologia|anomalia|item\d+)$/;
   function pesquisa(id, ph){
-    return '<div class="ofc-pq"><input class="ofc-in" id="ofc-pq-'+id+'" data-pq="'+id+'" placeholder="🔍 '+esc(ph)+'" autocomplete="off" autocorrect="off" enterkeyhint="search"'
+    let sug='';
+    if(PQ_CHIPS.test(id) && PQ[id]){
+      let l=[]; try{ l=PQ[id].fonte().slice(0, id==='manif'?10:(id==='zona'?30:12)); }catch(e){}
+      if(l.length) sug='<div class="ofc-chips" style="margin:0 0 8px;">'+l.map(n=>'<button type="button" class="ofc-chip" data-v="'+esc(n)+'" onclick="ofcPqEsc(\''+id+'\',this.dataset.v)">'+esc(n)+'</button>').join('')+'</div>';
+    }
+    return sug+'<div class="ofc-pq"><input class="ofc-in" id="ofc-pq-'+id+'" data-pq="'+id+'" placeholder="🔍 '+esc(ph)+'" autocomplete="off" autocorrect="off" enterkeyhint="search"'
       +' oninput="ofcPq(this)" onblur="setTimeout(function(){ofcPqFechar(\''+id+'\')},250)"'
       +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();ofcPqEnter(this)}">'
       +'<div class="ofc-pq-list" id="ofc-pql-'+id+'"></div></div>';
@@ -37536,7 +37629,7 @@ window.abrirApresentacaoGrupo = function(){
     PQ.anomalia={fonte:()=>ordenar(ANOMALIAS,{},[]), escolher:v=>{ S.c.tipoProblema=v; renderCaract(); sujo(); }};
     el.innerHTML='<div class="ofc-lbl">Tipo de imóvel</div>'
       +(S.c.tipologia?linhaSel(S.c.tipologia,"ofcLimpar('tipologia')"):pesquisa('tipologia','Escreve o tipo de imóvel (ex.: apartamento)'))
-      +(multiUnidade(S.c.tipologia)?'<div class="ofc-lbl">Nº da fração inspecionada *</div><input class="ofc-in" value="'+esc(S.c.numeroFracao)+'" placeholder="Ex.: 3.º Esq., Fração B" oninput="ofcSet(\'numeroFracao\',this.value)">':'')
+      +(multiUnidade(S.c.tipologia)?'<div class="ofc-lbl">Identificação da fração (ex.: 3.º Esq.) *</div><input class="ofc-in" value="'+esc(S.c.numeroFracao)+'" placeholder="Ex.: 3.º Esq., Fração B" oninput="ofcSet(\'numeroFracao\',this.value)">':'')
       +'<div class="ofc-lbl">Anomalia *</div>'
       +(S.c.tipoProblema?linhaSel(S.c.tipoProblema,"ofcLimpar('tipoProblema')"):pesquisa('anomalia','Escreve a anomalia (ex.: infiltração)'));
   }
@@ -37545,9 +37638,9 @@ window.abrirApresentacaoGrupo = function(){
   // ── Onde se manifesta ──
   function renderManif(){
     const el=$('ofc-manif'); if(!el) return;
-    PQ.manif={fonte:()=>ordenar(MANIF_SUG, aprendido().manif, S.manif), escolher:v=>{ S.manif.push(v); renderManif(); sujo(); }};
+    PQ.manif={fonte:()=>ordenar(MANIF_SUG, aprendido().manif, S.manif).filter(n=>!NAO_LOCAL.test(norm(n))), escolher:v=>{ S.manif.push(v); renderManif(); sujo(); }};
     el.innerHTML=S.manif.map((m,i)=>'<div class="ofc-sel"><input class="ofc-in" style="flex:1;padding:8px 10px;font-weight:600;background:transparent;border-color:transparent;" value="'+esc(m)+'" oninput="ofcManif('+i+',this.value)"><button type="button" class="ofc-x" onclick="ofcManifDel('+i+')" aria-label="Remover">✕</button></div>').join('')
-      +pesquisa('manif','Escreve onde aparece (ex.: teto do WC)');
+      +pesquisa('manif','Escreve onde aparece o problema (ex.: teto do WC)');
   }
   window.ofcManif=function(i,v){ S.manif[i]=v; sujo(); };
   window.ofcManifDel=function(i){ S.manif.splice(i,1); renderManif(); sujo(); };
@@ -37562,7 +37655,8 @@ window.abrirApresentacaoGrupo = function(){
     const el=$('ofc-zonas-itens'); if(!el) return;
     const zs=zonasVisiveis();
     PQ.zona={fonte:()=>ordenar(ZONAS, aprendido().zonas, S.c.divisoes||[]), escolher:v=>{
-      if(!(S.c.divisoes||[]).includes(v)) (S.c.divisoes=S.c.divisoes||[]).push(v);
+      if((S.c.divisoes||[]).some(z=>norm(z)===norm(v))){ T('A zona "'+v+'" já está na lista.','ℹ️'); return; }
+      (S.c.divisoes=S.c.divisoes||[]).push(v);
       renderZonas(); sujo();
       const i=(S.c.divisoes||[]).indexOf(v); const n=$('ofc-pq-item'+i); if(n){ n.scrollIntoView({block:'center'}); n.focus(); }
     }};
@@ -37575,10 +37669,10 @@ window.abrirApresentacaoGrupo = function(){
         +'<div style="font-weight:800;font-size:16px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">'+(ok?'✅':'🔎')+' '+esc(z)
         +'<button type="button" class="ofc-x" style="margin-left:auto;" data-z="'+esc(z)+'" onclick="ofcZonaDel(this.dataset.z)" aria-label="Remover zona">✕</button></div>'
         +itens.map(cartaoItem).join('')
-        +pesquisa('item'+zi,'Escreve o item testado em '+z)
+        +pesquisa('item'+zi,'Escreve o que testaste em '+z)
         +'</div>';
     }).join('')
-    +pesquisa('zona', zs.length?'Escreve outra zona inspecionada':'Escreve a zona inspecionada (ex.: casa de banho)');
+    +pesquisa('zona', zs.length?'Escreve outro local inspecionado':'Escreve onde inspecionaste (ex.: casa de banho)');
   }
   function cartaoItem(t){
     const cls=t.status==='anomalia'?' an':t.status==='sem'?' ok':'';
@@ -37645,14 +37739,40 @@ window.abrirApresentacaoGrupo = function(){
   // ── Metodologias e equipamentos ──
   function renderMetEq(){
     const el=$('ofc-meteq'); if(!el) return;
-    PQ.met={fonte:()=>ordenar(listaMets(),{},S.c.metodologias), escolher:v=>{ S.c.metodologias.push(v); renderMetEq(); sujo(); }};
-    PQ.equip={fonte:()=>ordenar(listaEquips(),{},S.c.equipamentos), escolher:v=>{ S.c.equipamentos.push(v); renderMetEq(); sujo(); }};
-    el.innerHTML='<div class="ofc-lbl">Metodologias utilizadas *</div>'
-      +S.c.metodologias.map((m,i)=>linhaSel(m,"ofcMetDel('metodologias',"+i+")")).join('')
-      +pesquisa('met','Escreve a metodologia (ex.: termografia)')
-      +'<div class="ofc-lbl">Equipamentos</div>'
-      +S.c.equipamentos.map((m,i)=>linhaSel(m,"ofcMetDel('equipamentos',"+i+")")).join('')
-      +pesquisa('equip','Escreve o equipamento (ex.: geofone)');
+    const add=campo=>v=>{ if(!S.c[campo].some(x=>norm(x)===norm(v))) S.c[campo].push(v); renderMetEq(); sujo(); obsAdmAuto(); atualizarFaltas(); };
+    PQ.met={fonte:()=>ordenar(listaMets(),{},S.c.metodologias), escolher:add('metodologias')};
+    PQ.equip={fonte:()=>ordenar(listaEquips(),{},S.c.equipamentos), escolher:add('equipamentos')};
+    const blk=(campo,lista,titulo,dica,pid,ph)=>{
+      const sel=S.c[campo]||[];
+      const todos=[...lista, ...sel.filter(x=>!lista.some(l=>norm(l)===norm(x)))];
+      return '<div class="ofc-lbl" style="display:flex;align-items:center;">'+titulo+' *<span class="ofc-cnt" style="background:'+(sel.length?'#dcfce7;color:#166534':'#fee2e2;color:#991b1b')+'">'+(sel.length?sel.length+' escolhida'+(sel.length>1?'s':''):'falta escolher')+'</span></div>'
+        +'<div class="ofc-hint">'+dica+'</div>'
+        +'<div class="ofc-chips">'+todos.map(n=>{ const on=sel.some(x=>norm(x)===norm(n));
+          return '<button type="button" class="ofc-chip'+(on?' on':'')+'" data-v="'+esc(n)+'" onclick="ofcMetTog(\''+campo+'\',this.dataset.v)">'+(on?'✓ ':'')+esc(n)+'</button>'; }).join('')+'</div>'
+        +pesquisa(pid,ph);
+    };
+    el.innerHTML=blk('metodologias',listaMets(),'Metodologias utilizadas','Toca em todas as que aplicaste neste trabalho.','met','Outra metodologia (escreve e adiciona)')
+      +blk('equipamentos',listaEquips(),'Equipamentos utilizados','Toca em todos os que usaste neste trabalho.','equip','Outro equipamento (escreve e adiciona)');
+  }
+  window.ofcMetTog=function(campo,v){
+    const l=S.c[campo]; const i=l.findIndex(x=>norm(x)===norm(v));
+    if(i>=0) l.splice(i,1); else l.push(v);
+    renderMetEq(); sujo(); obsAdmAuto(); atualizarFaltas();
+  };
+  const RETORNO_TXT='Marcar retorno para leitura do rastreador químico.';
+  const temRastr=()=>[...(S.c.metodologias||[]),...(S.c.equipamentos||[])].some(m=>/rastreador|tra[cç]ador|corante|\buv\b|alagamento/i.test(m));
+  window.ofcObsAdm=function(v){ S.c.obsAdmin=v; S.obsAdmTocado=true; sujo(); };
+  window.ofcObsAdd=function(){
+    const cur=(S.c.obsAdmin||'').trim();
+    if(norm(cur).includes('retorno para leitura')){ T('Já está na observação.','ℹ️'); return; }
+    S.c.obsAdmin=(cur?cur+'\n':'')+RETORNO_TXT; S.obsAdmTocado=true;
+    const ta=$('ofc-obsadmin'); if(ta) ta.value=S.c.obsAdmin; sujo();
+  };
+  // por defeito: se usou rastreador químico/UV, a observação já vem com "marcar retorno" (o técnico pode apagar ou escrever outra coisa)
+  function obsAdmAuto(){
+    if(S.obsAdmTocado) return; const ta=$('ofc-obsadmin');
+    if(temRastr()){ if(!S.c.obsAdmin){ S.c.obsAdmin=RETORNO_TXT; if(ta) ta.value=RETORNO_TXT; sujo(); } }
+    else if(S.c.obsAdmin===RETORNO_TXT){ S.c.obsAdmin=''; if(ta) ta.value=''; sujo(); }
   }
   window.ofcMetDel=function(campo,i){ S.c[campo].splice(i,1); renderMetEq(); sujo(); };
 
@@ -37686,21 +37806,9 @@ window.abrirApresentacaoGrupo = function(){
       return '<div class="ofc-foto"><img src="'+esc(src)+'" alt="">'
         +(!f.url?'<span class="ofc-up">a enviar</span>':'')
         +'<button type="button" class="ofc-fx" onclick="ofcFotoDel('+i+')" aria-label="Apagar foto">✕</button>'
-        +'<input data-fid="'+esc(f.fid||'')+'" data-campo="legenda" class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Local da foto *" oninput="ofcFotoLeg('+i+',this)">'
+        +'<input data-fid="'+esc(f.fid||'')+'" data-campo="legenda" class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Escreve o local da foto *" oninput="ofcFotoLeg('+i+',this)">'
         +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="" rows="2" placeholder="Descrição (opcional)" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
     }).join('');
-    // v16.xx — local da foto com um toque
-    const _idx=[]; S.fotos.forEach((f,i)=>{ if(!f.itemKey) _idx.push(i); });
-    el.querySelectorAll('.ofc-foto').forEach((box,k)=>{
-      const i=_idx[k]; const f=S.fotos[i]; if(!f||(f.legenda||'').trim()) return;
-      const w=document.createElement('div'); w.style.cssText='display:flex;flex-wrap:wrap;gap:5px;padding:6px;border-top:1px solid #e2e8f0;';
-      ['Vista geral','Zona afetada','Anomalia','Tubagem','Teto','Parede','Pavimento','Equipamento'].forEach(t=>{
-        const b=document.createElement('button'); b.type='button'; b.textContent=t;
-        b.style.cssText='border:1.5px solid #cbd5e1;background:#fff;border-radius:16px;padding:5px 10px;font-size:12.5px;font-weight:600;color:#334155;';
-        b.onclick=()=>ofcFotoLocal(i,t); w.appendChild(b);
-      });
-      box.appendChild(w);
-    });
     fotoGate();
   }
   window.ofcFotoLocal=function(i,txt){ const f=S.fotos[i]; if(!f) return; f.legenda=txt; try{ atualizarLocal(f); }catch(e){} renderFotos(); sujo(); };
@@ -37824,15 +37932,16 @@ window.abrirApresentacaoGrupo = function(){
   function faltas(os){
     const f=[];
     const c=S.c;
-    if(multiUnidade(c.tipologia) && !(c.numeroFracao||'').trim()) f.push('nº da fração');
+    if(multiUnidade(c.tipologia) && !(c.numeroFracao||'').trim()) f.push('identificação da fração');
     if(!c.tipoProblema) f.push('anomalia');
-    if(!S.manif.some(x=>(x||'').replace(/—\s*$/,'').trim())) f.push('onde se manifesta o problema');
-    if(!(c.divisoes||[]).length) f.push('zona inspecionada');
-    (c.divisoes||[]).forEach(z=>{ if(!S.testes.some(t=>t.zona===z && (t.nome||'').trim() && t.status)) f.push('item testado com resultado em "'+z+'"'); });
+    if(!S.manif.some(x=>(x||'').replace(/—\s*$/,'').trim())) f.push('onde aparece o problema');
+    if(!(c.divisoes||[]).length) f.push('fração inspecionada (locais)');
+    (c.divisoes||[]).forEach(z=>{ if(!S.testes.some(t=>t.zona===z && (t.nome||'').trim() && t.status)) f.push('teste com resultado em "'+z+'"'); });
     if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
     absorverCamposFoto();
     if(S.fotos.some(x=>!(x.legenda||'').trim())) f.push('local em todas as fotos');
-    if(!(c.metodologias||[]).length) f.push('metodologias');
+    if(!(c.metodologias||[]).length) f.push('metodologias utilizadas');
+    if(!(c.equipamentos||[]).length) f.push('equipamentos utilizados');
     const naoFat=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
     if(!naoFat && !S.pag) f.push('forma de pagamento');
     if(!S.sigTec) f.push('assinatura do técnico');
@@ -37845,6 +37954,7 @@ window.abrirApresentacaoGrupo = function(){
     const f=faltas(os);
     el.className='ofc-falta'+(f.length?'':' ok');
     el.innerHTML=f.length?('<strong>Falta para fechar:</strong> '+f.map(esc).join(' · ')):'✅ Tudo preenchido — podes fechar a OS.';
+    const bm=$('ofc-btn-main'); if(bm && bm.classList.contains('close') && /^✅ Fechar OS/.test(bm.textContent)) bm.textContent='✅ Fechar OS'+(f.length?' · faltam '+f.length:'');
     const n2=$('ofc-n2'); const relOk=!f.some(x=>!/pagamento|assinatura|quem assina/.test(x)); if(n2) n2.classList.toggle('ok', relOk);
   }
 
@@ -37886,6 +37996,7 @@ window.abrirApresentacaoGrupo = function(){
       testes:S.testes, reclamacao:S.c.reclamacao, descritivo:S.c.reclamacao,
       planta:S.planta==='sim'?'sim':'nao', obsPlanta:S.planta==='sim'?PLANTA_OBS:((ant&&ant.planta==='sim')?'':((ant&&ant.obsPlanta)||'')),
       conclusao:S.c.conclusao, conclusaoIA:!!S.c.conclusaoIA, trabalho:trab, detalhamento:trab,
+      obsAdmin:(S.c.obsAdmin||'').trim(), pedeRetorno:/retorno/i.test(S.c.obsAdmin||''),
       fotos,
       cliNome:cli.nome||'', cliNif:cli.nif||'', cliMorada:[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', '),
     };
@@ -38153,7 +38264,9 @@ window.abrirApresentacaoGrupo = function(){
             +'<div style="font-weight:800;color:#0f2447;margin:14px 0 8px;">📋 Relatórios</div>':''; })()
       +(p.length?p.map(m=>'<div class="vp-item"><div style="font-weight:800;color:#0f2447;">'+esc(m.osId)+' · '+esc(m.clienteNome||'—')+'</div>'
         +'<div style="font-size:12.5px;color:#64748b;margin-top:3px;">'+esc(m.tecnicoNome||'')+' · '+(m.motivo==='edicao'?'corrigido pelo técnico':'OS fechada')+' · '+new Date(m.criadoEm).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>'
+        +(()=>{ const r=relDe(m.osId), o=((r&&r.campos&&r.campos.obsAdmin)||m.obsAdmin||'').trim(); return o?'<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13.5px;color:#78350f;white-space:pre-wrap;"><strong>📌 Observação do técnico</strong>\n'+esc(o)+'</div>':''; })()
         +'<div class="vp-acts"><button onclick="valVer(\''+esc(m.osId)+'\')">👁 Ver</button>'
+        +(()=>{ const r=relDe(m.osId); return (r&&r.campos&&r.campos.pedeRetorno)?'<button style="background:#f5f3ff;border-color:#7c3aed;color:#6d28d9;" onclick="valRetorno(\''+esc(m.osId)+'\')">🔬 Agendar retorno</button>':''; })()
         +'<button onclick="valRever(\''+esc(m.osId)+'\')">✏️ Rever</button>'
         +'<button class="ok" onclick="valValidar(\''+esc(m.osId)+'\')">✅ Validar</button></div></div>').join('')
         :'<div style="text-align:center;padding:24px;color:#16a34a;font-weight:700;">Tudo validado ✅</div>');
@@ -38162,6 +38275,7 @@ window.abrirApresentacaoGrupo = function(){
   window.valAbrirPainel=function(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} desenhar(); document.getElementById('val-painel').classList.add('on'); };
   window.valVer=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpVerRelatorio==='function') rpVerRelatorio(id); };
   window.valRever=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpAbrirFormulario==='function') rpAbrirFormulario(id); };
+  window.valRetorno=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof agendarRetornoRastreador==='function') agendarRetornoRastreador(id); };
   window.valValidar=async function(id){ if(typeof rpTornarDefinitivo==='function') await rpTornarDefinitivo(id); atualizar(); };
 
   async function marcarValidado(osId){
@@ -38283,6 +38397,112 @@ window.abrirApresentacaoGrupo = function(){
 
 
 
+
+<script id="hg-flutuantes">
+/* v16.14 — Botões/avisos flutuantes MÓVEIS: arrasta com o dedo para onde não tapem o ecrã.
+   Um toque continua a funcionar como antes. A posição fica guardada neste telemóvel.
+   Duplo toque num botão flutuante = volta à posição original. */
+(function(){
+  'use strict';
+  var CHAVE='hg_flut_pos_v1', salvo={}, lista=[];
+  try{ salvo=JSON.parse(localStorage.getItem(CHAVE)||'{}')||{}; }catch(e){}
+  function guardar(){ try{ localStorage.setItem(CHAVE,JSON.stringify(salvo)); }catch(e){} }
+  var FIXOS='#crono-flutuante,#crono-pendente,#val-pill,.toast';
+  var EXCL=/picker|popover|menu|dropdown|drop|modal|loading|login|overlay|tooltip|autocomplete|sugest/i;
+
+  function limitar(el,x,y){
+    var w=Math.max(el.offsetWidth,56), h=Math.max(el.offsetHeight,40);
+    x=Math.min(Math.max(4,x),Math.max(4,innerWidth-w-4));
+    y=Math.min(Math.max(4,y),Math.max(4,innerHeight-h-4));
+    return [x,y];
+  }
+  function pos(el,x,y){
+    var p=limitar(el,x,y), s=el.style;
+    s.setProperty('left',p[0]+'px','important'); s.setProperty('top',p[1]+'px','important');
+    s.setProperty('right','auto','important'); s.setProperty('bottom','auto','important');
+    s.setProperty('transform','none','important');
+  }
+  function original(el){
+    ['left','top','right','bottom','transform'].forEach(function(k){ el.style.removeProperty(k); });
+    var o=el.__flutOrig||{}; Object.keys(o).forEach(function(k){ if(o[k]) el.style[k]=o[k]; });
+  }
+  function elegivel(el){
+    if(!el||el.nodeType!==1||el.__flut) return false;
+    if(/^(SCRIPT|STYLE|IFRAME|LINK|CANVAS)$/.test(el.tagName)) return false;
+    if(el.matches&&el.matches(FIXOS)) return true;
+    var cs=getComputedStyle(el);
+    if(cs.position!=='fixed') return false;
+    if((parseInt(cs.zIndex,10)||0)<900) return false;
+    if(el.offsetWidth===0||el.offsetHeight===0) return false;
+    if(el.offsetWidth>innerWidth*0.85||el.offsetHeight>innerHeight*0.5) return false;
+    if(EXCL.test((el.id||'')+' '+(el.className&&el.className.baseVal!==undefined?el.className.baseVal:el.className||''))) return false;
+    if(el.querySelector('input,textarea,select')) return false;
+    if(el.scrollHeight>el.clientHeight+4) return false;
+    return true;
+  }
+  function tornar(el){
+    if(el.__flut) return; el.__flut=1; lista.push(el);
+    el.__flutOrig={left:el.style.left,top:el.style.top,right:el.style.right,bottom:el.style.bottom,transform:el.style.transform};
+    el.style.touchAction='none'; el.style.webkitUserSelect='none'; el.style.userSelect='none';
+    var k=el.id||'', sx=0, sy=0, ox=0, oy=0, mov=false, pid=null, ultimoToque=0;
+    if(k&&salvo[k]) pos(el,salvo[k].x*innerWidth,salvo[k].y*innerHeight);
+    el.addEventListener('pointerdown',function(e){
+      if(e.button>0) return;
+      var r=el.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; ox=r.left; oy=r.top; mov=false; pid=e.pointerId;
+    });
+    el.addEventListener('pointermove',function(e){
+      if(pid!==e.pointerId) return;
+      var dx=e.clientX-sx, dy=e.clientY-sy;
+      if(!mov){ if(Math.sqrt(dx*dx+dy*dy)<9) return; mov=true; try{ el.setPointerCapture(pid); }catch(_){} el.style.opacity='.85'; }
+      e.preventDefault(); pos(el,ox+dx,oy+dy);
+    });
+    function fim(e){
+      if(pid!==e.pointerId) return; pid=null;
+      try{ el.releasePointerCapture(e.pointerId); }catch(_){}
+      el.style.opacity='';
+      if(mov){
+        el.__flutMoveu=true; setTimeout(function(){ el.__flutMoveu=false; },80);
+        if(k){ var r=el.getBoundingClientRect(); salvo[k]={x:r.left/innerWidth,y:r.top/innerHeight}; guardar(); }
+      } else {
+        var t=Date.now(); // duplo toque → posição original
+        if(t-ultimoToque<350 && k){ original(el); delete salvo[k]; guardar(); }
+        ultimoToque=t;
+      }
+    }
+    el.addEventListener('pointerup',fim); el.addEventListener('pointercancel',fim);
+    // depois de arrastar, não deixar o "soltar" contar como clique
+    el.addEventListener('click',function(e){
+      if(el.__flutMoveu){ e.stopImmediatePropagation(); e.preventDefault(); el.__flutMoveu=false; }
+    },true);
+  }
+  function varrer(raiz){
+    try{
+      if(raiz.nodeType===1 && elegivel(raiz)) tornar(raiz);
+      if(raiz.querySelectorAll) raiz.querySelectorAll(FIXOS).forEach(function(e){ if(!e.__flut) tornar(e); });
+    }catch(e){}
+  }
+  function iniciar(){
+    varrer(document.body);
+    Array.prototype.forEach.call(document.body.children,function(c){ if(elegivel(c)) tornar(c); });
+    new MutationObserver(function(ms){
+      ms.forEach(function(m){ m.addedNodes.forEach(function(n){ if(n.nodeType===1) varrer(n); }); });
+    }).observe(document.body,{childList:true,subtree:true});
+    // nunca deixar um botão fora do ecrã (rodar o telemóvel, aparecer depois de escondido…)
+    function reajustar(){
+      lista.forEach(function(el){
+        if(!el.isConnected||!el.offsetWidth) return;
+        var k=el.id, r=el.getBoundingClientRect();
+        if(k&&salvo[k]&&el.style.left) pos(el,salvo[k].x*innerWidth,salvo[k].y*innerHeight);
+        else if(r.right<20||r.bottom<20||r.left>innerWidth-20||r.top>innerHeight-20) pos(el,r.left,r.top);
+      });
+    }
+    addEventListener('resize',reajustar); addEventListener('orientationchange',reajustar);
+    setInterval(reajustar,2000);
+  }
+  window.hgFlutuantesRepor=function(){ salvo={}; guardar(); lista.forEach(original); };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
 
 </body>
 </html>

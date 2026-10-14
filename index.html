@@ -1526,7 +1526,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 
     <!-- COMISSÕES -->
     <div class="page" id="page-comissoes">
-      <div class="sh"><div class="sh-title">Cálculo de Comissões</div><div style="font-size:12px;color:var(--text3);">Normal: (Receita líq. − Salário×10) × 5%/4%/3%/0% conforme relatórios atrasados · CIPP 5% fixo · Imperm. 3% fixo</div></div>
+      <div class="sh"><div class="sh-title">Cálculo de Comissões</div><div style="font-size:12px;color:var(--text3);">5% do valor s/IVA de cada trabalho concluído</div></div>
       <div id="comm-list"></div>
     </div>
 
@@ -6808,139 +6808,30 @@ async function delFunc(id){
 // ──────────────────────────────────────────────────────────────
 // COMISSÕES
 // ──────────────────────────────────────────────────────────────
-// ── Comissões: helpers de período e condicionantes ───────────
+// ── Comissões (v16.30) — LÓGICA SIMPLES ──────────────────────
+//  • Comissão = 5% × valor da OS SEM IVA, por cada trabalho CONCLUÍDO
+//  • A OS pertence a UM técnico (hgTecReceita)
+//  • Sem limiar de salário, sem escalões por relatório atrasado, sem descontos/reposições/garantias
+//  • Garantias sem cobrança e serviços não faturáveis não geram comissão
+//  • O técnico só vê os SEUS valores; o admin vê todos
+window.HG_COMISSAO_TAXA = 0.05;
+function hgComissaoTaxa(){ return window.HG_COMISSAO_TAXA; }
 let _commPeriodo = new Date().toISOString().slice(0,7); // 'YYYY-MM'
+window._commTec = window._commTec || '';
+window._commDe  = window._commDe  || '';
+window._commAte = window._commAte || '';
 function _commSetPeriodo(v){ if(v){ _commPeriodo=v; renderComissoes(); } }
-function _commIsCipp(n){ return String(n||'').toLowerCase().includes('cipp'); }
-function _commIsImperm(n){ return String(n||'').toLowerCase().includes('impermeab'); }
-function _commAddDiasUteis(dateStr, n){
-  const d=new Date(String(dateStr).slice(0,10)); let added=0;
-  while(added<n){ d.setDate(d.getDate()+1); const wd=d.getDay(); if(wd!==0&&wd!==6) added++; }
-  return d;
-}
-// Relatório atrasado: OS concluída/faturável no período cujo relatório não foi entregue dentro de 5 dias úteis
-function _commRelAtrasado(uid, periodo){
-  const offenders=[];
-  (window.DB.ordens||[]).forEach(o=>{
-    if(!(o.tecnicos||[]).includes(uid)) return;
-    if(o.estado!=='concluida' && o.estado!=='os_fechada') return;
-    if(String(o.concluidoEm||o.data||'').slice(0,7)!==periodo) return;
-    if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
-    const entregue = window.osRelConcluido(o);
-    if(entregue) return;
-    const base=o.concluidoEm||o.data; if(!base) return;
-    if(new Date() > _commAddDiasUteis(base,5)) offenders.push(o.id);
-  });
-  return offenders;
-}
-// Taxa da comissão "Normal" conforme nº de relatórios entregues com atraso (>5 dias úteis) no período.
-// CIPP e Impermeabilização NÃO são afetados por esta escala — mantêm sempre 5% e 3%.
-function _commTaxaNormal(lateCount){
-  if(lateCount<=0) return 0.05;
-  if(lateCount<=4)  return 0.04;
-  if(lateCount<=9)  return 0.03;
-  return 0;
-}
-// Calcula a comissão de um técnico num período. Devolve todos os valores para reutilizar
-// tanto na vista de admin (todos os técnicos) como na vista pessoal do próprio técnico.
-function _commCalcularTecnico(t, uid, periodo){
-  const recs = (window.DB.recibos||[]).filter(r=>r.tech===t.name && r.status==='paid' && String(r.date||'').slice(0,7)===periodo);
-  const recCipp = recs.filter(r=>_commIsCipp(r.service));
-  const recImp  = recs.filter(r=>_commIsImperm(r.service));
-  const recOut  = recs.filter(r=>!_commIsCipp(r.service)&&!_commIsImperm(r.service));
-  const netOut  = recOut.reduce((a,r)=>a+(+r.net||0),0);
-  const netCipp = recCipp.reduce((a,r)=>a+(+r.net||0),0);
-  const netImp  = recImp.reduce((a,r)=>a+(+r.net||0),0);
-  const limiar  = (+t.salary||0)*10;
-  const relAtras  = uid?_commRelAtrasado(uid,periodo):[];
-  const lateCount = relAtras.length;
-  const taxaNormal= _commTaxaNormal(lateCount);
-  const comNormal = Math.max(0,(netOut-limiar))*taxaNormal;
-  const comCipp   = netCipp*0.05;
-  const comImp    = netImp*0.03;
-  const total     = comNormal+comCipp+comImp;
-  return {netOut,netCipp,netImp,limiar,relAtras,lateCount,taxaNormal,comNormal,comCipp,comImp,total};
-}
+function _commSetFiltro(k,v){ window[k]=v; renderComissoes(); }
+window._commSetFiltro=_commSetFiltro;
 
-let _minhaCommPeriodo = new Date().toISOString().slice(0,7);
-function _minhaCommMudarMes(delta){
-  const [y,m] = _minhaCommPeriodo.split('-').map(Number);
-  const d = new Date(y, m-1+delta, 1);
-  _minhaCommPeriodo = d.toISOString().slice(0,7);
-  renderMinhaComissao();
-}
-function renderMinhaComissao(){
-  const body = document.getElementById('minha-comm-body');
-  const lbl  = document.getElementById('minha-comm-periodo');
-  if(!body || !window.currentUser) return;
-  const [y,m] = _minhaCommPeriodo.split('-').map(Number);
-  const nomesMes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  if(lbl) lbl.textContent = `${nomesMes[m-1]} ${y}`;
-  const t = (window.DB.funcionarios||[]).find(f=>f.name===window.currentUser.name && f.role==='tecnico');
-  if(!t){
-    body.innerHTML = `<div class="empty">Não foi possível encontrar o teu registo de funcionário (salário). Avisa o admin.</div>`;
-    return;
-  }
-  const c = _commCalcularTecnico(t, window.currentUser.id, _minhaCommPeriodo);
-  body.innerHTML = `<div class="comm-card">
-    <div class="comm-header">
-      <div>
-        <div style="font-weight:700;font-size:15px;">${t.name}</div>
-        <div style="font-size:11px;color:var(--text3);">Salário bruto: €${fmt(t.salary)}</div>
-      </div>
-      <div style="margin-left:auto;"><span class="badge badge-green">💎 €${fmt(c.total)}</span></div>
-    </div>
-    <div class="comm-body">
-      <div class="comm-metric"><div class="cm-label">Normal (líq. €${fmt(c.netOut)} − €${fmt(c.limiar)}) ×${Math.round(c.taxaNormal*100)}%</div><div class="cm-val" style="color:var(--purple)">€${fmt(c.comNormal)}</div></div>
-      <div class="comm-metric"><div class="cm-label">CIPP (líq. €${fmt(c.netCipp)}) ×5%</div><div class="cm-val" style="color:var(--accent)">€${fmt(c.comCipp)}</div></div>
-      <div class="comm-metric"><div class="cm-label">Imperm. (líq. €${fmt(c.netImp)}) ×3%</div><div class="cm-val" style="color:var(--accent)">€${fmt(c.comImp)}</div></div>
-      <div class="comm-metric"><div class="cm-label">Limiar (Sal×10)</div><div class="cm-val">€${fmt(c.limiar)}</div></div>
-      <div class="comm-metric"><div class="cm-label">Relatórios atrasados (+5 dias úteis)</div><div class="cm-val" style="color:${c.lateCount>0?'var(--red)':'inherit'}">${c.lateCount}</div></div>
-      <div class="comm-metric"><div class="cm-label">Comissão final</div><div class="cm-val" style="color:var(--green)">€${fmt(c.total)}</div></div>
-    </div>
-    ${c.lateCount>9?`<div style="margin-top:10px;font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:8px;">⚠️ ${c.lateCount} relatórios atrasados este mês — a tua comissão Normal fica a 0%. CIPP e Impermeabilização mantêm-se.</div>`
-      :c.lateCount>0?`<div style="margin-top:10px;font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px;">${c.lateCount} relatório(s) atrasado(s) este mês — a tua taxa Normal desceu para ${Math.round(c.taxaNormal*100)}%.</div>`:''}
-    ${c.relAtras.length?`<div style="margin-top:8px;font-size:10px;color:var(--text3);">OS com relatório atrasado: ${c.relAtras.join(', ')}</div>`:''}
-  </div>`;
-}
-
-// ══════════════════════════════════════════════════════════════
-// v16.24 — FECHO DE COMISSÕES DO MÊS (dia 30)
-//  • Comissão do mês = 5% × (RECEBIDO + A RECEBER + EM CURSO) das OS agendadas nesse mês (sem IVA, sem garantias/orçamentos/canceladas)
-//  • A OS pertence a UM técnico (hgTecReceita): 1.º técnico, ou o Higor se estiver na OS, Aldo nunca em dupla
-//  • DESCONTO: OS do mês anterior que, até ao último dia desse mês, ainda não estavam pagas (a receber ou em curso)
-//    → 5% delas é descontado neste fecho, com a origem indicada OS a OS
-//  • REPOSIÇÃO: OS de meses anteriores que tinham sido descontadas e foram recebidas neste mês → 5% volta a ser somado
-// ══════════════════════════════════════════════════════════════
-// Configuração editável no ecrã (guardada na coleção 'meta'): % de comissão, redução por garantia e mês de início
-window.HG_COMISSAO_TAXA = window.HG_COMISSAO_TAXA || 0.05;
-window.HG_COMISSAO_INICIO = '2026-09';   // 1.º mês a contar; nada de meses anteriores é abatido
-function hgComissaoTaxa(){ const v=parseFloat(window.DB&&window.DB.comissaoTaxaPct); return (isFinite(v)&&v>=0&&v<=100)?v/100:window.HG_COMISSAO_TAXA; }
-function hgComissaoGarantiaPct(){ const v=parseFloat(window.DB&&window.DB.comissaoGarantiaPct); return (isFinite(v)&&v>=0&&v<=100)?v/100:1; }
-async function hgComissaoGuardarConfig(){
-  const t=parseFloat(String(document.getElementById('fecho-taxa')?.value).replace(',','.'));
-  const g=parseFloat(String(document.getElementById('fecho-garantia')?.value).replace(',','.'));
-  if(!isFinite(t)||t<0||t>100){ toast('Percentagem de comissão inválida (0 a 100)','⚠️'); return; }
-  if(!isFinite(g)||g<0||g>100){ toast('Redução por garantia inválida (0 a 100)','⚠️'); return; }
-  try{
-    window.DB.comissaoTaxaPct=t; window.DB.comissaoGarantiaPct=g;
-    await window.fsMeta('comissaoTaxaPct',t); await window.fsMeta('comissaoGarantiaPct',g);
-    toast('Percentagens guardadas ✅','💾');
-  }catch(e){ toast('Erro ao guardar: '+(e.message||e),'❌'); }
-  if(typeof renderComissoes==='function') renderComissoes();
-}
-window.hgComissaoGuardarConfig=hgComissaoGuardarConfig;
-function _fechoMesAnterior(periodo){
-  const [y,m]=periodo.split('-').map(Number); const d=new Date(y,m-2,1);
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-}
+// OS concluídas com valor s/IVA (uma linha por OS, com o respetivo dono)
 function _fechoTodasOS(){
   const num=v=>{const n=parseFloat(String(v==null?0:v).replace(',','.'));return isNaN(n)?0:n;};
   const reciboDe={}; (window.DB.recibos||[]).forEach(r=>{ if(r.osId && !reciboDe[r.osId]) reciboDe[r.osId]=r; });
   const out=[];
   (window.DB.ordens||[]).forEach(o=>{
-    const est=o.estado;
-    if(est!=='concluida' && est!=='os_fechada' && est!=='em_curso') return;
+    if(o.estado!=='concluida' && o.estado!=='os_fechada') return;       // só trabalhos concluídos
+    if(o.naoFaturavel) return;
     if(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) return;
     if(o.garantia===true && !o.garantiaComCobranca) return;
     const rc=reciboDe[o.id];
@@ -6948,13 +6839,9 @@ function _fechoTodasOS(){
     if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
     if(!net) net=window.hgNetReserva(o);
     if(!net) return;
-    const pago=(o.pago===true)||!!(rc&&rc.status==='paid');
-    const pag=o.pagamento||{};
-    const dPag=pago?String(o.pagoEm||(rc&&(rc.pagoEm||rc.date))||pag.confirmadoEm||pag.data||o.concluidoEm||o.data||'').slice(0,10):'';
     out.push({id:o.id, data:String(o.data||'').slice(0,10), mes:String(o.data||'').slice(0,7),
       cliente:o.clienteNomeSnapshot||o.clienteNome||((window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{}).nome||'',
-      owner:window.hgTecReceita(o,(rc&&rc.techId)||'__sem__'), net,
-      estado:(est==='em_curso')?'curso':'concl', pago, dPag});
+      owner:window.hgTecReceita(o,(rc&&rc.techId)||'__sem__'), net});
   });
   return out;
 }
@@ -6966,146 +6853,89 @@ function hgFechoTecnicos(todas){
   return Object.values(out).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt'));
 }
 window.hgFechoTecnicos=hgFechoTecnicos;
-function hgFechoComissoes(periodo, opts){
+// Comissão de um técnico num mês (ou intervalo de datas)
+function hgComissaoTecnico(uid, periodo, opts){
   opts=opts||{};
-  const ant=_fechoMesAnterior(periodo), taxa=hgComissaoTaxa(), garPct=hgComissaoGarantiaPct();
-  const inicio=window.HG_COMISSAO_INICIO||'2026-09';
-  const todas=_fechoTodasOS();
-  // garantias do mês: reduzem a comissão da OS original (uma só vez por OS original)
-  const garantias=(window.DB.ordens||[]).filter(o=>o.garantia===true && o.estado!=='cancelada' && o.osOriginalId && String(o.data||'').slice(0,7)===periodo && periodo>=inicio);
-  const tecs=hgFechoTecnicos(todas).map(x=>({name:x.name,id:x.id}));
-  const fimMes=m=>m+'-31';
-  const linhas=tecs.map(t=>{
-    const uid=t.id;
-    const mine=todas.filter(e=>e.owner===uid);
-    const doMes=mine.filter(e=>e.mes===periodo && (!opts.de||e.data>=opts.de) && (!opts.ate||e.data<=opts.ate));
-    const rec=doMes.filter(e=>e.estado==='concl' && e.pago).reduce((a,e)=>a+e.net,0);
-    const ar =doMes.filter(e=>e.estado==='concl' && !e.pago).reduce((a,e)=>a+e.net,0);
-    const ec =doMes.filter(e=>e.estado==='curso').reduce((a,e)=>a+e.net,0);
-    const base=rec+ar+ec, comissao=base*taxa;
-    // desconto: OS do mês anterior sem pagamento até ao fim desse mês
-    const desc=((ant<inicio||opts.semExtras)?[]:mine.filter(e=>e.mes===ant && !(e.pago && e.dPag<=fimMes(ant))))
-      .map(e=>({...e, com:e.net*taxa, hoje:(e.estado==='concl'&&e.pago)?('recebida em '+e.dPag):(e.estado==='curso'?'ainda em curso':'ainda por receber')}));
-    const deducao=desc.reduce((a,e)=>a+e.com,0);
-    // reposição: OS de meses anteriores sem pagamento no fim do seu mês, recebidas neste mês
-    const repo=(opts.semExtras?[]:mine).filter(e=>e.mes>=inicio && e.mes<periodo && e.estado==='concl' && e.pago && e.dPag>fimMes(e.mes) && e.dPag.slice(0,7)===periodo)
-      .map(e=>({...e, com:e.net*taxa}));
-    const reposicao=repo.reduce((a,e)=>a+e.com,0);
-    // garantia: a OS original (deste técnico) perde garPct% da sua comissão
-    const gar=[]; const _vistas={};
-    (opts.semExtras?[]:garantias).forEach(g=>{
-      const orig=todas.find(e=>e.id===g.osOriginalId);
-      if(!orig || orig.owner!==uid || _vistas[orig.id]) return;
-      _vistas[orig.id]=1;
-      gar.push({...orig, garId:g.id, garData:String(g.data||'').slice(0,10), com:orig.net*taxa*garPct});
-    });
-    const reducaoGar=gar.reduce((a,e)=>a+e.com,0);
-    return {t,uid,rec,ar,ec,base,comissao,desc,deducao,repo,reposicao,gar,reducaoGar,total:comissao-deducao+reposicao-reducaoGar};
-  });
-  return {periodo,ant,taxa,garPct,inicio,linhas};
+  const taxa=hgComissaoTaxa();
+  const os=_fechoTodasOS().filter(e=>e.owner===uid && (opts.de||opts.ate ? ((!opts.de||e.data>=opts.de)&&(!opts.ate||e.data<=opts.ate)) : e.mes===periodo))
+    .sort((a,b)=>a.data<b.data?-1:1)
+    .map(e=>({...e, com:e.net*taxa}));
+  const base=os.reduce((a,e)=>a+e.net,0);
+  return {os, base, taxa, total:base*taxa};
 }
-// Filtros do ecrã: técnico e período (mês ou intervalo de datas)
-window._commTec = window._commTec || '';
-window._commDe = window._commDe || '';
-window._commAte = window._commAte || '';
-function hgFechoIntervalo(periodo){
-  const F0=window._commDe && window._commAte && window._commDe<=window._commAte;
-  if(!F0) return hgFechoComissoes(periodo);
-  const de=window._commDe, ate=window._commAte;
-  const meses=[]; let [y,m]=de.slice(0,7).split('-').map(Number); const fim=ate.slice(0,7);
-  for(let k=0;k<60;k++){ const mm=y+'-'+String(m).padStart(2,'0'); meses.push(mm); if(mm>=fim) break; m++; if(m>12){m=1;y++;} }
-  const res=meses.map(mm=>{
-    const cheio = de<=mm+'-01' && ate>=mm+'-31';
-    return hgFechoComissoes(mm,{de,ate,semExtras:!cheio});
-  });
-  const base=res[0];
-  const linhas=base.linhas.map((l,i)=>{
-    const M={...l, rec:0,ar:0,ec:0,base:0,comissao:0,desc:[],deducao:0,repo:[],reposicao:0,gar:[],reducaoGar:0,total:0};
-    res.forEach(r=>{ const x=r.linhas[i];
-      ['rec','ar','ec','base','comissao','deducao','reposicao','reducaoGar','total'].forEach(k=>M[k]+=x[k]);
-      M.desc=M.desc.concat(x.desc); M.repo=M.repo.concat(x.repo); M.gar=M.gar.concat(x.gar); });
-    return M;
-  });
-  return {periodo, ant:base.ant, taxa:base.taxa, garPct:base.garPct, inicio:base.inicio, linhas, multi:true, de, ate,
-          avisoParcial: res.some(r=>false)};
+window.hgComissaoTecnico=hgComissaoTecnico;
+
+function _commTabelaOS(c){
+  if(!c.os.length) return '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Sem trabalhos concluídos neste período.</div>';
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">
+    <thead><tr style="text-align:left;color:var(--text3);"><th style="padding:5px 6px;border-bottom:1px solid var(--border);">OS</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);">Data</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);">Cliente</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;">Valor s/IVA</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;">Comissão ${Math.round(c.taxa*100)}%</th></tr></thead>
+    <tbody>${c.os.map(e=>`<tr><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${e.id}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${e.data.split('-').reverse().join('/')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(e.cliente)}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:right;">€${fmt(e.net)}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;">€${fmt(e.com)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3" style="padding:6px;font-weight:700;">Total</td><td style="padding:6px;text-align:right;font-weight:700;">€${fmt(c.base)}</td><td style="padding:6px;text-align:right;font-weight:800;color:var(--green);">€${fmt(c.total)}</td></tr></tfoot></table>`;
 }
-function _commSetFiltro(k,v){ window[k]=v; renderComissoes(); }
-window._commSetFiltro=_commSetFiltro;
+
+// ── Ecrã do técnico: só vê o seu ──
+let _minhaCommPeriodo = new Date().toISOString().slice(0,7);
+function _minhaCommMudarMes(delta){
+  const [y,m] = _minhaCommPeriodo.split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  _minhaCommPeriodo = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  renderMinhaComissao();
+}
+function renderMinhaComissao(){
+  const body = document.getElementById('minha-comm-body');
+  const lbl  = document.getElementById('minha-comm-periodo');
+  if(!body || !window.currentUser) return;
+  const [y,m] = _minhaCommPeriodo.split('-').map(Number);
+  const nomesMes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  if(lbl) lbl.textContent = `${nomesMes[m-1]} ${y}`;
+  const c = hgComissaoTecnico(window.currentUser.id, _minhaCommPeriodo);   // sempre o utilizador autenticado
+  body.innerHTML = `<div class="comm-card">
+    <div class="comm-header">
+      <div><div style="font-weight:700;font-size:15px;">${esc(window.currentUser.name)}</div>
+        <div style="font-size:11px;color:var(--text3);">${Math.round(c.taxa*100)}% do valor de cada trabalho concluído, sem IVA</div></div>
+      <div style="margin-left:auto;"><span class="badge badge-green">💎 €${fmt(c.total)}</span></div>
+    </div>
+    <div class="comm-body">
+      <div class="comm-metric"><div class="cm-label">Trabalhos concluídos</div><div class="cm-val">${c.os.length}</div></div>
+      <div class="comm-metric"><div class="cm-label">Valor s/IVA</div><div class="cm-val">€${fmt(c.base)}</div></div>
+      <div class="comm-metric"><div class="cm-label">Comissão</div><div class="cm-val" style="color:var(--green)">€${fmt(c.total)}</div></div>
+    </div>
+    ${_commTabelaOS(c)}
+  </div>`;
+}
+
+// ── Ecrã do admin: todos os técnicos ──
 function hgFechoHtml(periodo, paraImprimir){
-  const F=hgFechoIntervalo(periodo);
-  if(window._commTec) F.linhas=F.linhas.filter(l=>(l.uid||l.t.name)===window._commTec||l.t.name===window._commTec);
-  const _fd=d=>{const x=String(d).split('-');return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:d;};
-  const nomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-  const lbl=p=>{const [y,m]=p.split('-').map(Number);return nomes[m-1]+' '+y;};
-  const LP=F.multi?(_fd(F.de)+' a '+_fd(F.ate)):lbl(periodo), LA=F.multi?'meses anteriores':lbl(F.ant);
-  const E=v=>'€'+fmt(v), pct=Math.round(F.taxa*1000)/10;
-  const fd=d=>{const x=String(d).split('-');return x.length===3?x[2]+'/'+x[1]+'/'+x[0]:d;};
-  const T={rec:0,ar:0,ec:0,base:0,com:0,ded:0,rep:0,gar:0,tot:0};
-  const th='padding:8px 10px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;';
-  const rows=F.linhas.map((l,i)=>{ T.rec+=l.rec; T.ar+=l.ar; T.ec+=l.ec; T.base+=l.base; T.com+=l.comissao; T.ded+=l.deducao; T.rep+=l.reposicao; T.gar+=l.reducaoGar; T.tot+=l.total;
-    return `<tr style="border-bottom:1px solid #e5e7eb;background:${i%2?'#fff':'#f8fafc'};">
-      <td style="padding:9px 10px;font-weight:700;">${l.t.name}</td>
-      <td style="padding:9px 10px;text-align:right;">${E(l.rec)}</td>
-      <td style="padding:9px 10px;text-align:right;">${E(l.ar)}</td>
-      <td style="padding:9px 10px;text-align:right;">${E(l.ec)}</td>
-      <td style="padding:9px 10px;text-align:right;font-weight:700;">${E(l.base)}</td>
-      <td style="padding:9px 10px;text-align:right;font-weight:700;color:#15803d;">${E(l.comissao)}</td>
-      <td style="padding:9px 10px;text-align:right;color:#b45309;">${l.deducao>0?'− '+E(l.deducao)+`<br><span style="font-size:10px;color:#64748b;">${l.desc.length} OS</span>`:E(0)}</td>
-      <td style="padding:9px 10px;text-align:right;color:#0369a1;">${l.reposicao>0?'+ '+E(l.reposicao)+`<br><span style="font-size:10px;color:#64748b;">${l.repo.length} OS</span>`:E(0)}</td>
-      <td style="padding:9px 10px;text-align:right;color:#b91c1c;">${l.reducaoGar>0?'− '+E(l.reducaoGar)+`<br><span style="font-size:10px;color:#64748b;">${l.gar.length} OS</span>`:E(0)}</td>
-      <td style="padding:9px 10px;text-align:right;font-weight:800;font-size:14px;color:#1e3a8a;">${E(l.total)}</td></tr>`; }).join('');
-  const det=F.linhas.filter(l=>l.desc.length||l.repo.length||l.gar.length).map(l=>`
-    <div style="margin:10px 0 4px;font-weight:800;">${l.t.name}</div>
-    ${l.desc.length?`<div style="font-size:11px;color:#b45309;font-weight:700;margin-top:4px;">Desconto — comissão de ${LA} sobre OS não pagas até ao fim de ${LA}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><thead><tr style="background:#fffbeb;"><th style="padding:4px 6px;text-align:left;">OS</th><th style="padding:4px 6px;text-align:left;">Data</th><th style="padding:4px 6px;text-align:left;">Cliente</th><th style="padding:4px 6px;text-align:left;">Situação no fim de ${LA}</th><th style="padding:4px 6px;text-align:left;">Hoje</th><th style="padding:4px 6px;text-align:right;">Valor s/IVA</th><th style="padding:4px 6px;text-align:right;">Desconto ${pct}%</th></tr></thead><tbody>
-    ${l.desc.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">${e.estado==='curso'?'em curso':'a receber'}</td><td style="padding:4px 6px;">${e.hoje}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#b45309;">− ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}
-    ${l.gar.length?`<div style="font-size:11px;color:#b91c1c;font-weight:700;margin-top:4px;">Garantias — comissão reduzida (${Math.round(F.garPct*100)}%) nas OS originais com garantia aberta em ${LP}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><tbody>
-    ${l.gar.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">garantia ${e.garId} (${fd(e.garData)})</td><td style="padding:4px 6px;text-align:right;color:#b91c1c;">− ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}
-    ${l.repo.length?`<div style="font-size:11px;color:#0369a1;font-weight:700;margin-top:4px;">Reposição — OS de meses anteriores (comissão já descontada) recebidas em ${LP}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:4px;"><tbody>
-    ${l.repo.map(e=>`<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 6px;font-weight:700;">${e.id}</td><td style="padding:4px 6px;">${fd(e.data)}</td><td style="padding:4px 6px;">${e.cliente}</td><td style="padding:4px 6px;">recebida em ${fd(e.dPag)}</td><td style="padding:4px 6px;text-align:right;">${E(e.net)}</td><td style="padding:4px 6px;text-align:right;color:#0369a1;">+ ${E(e.com)}</td></tr>`).join('')}</tbody></table>`:''}`).join('');
-  return `<div class="comm-card" style="margin-bottom:22px;border:2px solid #1e3a8a;">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-      <div style="font-weight:800;font-size:15px;color:#1e3a8a;">📅 Fecho do mês — comissões a pagar · ${LP}</div>
+  const todas=_fechoTodasOS();
+  const fTec=window._commTec||'';
+  const opts={de:window._commDe||'', ate:window._commAte||''};
+  const tecs=hgFechoTecnicos(todas).filter(t=>!fTec||t.id===fTec);
+  const cs=tecs.map(t=>({t, c:hgComissaoTecnico(t.id, periodo, opts)})).filter(x=>x.c.os.length || fTec);
+  const totalGeral=cs.reduce((a,x)=>a+x.c.total,0);
+  const rotulo=(opts.de||opts.ate)?((opts.de||'…')+' a '+(opts.ate||'…')):periodo;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:800;">Comissões — ${rotulo}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--green);">Total: €${fmt(totalGeral)}</div>
       ${paraImprimir?'':`<button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="hgFechoImprimir('${periodo}')">🖨️ Imprimir</button>`}
     </div>
-    ${paraImprimir?'':`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;">
-      <div><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;">Percentagem de comissão (%)</div>
-        <input id="fecho-taxa" type="number" step="0.1" min="0" max="100" value="${pct}" style="width:110px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-weight:700;"></div>
-      <div><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:3px;">Redução por garantia (% da comissão da OS)</div>
-        <input id="fecho-garantia" type="number" step="1" min="0" max="100" value="${Math.round(F.garPct*100)}" style="width:110px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:8px;font-weight:700;"></div>
-      <button class="btn btn-sm" style="background:#1e3a8a;color:#fff;" onclick="hgComissaoGuardarConfig()">💾 Guardar percentagens</button>
-      <div style="font-size:11px;color:#64748b;">Cálculos a partir de ${lbl(F.inicio)}. Alterar a percentagem recalcula todos os meses.</div></div>`}
-    <div style="overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;">
-      <thead><tr style="background:#f1f5f9;">
-        <th style="${th}text-align:left;">Técnico</th><th style="${th}">Recebido</th><th style="${th}">A receber</th><th style="${th}">Em curso</th>
-        <th style="${th}">Total (base)</th><th style="${th}">Comissão ${pct}%</th><th style="${th}">Desconto ${LA}</th><th style="${th}">Reposição</th><th style="${th}">Garantias</th><th style="${th}">TOTAL A PAGAR</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="background:#eef2ff;font-weight:800;border-top:2px solid #1e3a8a;"><td style="padding:10px;">TOTAL</td>
-        <td style="padding:10px;text-align:right;">${E(T.rec)}</td><td style="padding:10px;text-align:right;">${E(T.ar)}</td><td style="padding:10px;text-align:right;">${E(T.ec)}</td>
-        <td style="padding:10px;text-align:right;">${E(T.base)}</td><td style="padding:10px;text-align:right;">${E(T.com)}</td>
-        <td style="padding:10px;text-align:right;">− ${E(T.ded)}</td><td style="padding:10px;text-align:right;">+ ${E(T.rep)}</td><td style="padding:10px;text-align:right;">− ${E(T.gar)}</td>
-        <td style="padding:10px;text-align:right;font-size:15px;color:#1e3a8a;">${E(T.tot)}</td></tr></tfoot>
-    </table></div>
-    <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">
-      <b>Comissão do mês</b> = ${pct}% × (recebido + a receber + em curso) das OS agendadas em ${LP}, sem IVA, sem garantias/orçamentos; cada OS conta para um só técnico.<br>
-      <b>Garantias</b> = a comissão da OS original (do técnico que a fez) é reduzida em ${Math.round(F.garPct*100)}% quando é aberta uma garantia nesse mês. ${(!F.multi&&F.ant<F.inicio)?'<br><i>Não há desconto de '+LA+': os cálculos começam em '+lbl(F.inicio)+'.</i>':''}<br><b>Desconto</b> = ${pct}% das OS de ${LA} que não estavam pagas até ao fim desse mês. <b>Reposição</b> = ${pct}% das OS que já tinham sido descontadas e foram recebidas em ${LP}.
-      ${det?`<details style="margin-top:6px;" open><summary style="cursor:pointer;font-weight:700;color:#1e3a5f;">Origem dos descontos e reposições</summary>${det}</details>`:''}
-    </div></div>`;
+    ${cs.length?cs.map(({t,c})=>`<div class="comm-card" style="margin-bottom:14px;">
+      <div class="comm-header"><div style="font-weight:700;font-size:15px;">${esc(t.name)}</div>
+        <div style="margin-left:auto;"><span class="badge badge-green">💎 €${fmt(c.total)}</span></div></div>
+      ${_commTabelaOS(c)}</div>`).join(''):'<div class="empty">Sem trabalhos concluídos neste período.</div>'}`;
 }
 function hgFechoImprimir(periodo){
-  const css='body{font-family:Arial,sans-serif;padding:18px;color:#1e293b}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1}.comm-card{border:none!important}@page{size:A4 landscape;margin:10mm}';
-  hgImprimirHTML('<!doctype html><html><head><meta charset="utf-8"><title>Fecho de comissões</title><style>'+css+'</style></head><body>'+hgFechoHtml(periodo,true)+'</body></html>');
+  const css='body{font-family:Arial,sans-serif;padding:18px;color:#1e293b}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #cbd5e1}.comm-card{border:none!important}@page{size:A4;margin:10mm}';
+  hgImprimirHTML('<!doctype html><html><head><meta charset="utf-8"><title>Comissões</title><style>'+css+'</style></head><body>'+hgFechoHtml(periodo,true)+'</body></html>');
 }
 function renderComissoes(){
   const container = document.getElementById('comm-list');
-  const _periodoC = _commPeriodo;
-
+  if(!container) return;
+  // Segurança: só o admin vê as comissões de todos; técnico é reencaminhado para o seu ecrã
+  if(window.currentUser && window.currentUser.role==='tecnico'){ container.innerHTML=''; if(typeof navigate==='function') navigate('minha-comissao'); return; }
   container.innerHTML = `
     <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:18px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:10px 14px;">
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">👷 Técnico</div>
-        <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${hgFechoTecnicos().map(t=>`<option value="${t.id}" ${window._commTec===t.id?'selected':''}>${t.name}</option>`).join('')}</select></div>
+        <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${hgFechoTecnicos().map(t=>`<option value="${t.id}" ${window._commTec===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">📅 Mês</div>
         <input type="month" value="${_commPeriodo}" onchange="window._commDe='';window._commAte='';_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;"></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">ou período: de</div>
@@ -7113,9 +6943,9 @@ function renderComissoes(){
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">até</div>
         <input type="date" value="${window._commAte}" onchange="_commSetFiltro('_commAte',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;"></div>
       ${(window._commDe||window._commAte)?`<button class="btn btn-ghost btn-sm" onclick="window._commDe='';window._commAte='';renderComissoes()">✕ Limpar período</button>`:''}
-      <span style="font-size:11px;color:var(--text3);flex-basis:100%;">Fecho: percentagem × (recebido + a receber + em curso), menos descontos de OS não pagas e garantias. Num período personalizado, descontos e garantias só entram nos meses completos incluídos.</span>
+      <span style="font-size:11px;color:var(--text3);flex-basis:100%;">5% do valor s/IVA de cada trabalho concluído (data de agendamento). Cada trabalho conta para um único técnico.</span>
     </div>
-    ${hgFechoHtml(_periodoC)}
+    ${hgFechoHtml(_commPeriodo)}
   `;
 }
 
@@ -13714,7 +13544,7 @@ async function osEscolherFluxoRelatorio(id, modo){
     if(window.currentUser?.role==='tecnico'){
       try{ await rpAutoEncerrarTempoEir(id); }catch(e){ console.warn('carimbo hora (fluxo depois) falhou:', e); }
     }
-    toast('📅 A OS fecha com esta hora. Ainda tens de PREENCHER o relatório — o atraso (>5 dias úteis) reduz a comissão e pode dar avaliações negativas.','⚠️',8000);
+    toast('📅 A OS fecha com esta hora. Ainda tens de PREENCHER o relatório — o atraso (>5 dias úteis) pode dar avaliações negativas.','⚠️',8000);
     osAbrirDetalhe(id);
   }
 }
@@ -13788,8 +13618,9 @@ function cronoFlutuanteTick(){
   const myId=window.currentUser?.id;
   const emCurso=(window.DB.ordens||[]).find(o=>
     (o.tecnicos||[]).includes(myId) &&
-    (o.horaIniReal||o.iniciadoEm) && !o.horaFimReal &&
-    o.estado!=='concluida' && o.estado!=='os_fechada' && o.estado!=='cancelada'
+    (o.horaIniReal||o.iniciadoEm) && !o.horaFimReal && !o.concluidoEm &&
+    o.estado==='em_curso' &&
+    !(typeof osEhTecnicoAuxiliar==='function' && osEhTecnicoAuxiliar(o))   // só o técnico principal vê o cronómetro
   );
   if(!emCurso){ box.style.display='none'; return; }
 
@@ -18641,7 +18472,7 @@ async function locEnviar(pos){
   // ── Auto-deteção: técnico afastou-se do local sem terminar o relatório ──
   // Se ficar >300m da posição inicial durante 5 min seguidos, paramos o
   // cronómetro automaticamente (horaFimReal) e avisamos a gestão.
-  // Não marcamos a OS como concluída — o relatório continua pendente.
+  // A OS passa a 'concluída' com a hora de saída; o relatório continua pendente.
   const LOC_LIMITE_DIST_M = 300;
   const LOC_LIMITE_TEMPO_MS = 5*60*1000;
   if(osActiva && isFinite(osActiva.iniLat) && isFinite(osActiva.iniLng)
@@ -18657,6 +18488,8 @@ async function locEnviar(pos){
         delete window._afastadoDesde[osActiva.id];
         window.fsSetMerge('ordens', osActiva.id, {
           horaFimReal: horaFimAuto,
+          estado: 'concluida',
+          concluidoEm: new Date().toISOString(),
           encerramentoAutomatico: true,
           encerramentoAutomaticoEm: new Date().toISOString(),
           encerramentoAutomaticoDistM: Math.round(distM),
@@ -19832,7 +19665,7 @@ function cronoPendenteFecho(osId){
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;opacity:.9;margin-bottom:2px;padding-right:22px;">⚠️ OS por fechar</div>
     <div style="font-size:13px;font-weight:700;">${os.id} · ${(cli.nome||'').slice(0,20)}</div>
     <div style="font-size:11px;opacity:.95;margin-top:3px;">Trabalho terminado às ${os.horaFimReal}. Falta pagamento + assinatura. Toque para concluir.</div>
-    <div style="font-size:10px;opacity:.95;margin-top:4px;border-top:1px solid rgba(255,255,255,.3);padding-top:4px;">O atraso reduz a comissão e pode gerar avaliações negativas.</div>`;
+    <div style="font-size:10px;opacity:.95;margin-top:4px;border-top:1px solid rgba(255,255,255,.3);padding-top:4px;">O atraso pode gerar avaliações negativas.</div>`;
   box.onclick=()=>{ if(typeof osAbrirConcluir==='function') osAbrirConcluir(osId); };
   box.style.display='block';
 }
@@ -27818,8 +27651,8 @@ function rpMostrarAlertaBV(){
     if(!_imp){ _imp=document.createElement('div'); _imp.id='bv-impacto'; _bvSub.parentElement.appendChild(_imp); }
     _imp.style.cssText='margin-top:8px;font-size:12px;font-weight:600;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;';
     _imp.innerHTML = atrasados
-      ? `🔴 Tens ${atrasados} relatório${atrasados!==1?'s':''} atrasado${atrasados!==1?'s':''}. O atraso <strong>reduz a tua comissão</strong> (pode chegar a 0% na comissão Normal) e pode gerar <strong>avaliações negativas</strong>. Preenche o quanto antes.`
-      : `⏱ Preenche os relatórios pendentes dentro de 5 dias úteis. O atraso <strong>reduz a tua comissão</strong> e pode gerar <strong>avaliações negativas</strong>.`;
+      ? `🔴 Tens ${atrasados} relatório${atrasados!==1?'s':''} atrasado${atrasados!==1?'s':''}. O atraso pode gerar <strong>avaliações negativas</strong>. Preenche o quanto antes.`
+      : `⏱ Preenche os relatórios pendentes dentro de 5 dias úteis. O atraso pode gerar <strong>avaliações negativas</strong>.`;
   }
 
   document.getElementById('bv-lista').innerHTML = pendentes.slice(0,10).map(p=>{
@@ -37016,15 +36849,22 @@ window.abrirApresentacaoGrupo = function(){
     if(os.horaIniReal){ const d=new Date((os.data||new Date().toISOString().slice(0,10))+'T'+os.horaIniReal+':00'); if(!isNaN(d)) return d.getTime(); }
     return null;
   }
-  function segPausa(os){
-    let s=0; (os.pausas||[]).forEach(p=>{ if(!p||!p.inicio) return; const a=new Date(p.inicio).getTime(); const b=p.fim?new Date(p.fim).getTime():Date.now(); if(b>a) s+=(b-a)/1000; });
+  function segPausa(os, capMs){
+    let s=0; (os.pausas||[]).forEach(p=>{ if(!p||!p.inicio) return; const a=new Date(p.inicio).getTime(); const b=p.fim?new Date(p.fim).getTime():(capMs||Date.now()); if(b>a) s+=(b-a)/1000; });
     return s;
   }
+  // Instante em que o trabalho terminou (null = ainda a decorrer). Fechada, com hora de fim ou concluída => o relógio pára.
+  function fimMs(os){
+    if(os.concluidoEm){ const t=new Date(os.concluidoEm).getTime(); if(!isNaN(t)) return t; }
+    if(os.horaFimReal){ const d=new Date((os.data||new Date().toISOString().slice(0,10))+'T'+os.horaFimReal+':00'); if(!isNaN(d)) return d.getTime(); }
+    return null;
+  }
   function segTrabalho(os){
-    if(fechada(os) && os.horaIniReal && os.horaFimReal){
-      const m=_minutosEntreHoras(os.horaIniReal, os.horaFimReal); return Math.max(0,((m||0)*60)-segPausa(os));
+    if(os.horaIniReal && os.horaFimReal){
+      const m=_minutosEntreHoras(os.horaIniReal, os.horaFimReal); return Math.max(0,((m||0)*60)-segPausa(os, fimMs(os)||undefined));
     }
     const ini=inicioMs(os); if(!ini) return 0;
+    if(fechada(os)){ const f=fimMs(os)||ini; return Math.max(0,(f-ini)/1000 - segPausa(os, f)); }
     return Math.max(0,(Date.now()-ini)/1000 - segPausa(os));
   }
   const fmtSeg = s => { s=Math.floor(s); const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); };
@@ -37318,7 +37158,7 @@ window.abrirApresentacaoGrupo = function(){
       h='<div class="ofc-clock" style="font-size:20px;">'+esc(os.horaIniReal)+'–'+esc(os.horaFimReal||'')+'<small>OS fechada</small></div>'
        +'<button class="ofc-main" id="ofc-btn-main" onclick="ofcGuardarEdicao()">💾 Guardar alterações</button>';
     } else {
-      h='<div class="ofc-clock'+(pausa?' pausa':'')+'" id="ofc-clock">'+fmtSeg(segTrabalho(os))+'<small>'+(pausa?'Em pausa':'A contar desde '+esc(os.horaIniReal))+'</small></div>'
+      h='<div class="ofc-clock'+(pausa?' pausa':'')+'" id="ofc-clock">'+fmtSeg(segTrabalho(os))+'<small>'+(os.horaFimReal?'Parado às '+esc(os.horaFimReal):(pausa?'Em pausa':'A contar desde '+esc(os.horaIniReal)))+'</small></div>'
        +'<button class="ofc-pbtn" onclick="ofcPausa()" aria-label="'+(pausa?'Retomar':'Pausar')+'">'+(pausa?'▶':'⏸')+'</button>'
        +'<button class="ofc-main close" id="ofc-btn-main" onclick="ofcFechar()">✅ Fechar OS</button>';
     }
@@ -37358,93 +37198,23 @@ window.abrirApresentacaoGrupo = function(){
     },900);
   };
 
-  // ── Validação da localização ao iniciar ──
-  const _geoCache={};
-  async function coordsCliente(os){
-    const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId)||{};
-    const lat=os.lat||cli.srvLat||cli.lat, lng=os.lng||cli.srvLng||cli.lng||cli.lon;
-    if(isFinite(lat)&&isFinite(lng)&&lat&&lng) return {lat:+lat,lng:+lng,raio:300,fonte:'ficha'};
-    const rua=cli.srvRua||cli.rua||'', cp=(cli.srvCp||cli.cp||'').trim(), loc=cli.srvLocalidade||cli.localidade||'';
-    const k=rua+'|'+cp; if(_geoCache[k]) return _geoCache[k];
-    const q=async u=>{ const r=await fetch(u,{headers:{'Accept-Language':'pt'}}); return r.json(); };
-    try{
-      if(rua){
-        const d=await q('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pt&q='+encodeURIComponent([rua,cp,loc].filter(Boolean).join(', ')));
-        if(d&&d[0]) return _geoCache[k]={lat:+d[0].lat,lng:+d[0].lon,raio:300,fonte:'morada'};
-      }
-    }catch(e){}
-    try{
-      const cpF=cp.replace(/[^0-9]/g,''); if(cpF.length===7){
-        const d=await q('https://json.geoapi.pt/cp/'+cpF.slice(0,4)+'-'+cpF.slice(4));
-        const c=(d&&(d.centro||d.centroide||(d.lat&&[d.lat,d.lng])))||null;
-        if(c&&isFinite(c[0])) return _geoCache[k]={lat:+c[0],lng:+c[1],raio:500,fonte:'código postal'};
-      }
-    }catch(e){}
-    return null;
-  }
-  const posicaoAtual=()=>new Promise(res=>{
-    if(!navigator.geolocation) return res({erro:'sem_gps'});
-    navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}),
-      e=>res({erro:e.code===1?'negado':'indisponivel'}), {enableHighAccuracy:true, timeout:15000, maximumAge:0});
-  });
-  function distM(a,b){ const R=6371000,t=x=>x*Math.PI/180; const dLa=t(b.lat-a.lat), dLo=t(b.lng-a.lng);
-    const h=Math.sin(dLa/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
-  async function validarLocal(os){
-    const raioCfg=parseFloat(cfg().raioInicioM)||0;
-    const [pos, alvo]=await Promise.all([posicaoAtual(), coordsCliente(os)]);
-    if(pos.erro) return {ok:false, motivo:pos.erro==='negado'?'A localização do telemóvel está desligada ou sem permissão.':'Não foi possível obter a posição GPS.', semGps:true};
-    if(!alvo) return {ok:false, motivo:'Não foi possível localizar a morada do cliente no mapa.', lat:pos.lat, lng:pos.lng, acc:pos.acc, semMorada:true};
-    const d=distM(pos, alvo), raio=raioCfg||alvo.raio, folga=Math.min(pos.acc||0,150);
-    if(d<=raio+folga) return {ok:true, validado:true, distM:d, acc:pos.acc, lat:pos.lat, lng:pos.lng};
-    return {ok:false, longe:true, distM:d, acc:pos.acc, lat:pos.lat, lng:pos.lng, motivo:'Estás a '+(d>=1000?(d/1000).toFixed(1)+' km':Math.round(d)+' m')+' da morada do cliente (tolerância '+raio+' m).'};
-  }
-  function mostrarBloqueioGPS(os, g){
-    let ov=$('ofc-gps'); if(!ov){ ov=document.createElement('div'); ov.id='ofc-gps'; $('ofc').appendChild(ov); }
-    ov.style.cssText='position:absolute;inset:0;z-index:6;background:rgba(15,36,71,.55);display:flex;align-items:flex-end;';
-    ov.innerHTML='<div style="background:#fff;width:100%;border-radius:16px 16px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);">'
-      +'<div style="font-size:18px;font-weight:800;margin-bottom:8px;">📍 Não é possível iniciar aqui</div>'
-      +'<div style="font-size:15px;line-height:1.5;margin-bottom:12px;">'+esc(g.motivo)+(g.longe?' Só podes iniciar o trabalho na morada do cliente.':'')+'</div>'
-      +(g.semGps?'<div class="ofc-hint">Ativa a localização do telemóvel e dá permissão ao navegador, depois tenta outra vez.</div>':'')
-      +'<button class="ofc-main start" style="width:100%;margin-bottom:10px;" onclick="document.getElementById(\'ofc-gps\').remove();ofcIniciarDeNovo()">🔄 Tentar outra vez</button>'
-      +'<details style="margin-top:4px;"><summary style="font-size:14px;color:#64748b;cursor:pointer;padding:6px 0;">Estou no local mas o GPS falha</summary>'
-      +'<textarea class="ofc-ta" id="ofc-gps-just" style="margin-top:8px;min-height:70px;" placeholder="Explica o que se passa (fica registado e a gestão é avisada)"></textarea>'
-      +'<button class="ofc-act" style="width:100%;margin-top:8px;" onclick="ofcIniciarJustificado()">Iniciar com justificação</button></details>'
-      +'<button class="ofc-act" style="width:100%;margin-top:10px;" onclick="document.getElementById(\'ofc-gps\').remove()">Cancelar</button></div>';
-    S._gps=g;
-  }
-  window.ofcIniciarDeNovo=function(){ S.armed=true; ofcIniciar(); };
-  window.ofcIniciarJustificado=async function(){
-    const j=($('ofc-gps-just').value||'').trim();
-    if(j.length<10){ T('Escreve uma justificação (mínimo 10 caracteres).','✍️'); return; }
-    const os=getOS(); if(!os) return; $('ofc-gps').remove();
-    await iniciarAgora(os, {...(S._gps||{}), validado:false, justificacao:j});
-    try{
-      await grava('mensagens_internas','msg_gps_'+os.id,{id:'msg_gps_'+os.id,tipo:'inicio_sem_gps',osId:os.id,tecnicoNome:window.currentUser?.name||'',motivo:(S._gps||{}).motivo||'',justificacao:j,lida:false,criadoEm:new Date().toISOString()});
-    }catch(e){}
-  };
-
   // ── início / pausa ───────────────────────────────────────────
   window.ofcIniciar = async function(){
     const os=getOS(); if(!os) return;
     if(typeof osBloquearAuxiliar==='function' && osBloquearAuxiliar(os,'Iniciar o trabalho')) return;
     if(!S.armed){ S.armed=true; renderBar(); setTimeout(()=>{ if(S.armed){ S.armed=false; renderBar(); } },3500); return; }
     S.armed=false;
-    const btn=document.querySelector('#ofc-bar .ofc-main'); if(btn){ btn.disabled=true; btn.textContent='📍 A confirmar a localização…'; }
-    const g=await validarLocal(os);
+    const btn=document.querySelector('#ofc-bar .ofc-main'); if(btn){ btn.disabled=true; }
+    await iniciarAgora(os);
     if(btn){ btn.disabled=false; }
-    if(!g.ok){ renderBar(); mostrarBloqueioGPS(os, g); return; }
-    await iniciarAgora(os, g);
   };
-  async function iniciarAgora(os, g){
-    const ini=hhmm(), patch={estado:'em_curso', horaIniReal:ini, iniciadoEm:new Date().toISOString(),
-      inicioGPS:limpo({validado:!!g.validado, distM:g.distM!=null?Math.round(g.distM):null, precisaoM:g.acc!=null?Math.round(g.acc):null,
-        lat:g.lat||null, lng:g.lng||null, motivo:g.motivo||'', justificacao:g.justificacao||'', em:new Date().toISOString()})};
-    if(g.justificacao) patch.inicioForaDoLocal=true;
+  async function iniciarAgora(os){
+    const ini=hhmm(), patch={estado:'em_curso', horaIniReal:ini, iniciadoEm:new Date().toISOString()};
     try{ await grava('ordens', os.id, patch); Object.assign(os, patch); }
     catch(e){ T('❌ Não foi possível iniciar: '+(e.message||'sem ligação'),'❌'); renderBar(); return; }
     try{ if(typeof osCapturarAnchorGPS==='function') osCapturarAnchorGPS(os.id); }catch(e){}
     try{ if(typeof tecPararDeslocamento==='function') tecPararDeslocamento(); }catch(e){}
-    try{ auditLog(g.justificacao?'os_iniciada_fora_local':'os_iniciada','OS '+os.id+' iniciada às '+ini+(g.validado?' — no local ('+Math.round(g.distM)+' m)':' — SEM validação GPS: '+(g.motivo||'')+(g.justificacao?' · justificação: '+g.justificacao:''))); }catch(e){}
+    try{ auditLog('os_iniciada','OS '+os.id+' iniciada às '+ini); }catch(e){}
     if(navigator.vibrate) navigator.vibrate(80);
     T('▶ Trabalho iniciado às '+ini,'⏱');
     render();
@@ -38234,7 +38004,7 @@ window.abrirApresentacaoGrupo = function(){
     const pill=document.getElementById('val-pill'); if(!pill) return;
     if(!ehGestao()){ pill.style.display='none'; return; }
     const p=pendentes();
-    const gps=(window.DB.mensagens_internas||[]).filter(m=>m.tipo==='inicio_sem_gps'&&!m.lida).length;
+    const gps=0;
     pill.style.display=(p.length||gps)?'block':'none';
     pill.textContent=(p.length?'📋 '+p.length+' relatório'+(p.length>1?'s':'')+' a validar':'')+(p.length&&gps?' · ':'')+(gps?'📍 '+gps+' sem GPS':'');
     p.forEach(m=>{
@@ -38256,12 +38026,6 @@ window.abrirApresentacaoGrupo = function(){
     el.innerHTML='<div style="display:flex;align-items:center;margin-bottom:12px;"><strong style="font-size:17px;color:#0f2447;">Relatórios a validar</strong>'
       +'<button onclick="document.getElementById(\'val-painel\').classList.remove(\'on\')" style="margin-left:auto;border:0;background:#f1f5f9;border-radius:8px;width:38px;height:38px;font-size:16px;cursor:pointer;">✕</button></div>'
       +'<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Fechados pelos técnicos como preliminares. Só depois de validados podem ser enviados ao cliente.</div>'
-      +(()=>{ const g=(window.DB.mensagens_internas||[]).filter(m=>m.tipo==='inicio_sem_gps'&&!m.lida);
-          return g.length?'<div style="font-weight:800;color:#b45309;margin:4px 0 8px;">📍 Trabalhos iniciados sem confirmação GPS</div>'
-            +g.map(m=>'<div class="vp-item" style="border-color:#fde68a;"><div style="font-weight:800;">'+esc(m.osId)+' · '+esc(m.tecnicoNome||'')+'</div>'
-              +'<div style="font-size:13px;color:#64748b;margin-top:3px;">'+esc(m.motivo||'')+'</div><div style="font-size:13.5px;margin-top:4px;">“'+esc(m.justificacao||'')+'”</div>'
-              +'<div class="vp-acts"><button onclick="valGpsVisto(\''+esc(m.id||m._firebaseId)+'\')">✓ Visto</button></div></div>').join('')
-            +'<div style="font-weight:800;color:#0f2447;margin:14px 0 8px;">📋 Relatórios</div>':''; })()
       +(p.length?p.map(m=>'<div class="vp-item"><div style="font-weight:800;color:#0f2447;">'+esc(m.osId)+' · '+esc(m.clienteNome||'—')+'</div>'
         +'<div style="font-size:12.5px;color:#64748b;margin-top:3px;">'+esc(m.tecnicoNome||'')+' · '+(m.motivo==='edicao'?'corrigido pelo técnico':'OS fechada')+' · '+new Date(m.criadoEm).toLocaleString('pt-PT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>'
         +(()=>{ const r=relDe(m.osId), o=((r&&r.campos&&r.campos.obsAdmin)||m.obsAdmin||'').trim(); return o?'<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13.5px;color:#78350f;white-space:pre-wrap;"><strong>📌 Observação do técnico</strong>\n'+esc(o)+'</div>':''; })()
@@ -38271,7 +38035,6 @@ window.abrirApresentacaoGrupo = function(){
         +'<button class="ok" onclick="valValidar(\''+esc(m.osId)+'\')">✅ Validar</button></div></div>').join('')
         :'<div style="text-align:center;padding:24px;color:#16a34a;font-weight:700;">Tudo validado ✅</div>');
   }
-  window.valGpsVisto=async function(id){ try{ await window.fsSetMerge('mensagens_internas', id, {lida:true, vistoPor:window.currentUser?.name||''}); const m=(window.DB.mensagens_internas||[]).find(x=>(x.id||x._firebaseId)===id); if(m) m.lida=true; }catch(e){} desenhar(); atualizar(); };
   window.valAbrirPainel=function(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} desenhar(); document.getElementById('val-painel').classList.add('on'); };
   window.valVer=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpVerRelatorio==='function') rpVerRelatorio(id); };
   window.valRever=function(id){ document.getElementById('val-painel').classList.remove('on'); if(typeof rpAbrirFormulario==='function') rpAbrirFormulario(id); };

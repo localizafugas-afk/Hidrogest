@@ -1368,7 +1368,10 @@ tr:hover td{background:rgba(37,99,235,.03);}
       <div id="crono-flutuante-tempo" style="font-size:22px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums;">00:00:00</div>
       <div id="crono-flutuante-os" style="font-size:11px;opacity:.9;"></div>
     </div>
-    <button id="crono-flutuante-continuar" onclick="event.stopPropagation();cronoFlutuanteContinuar();" style="display:none;background:#fff;color:#b45309;border:none;border-radius:10px;padding:9px 12px;font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;flex-shrink:0;">▶️ Continuar</button>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+      <button id="crono-flutuante-continuar" onclick="event.stopPropagation();cronoFlutuanteContinuar();" style="display:none;background:#fff;color:#b45309;border:none;border-radius:10px;padding:9px 12px;font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;">▶️ Continuar</button>
+      <button id="crono-flutuante-encerrar" onclick="event.stopPropagation();cronoFlutuanteEncerrar();" style="display:none;background:rgba(0,0,0,.28);color:#fff;border:1px solid rgba(255,255,255,.55);border-radius:10px;padding:7px 12px;font-weight:700;font-size:12px;white-space:nowrap;cursor:pointer;">⏹ Encerrar OS</button>
+    </div>
   </div>
   <div class="content">
 
@@ -13665,6 +13668,8 @@ function cronoFlutuanteTick(){
   if(labelEl) labelEl.textContent = pausado ? '⏸️ Pausado — 4h atingidas' : 'Trabalho em curso';
   if(dotEl) dotEl.style.animation = pausado ? 'none' : 'cronoBlink 1.2s infinite';
   if(contBtn) contBtn.style.display = pausado ? 'block' : 'none';
+  const encBtn=document.getElementById('crono-flutuante-encerrar');
+  if(encBtn) encBtn.style.display = pausado ? 'block' : 'none';
   box.dataset.osid=emCurso.id;
   box.style.display='flex';
 
@@ -13690,6 +13695,55 @@ function cronoFlutuanteContinuar(){
   const id=document.getElementById('crono-flutuante')?.dataset?.osid;
   if(id && typeof osRetomarTrabalho==='function') osRetomarTrabalho(id);
 }
+// Botão "⏹ Encerrar OS" do widget flutuante (só aparece com o cronómetro pausado às 4h):
+// fecha o cronómetro e conclui a OS mesmo com informações em falta (relatório, fotos,
+// assinaturas, pagamento). Fica marcada para a gestão rever.
+async function cronoFlutuanteEncerrar(){
+  const id=document.getElementById('crono-flutuante')?.dataset?.osid; if(!id) return;
+  if(!confirm('Encerrar a OS '+id+' agora?\n\nO cronómetro é fechado e a OS fica concluída MESMO com informações em falta (relatório, fotos, assinaturas ou pagamento). A gestão será avisada para rever.')) return;
+  await osEncerrarForcado(id);
+}
+async function osEncerrarForcado(id){
+  const os=(window.DB.ordens||[]).find(x=>x.id===id); if(!os) return;
+  const agora=new Date();
+  const agoraISO=agora.toISOString();
+  const fim=agora.toTimeString().slice(0,5);
+  // 1) Fechar qualquer pausa ainda aberta (a das 4h) — o tempo parado não conta
+  const pausasFechadas=(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:agoraISO}:p);
+  const osTmp={...os, pausas:pausasFechadas};
+  // 2) Recalcular tempo e valor, como no "Parar" normal (tempo útil = total − pausas)
+  const upd={
+    estado:'concluida', concluidoEm:agoraISO, concluidoPor:window.currentUser?.id||'',
+    horaFimReal:fim, pausas:pausasFechadas, pausaAtiva:false,
+    encerramentoForcado:true, encerramentoForcadoEm:agoraISO, encerramentoForcadoPor:window.currentUser?.id||''
+  };
+  try{
+    const ini=os.horaIniReal||os.horaIni||'';
+    if(ini && typeof _minutosEntreHoras==='function'){
+      const min0=_minutosEntreHoras(ini,fim);
+      const min=(min0!==null && min0!==undefined) ? Math.max(0,min0-osCalcMinPausados(osTmp)) : null;
+      if(min!==null && min>0){
+        const horas=min/60;
+        const h1Val=parseFloat(os.h1)||0, haddV=parseFloat(os.haddV)||0, iva=parseInt(os.iva||23);
+        const net=parseFloat(calcNetOS(horas,h1Val,haddV).toFixed(2));
+        const ivaV=parseFloat((net*iva/100).toFixed(2));
+        upd.haddN=calcHorasAdd(horas); upd.net=net; upd.ivaVal=ivaV; upd.total=parseFloat((net+ivaV).toFixed(2));
+      }
+    }
+  }catch(e){ console.warn('Encerrar OS: não foi possível recalcular o valor, mantém o anterior.', e); }
+  try{
+    await window.fsSetMerge('ordens', id, upd);
+    Object.assign(os, upd);                         // atualiza já em memória → o banner desaparece logo
+    if(typeof auditLog==='function') auditLog('os_encerrada_forcada', `OS ${id} encerrada à força por ${window.currentUser?.name||''} (com informações em falta).`);
+    const box=document.getElementById('crono-flutuante'); if(box) box.style.display='none';
+    if(typeof toast==='function') toast('⏹ OS '+id+' encerrada. A gestão vai rever as informações em falta.','✅',6000);
+    if(typeof osRenderLista==='function') osRenderLista();
+    if(typeof osRenderMinhas==='function') osRenderMinhas();
+    cronoFlutuanteTick();
+  }catch(e){ if(typeof toast==='function') toast('Erro ao encerrar a OS: '+e.message,'❌'); }
+}
+window.osEncerrarForcado=osEncerrarForcado;
+window.cronoFlutuanteEncerrar=cronoFlutuanteEncerrar;
 function cronoFlutuanteStart(){
   if(_cronoFlutuanteInterval) clearInterval(_cronoFlutuanteInterval);
   cronoFlutuanteTick();

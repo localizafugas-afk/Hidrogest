@@ -15285,14 +15285,14 @@ async function rpMelhorarTexto(fieldId){
     const _seccao = {
       'rp-reclamacao': 'a descrição do problema/reclamação reportado pelo cliente',
       'rp-trabalho':   'a descrição dos trabalhos e ensaios realizados no local',
-      'rp-conclusao':  'a conclusão técnica do diagnóstico',
+      'rp-conclusao':  'a conclusão do laudo (deve deixar claro qual é o problema, como se chegou a ele e o que fazer a seguir)',
     }[fieldId] || 'um excerto de um relatório técnico';
 
     const prompt = `Reescreve o texto seguinte, que corresponde a ${_seccao}, para que QUALQUER pessoa o perceba à primeira leitura — um cliente, um administrador de condomínio ou uma seguradora, sem conhecimentos técnicos.
 
 Regras:
 - Frases curtas e claras, em português europeu correto (ortografia, pontuação, acentos).
-- Usa palavras do dia a dia. Se precisares de um termo técnico, explica-o em poucas palavras entre parênteses.
+- Escreve de forma clara e didática, com palavras do dia a dia. Só usa um termo técnico se for mesmo necessário e, nesse caso, explica-o em poucas palavras entre parênteses.
 - Diz de forma direta o que se verificou, onde, e o que isso significa.
 - Mantém rigorosamente os factos: não acrescentes, não inventes nem exageres causas, valores ou conclusões.
 - Tom profissional e neutro, sem linguagem comercial.
@@ -15405,20 +15405,21 @@ async function rpGerarComIA(osId){
     if(dados.trabalhosRealizados) linhas.push('Observações do técnico: '+dados.trabalhosRealizados);
 
     const prompt =
-'És um engenheiro responsável por relatórios técnicos de peritagem não destrutiva (deteção de fugas, infiltrações e patologias da construção).\n'+
+'És o responsável pelos laudos de uma empresa de deteção de fugas e infiltrações, e explicas sempre os problemas de forma clara a pessoas sem conhecimentos técnicos.\n'+
 'Com base EXCLUSIVAMENTE nos dados abaixo e nas fotografias de serviço anexadas, preenche o relatório.\n\n'+
 'Dados da intervenção:\n'+linhas.join('\n')+'\n\n'+
 'Seguem '+visLim.length+' fotografia(s), pela ordem (Foto 1, Foto 2, ...).\n\n'+
 'Devolve ESTRITAMENTE um objeto JSON válido (sem texto antes ou depois, sem marcas de código), com esta forma:\n'+
 '{\n'+
 '  "legendas": ['+visLim.map((_,k)=>'"legenda da Foto '+(k+1)+'"').join(', ')+'],\n'+
-'  "conclusao": "conclusão técnica do diagnóstico (2 a 6 frases)",\n'+
+'  "conclusao": "conclusão do laudo em linguagem simples, que qualquer pessoa perceba (3 a 6 frases curtas): qual é o problema e onde está; como se chegou a essa conclusão; o que fazer a seguir",\n'+
 '  "recomendacoes": "recomendações / proposta de reparação e próximos passos"\n'+
 '}\n\n'+
 'Regras:\n'+
 '- "legendas" tem de ter exactamente '+visLim.length+' entrada(s), uma por foto e pela mesma ordem; cada legenda é uma linha curta (o que a foto mostra e o local).\n'+
 '- Baseia-te só nos dados e no que é visível nas fotos. NÃO inventes factos, valores, causas ou localizações. Se a evidência for insuficiente, escreve com prudência.\n'+
-'- Português europeu, registo técnico impessoal. Terminologia adequada à patologia (hidráulica predial, impermeabilização, capilaridade, termografia, ensaios não destrutivos); não forces vocabulário de canalização em casos de infiltração/cobertura.';
+'- Português europeu. A "conclusao" tem de ser escrita para uma pessoa comum (cliente, vizinho, condomínio, seguradora): frases curtas, palavras do dia a dia, de forma clara e didática, SEM linguagem de engenheiro; só uses um termo técnico se for mesmo necessário e, nesse caso, explica-o entre parênteses. Não forces vocabulário de canalização em casos de infiltração/cobertura.\n'+
+'- "legendas" e "recomendacoes": claras e objetivas, também sem jargão desnecessário.';
 
     const content = [{ type:'text', text: prompt }];
     for(const v of visLim){ content.push({ type:'image', source:{ type:'base64', media_type:v.media_type, data:v.data } }); }
@@ -15515,18 +15516,18 @@ async function rpGerarConclusao(osId){
     if(dados.equipamentos.length) linhas.push(`Equipamentos utilizados: ${dados.equipamentos.join('; ')}`);
     if(dados.trabalhosRealizados) linhas.push(`Trabalhos e observações do técnico: ${dados.trabalhosRealizados}`);
 
-    const prompt = `És um engenheiro responsável por relatórios técnicos de peritagem não destrutiva (deteção de fugas, infiltrações e patologias da construção).
-Com base EXCLUSIVAMENTE nos dados dos ensaios abaixo e nas fotografias de serviço anexadas, redige a CONCLUSÃO TÉCNICA do diagnóstico.
+    const prompt = `És o responsável por redigir o laudo (relatório) de uma empresa de deteção de fugas e infiltrações. O leitor é uma pessoa comum — o cliente, um vizinho, um administrador de condomínio ou uma seguradora — que não percebe de engenharia nem de canalização.
+Com base EXCLUSIVAMENTE nos dados dos ensaios abaixo e nas fotografias de serviço anexadas, escreve a CONCLUSÃO do laudo.
 
 Dados da intervenção:
 ${linhas.join('\n')}
 
 Instruções:
-- Escreve a conclusão num registo técnico de engenharia, objetivo e impessoal, em português europeu.
-- Fundamenta a conclusão nos ensaios realizados e no que é visível nas fotografias (ex.: presença de fluorescência de traçador, manchas de humidade, anomalia térmica, falha de impermeabilização, etc.).
-- NÃO inventes factos, valores, causas ou localizações que não estejam nos dados ou claramente visíveis nas imagens. Se a evidência for insuficiente para afirmar a origem, indica-o com prudência.
-- Usa terminologia adequada à patologia em causa (hidráulica predial, impermeabilização, capilaridade, ensaios não destrutivos), sem forçar vocabulário de canalização em casos de infiltração/cobertura.
-- Devolve APENAS o texto da conclusão (2 a 6 frases), sem título, introdução ou comentários.`;
+- Escreve de forma clara e didática, como se estivesses a explicar o problema a alguém à mesa: português europeu, frases curtas, palavras do dia a dia. Nada de linguagem de engenheiro.
+- Não uses termos técnicos, a não ser que sejam mesmo necessários. Quando for necessário usar um, explica-o logo, em poucas palavras, entre parênteses (ex.: "termografia (câmara que mostra o calor e revela zonas húmidas)").
+- Responde, por esta ordem e em texto corrido: (1) qual é o problema e onde está; (2) como se chegou a essa conclusão (o que se testou e o que se vê nas fotografias); (3) o que isto significa para o cliente e o que se recomenda fazer a seguir.
+- NÃO inventes factos, valores, causas ou localizações que não estejam nos dados ou claramente visíveis nas imagens. Se a evidência não chegar para afirmar a origem, diz isso com clareza e indica o que falta confirmar.
+- Devolve APENAS o texto da conclusão (3 a 6 frases curtas), sem título, listas, introdução ou comentários.`;
 
     const content = [{ type:'text', text: prompt }];
     for(const dataUrl of fotos){
@@ -23601,7 +23602,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-reclamacao')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
+        title="Reescrever em linguagem simples, que qualquer pessoa perceba">✨ Melhorar texto</button>
     </div>
     <textarea class="fta" id="rp-reclamacao" rows="6"
       placeholder="Descreva a reclamação / problema reportado pelo cliente..."
@@ -23613,7 +23614,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-trabalho')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
+        title="Reescrever em linguagem simples, que qualquer pessoa perceba">✨ Melhorar texto</button>
     </div>
     <textarea class="fta" id="rp-trabalho" rows="9"
       placeholder="Descreva o trabalho efectuado, metodologia aplicada e o que foi inspeccionado..."
@@ -23674,7 +23675,7 @@ function rpAbrirFormulario(osId, preserveTemp){
       <button type="button" onclick="rpMelhorarTexto('rp-conclusao')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #7c3aed;
         border-radius:8px;background:#faf5ff;color:#7c3aed;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
-        title="Melhorar para linguagem técnica de engenharia">✨ Melhorar texto</button>
+        title="Reescrever em linguagem simples, que qualquer pessoa perceba">✨ Melhorar texto</button>
       <button type="button" onclick="rpGerarConclusao('${osId}')"
         style="display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1.5px solid #15803d;
         border-radius:8px;background:#f0fdf4;color:#15803d;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;"
@@ -25408,8 +25409,9 @@ function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
 
   function gerarConclusaoTecnica(){
     if(!c.conclusao) return '';
-    // Conclusão gerada/melhorada por IA já vem em linguagem técnica — não reprocessar
-    return c.conclusaoIA ? c.conclusao : tecToEng(c.conclusao, 'conclusao');
+    // A conclusão do laudo fica SEMPRE em linguagem simples, tal como foi escrita/gerada
+    // (já não é reescrita em "linguagem de engenharia" por tecToEng).
+    return c.conclusao;
   }
 
   function gerarRecomendacaoTecnica(){
@@ -37340,9 +37342,10 @@ window.abrirApresentacaoGrupo = function(){
         +'\nEquipamentos: '+((S.c.equipamentos||[]).join(', ')||'—')
         +'\nItens testados (por zona):\n'+testes
         +'\nObservações do técnico: '+(S.c.reclamacao||'—');
-      const prompt='És o responsável técnico de uma empresa de deteção de fugas e infiltrações. Com base APENAS nas fotos e nos dados abaixo, recolhidos no local pelo técnico, escreve a conclusão preliminar do relatório.\n\n'
-        +'Regras:\n- Português europeu, frases curtas e simples, que qualquer pessoa perceba (cliente, condomínio, seguradora).\n'
-        +'- Diz: onde está a origem provável do problema, em que te baseias (testes/metodologias e o que se vê nas fotos) e o que se recomenda fazer.\n'
+      const prompt='És o responsável pelo laudo de uma empresa de deteção de fugas e infiltrações. Com base APENAS nas fotos e nos dados abaixo, recolhidos no local pelo técnico, escreve a conclusão preliminar do laudo. O leitor é uma pessoa comum (cliente, vizinho, condomínio, seguradora) que não percebe de engenharia.\n\n'
+        +'Regras:\n- Português europeu, frases curtas, palavras do dia a dia, de forma clara e didática, como se explicasses o problema a alguém à mesa. Nada de linguagem de engenheiro.\n'
+        +'- Não uses termos técnicos, a não ser que sejam mesmo necessários; quando for necessário usar um, explica-o logo entre parênteses, em poucas palavras.\n'
+        +'- Diz, por esta ordem: (1) qual é o problema e onde está (origem provável); (2) como se chegou a isso (os testes feitos e o que se vê nas fotos); (3) o que isto significa para o cliente e o que se recomenda fazer.\n'
         +'- Se os dados não chegam para uma conclusão segura, diz isso claramente e indica o que falta confirmar.\n'
         +'- Não inventes locais, medidas, valores nem causas que não estejam nos dados ou visíveis nas fotos.\n'
         +'- Sem títulos, sem listas com marcadores, no máximo 3 parágrafos curtos. Responde só com o texto.\n\nDADOS DA VISITA\n'+dados;

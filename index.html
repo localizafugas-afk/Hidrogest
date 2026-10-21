@@ -418,6 +418,10 @@ function locLimpezaStale(){
   });
 }
 
+// ── Normalizador global de pesquisa: minúsculas + sem acentos + sem espaços nas pontas ──
+// Permite encontrar "José" escrevendo "jose", "São" com "sao", etc. e por qualquer parte do nome.
+window.hgNorm = function(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); };
+
 function onDataChange() {
   if(!window.currentUser) return; // não renderizar sem utilizador autenticado
   // Limpeza de estados GPS stale
@@ -452,12 +456,40 @@ function onDataChange() {
     if(id==='relatorios')    renderReports();
     if(id==='utilizadores')  renderUsers();
     if(id==='agenda-os')     { osRenderAgenda(); agRenderRecebimentos(); }
-    if(id==='lista-os')      osVoltarHome();
+    // Preservar a sub-vista atual: se a LISTA estiver aberta, re-renderizar a lista
+    // (não voltar à página de cartões inicial) — senão uma atualização em tempo real
+    // atira o utilizador de volta ao início enquanto pesquisa.
+    if(id==='lista-os'){
+      const _lv=document.getElementById('os-lista-view');
+      if(_lv && _lv.style.display!=='none'){ if(typeof osRenderLista==='function') osRenderLista(); }
+      else { if(typeof osRenderHomeCards==='function') osRenderHomeCards(); }
+    }
     if(id==='clientes-os')   osRenderClientes();
     if(id==='administradoras') renderAdministradoras();
     if(id==='minhas-os')     osRenderMinhas();
-    if(id==='relat-pesquisa'){ rpVoltarHome(); }
+    if(id==='relat-pesquisa'){
+      const _rlv=document.getElementById('rp-lista-view');
+      if(_rlv && _rlv.style.display!=='none'){ if(typeof rpRender==='function') rpRender(); }
+      else { if(typeof rpRenderHomeCards==='function') rpRenderHomeCards(); }
+    }
   }
+  // Refrescar pesquisas de cliente abertas quando os dados chegam/atualizam,
+  // para o cliente aparecer à primeira sem ser preciso reescrever.
+  try{ hgRefrescarPesquisasAbertas(); }catch(_){}
+}
+
+// Re-executa uma pesquisa de cliente que esteja aberta, para refletir dados recém-carregados
+function hgRefrescarPesquisasAbertas(){
+  const _run=(inpId, resId, fn)=>{
+    const inp=document.getElementById(inpId), res=document.getElementById(resId);
+    if(inp && inp.value && inp.value.trim().length>=2 && res && res.style.display!=='none'){ try{ fn(inp.value); }catch(_){} }
+  };
+  if(typeof agClienteBuscar==='function'){
+    _run('ag-cliente-busca','ag-cliente-resultados', v=>agClienteBuscar(v,'ag'));
+    _run('lista-cliente-busca','lista-cliente-resultados', v=>agClienteBuscar(v,'lista'));
+  }
+  if(typeof ncSearch==='function') _run('os-cli-search','os-cli-sr-list', ncSearch);
+  if(typeof osGlobalSearch==='function') _run('global-search','search-results', osGlobalSearch);
 }
 
 // ─── CRUD helpers ─────────────────────────────────────────────
@@ -5346,7 +5378,7 @@ function renderRecibos(){
   const ate = document.getElementById('rec-ate')?.value||'';
   const tec = document.getElementById('rec-tec')?.value||'';
   const nif = (document.getElementById('rec-nif')?.value||'').trim();
-  const q   = (document.getElementById('rec-q')?.value||'').toLowerCase().trim();
+  const q   = window.hgNorm(document.getElementById('rec-q')?.value||'');
 
   if(de)  recs=recs.filter(r=>(r.date||'')>=de);
   if(ate) recs=recs.filter(r=>(r.date||'')<=ate);
@@ -5354,7 +5386,7 @@ function renderRecibos(){
   if(nif) recs=recs.filter(r=>recNif(r).includes(nif));
   if(q)   recs=recs.filter(r=>{
     const campos=[r.id,r.client,r.service,r.tech,r.osId,recNif(r)];
-    return campos.map(x=>String(x||'').toLowerCase()).some(s=>s.includes(q));
+    return window.hgNorm(campos.filter(x=>x!=null).join(' ')).includes(q);
   });
 
   // Ordenar por data (mais recente primeiro)
@@ -11594,10 +11626,10 @@ function agClienteBuscar(termo, ctx){
   ctx = ctx || 'ag';
   const boxId = ctx==='lista' ? 'lista-cliente-resultados' : 'ag-cliente-resultados';
   const box=document.getElementById(boxId); if(!box) return;
-  const q=(termo||'').trim().toLowerCase();
+  const q=window.hgNorm(termo);
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
 
-  const norm=s=>String(s||'').toLowerCase();
+  const norm=s=>window.hgNorm(s);
   const qDig=q.replace(/\D/g,'');   // dígitos, para comparar NIF/telefone
   const clientes=(window.DB.clientes||[]).filter(c=>{
     if(norm(c.nome).includes(q)) return true;
@@ -12897,10 +12929,10 @@ function osRenderLista(){
   }
   const fEstado=document.getElementById('os-filter-estado')?.value||'';
   const fTec=document.getElementById('os-filter-tec')?.value||'';
-  const fSearch=(document.getElementById('os-search')?.value||'').toLowerCase().trim();
+  const fSearch=window.hgNorm(document.getElementById('os-search')?.value||'');
   const fDe=document.getElementById('os-filter-de')?.value||'';
   const fAte=document.getElementById('os-filter-ate')?.value||'';
-  const fLocal=(document.getElementById('os-filter-local')?.value||'').toLowerCase().trim();
+  const fLocal=window.hgNorm(document.getElementById('os-filter-local')?.value||'');
   let os=[...(window.DB.ordens||[])];
   if(fEstado) os=os.filter(o=>o.estado===fEstado);
   if(fTec) os=os.filter(o=>(o.tecnicos||[]).includes(fTec));
@@ -12908,14 +12940,14 @@ function osRenderLista(){
   if(fAte) os=os.filter(o=>(o.data||'')<=fAte);
   if(fLocal) os=os.filter(o=>{
     const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
-    const loc=[cli?.srvLocalidade,cli?.localidade,cli?.srvCp,cli?.cp].filter(Boolean).join(' ').toLowerCase();
+    const loc=window.hgNorm([cli?.srvLocalidade,cli?.localidade,cli?.srvCp,cli?.cp].filter(Boolean).join(' '));
     return loc.includes(fLocal);
   });
   os.sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.horaIni||'').localeCompare(a.horaIni||''));
   if(fSearch) os=os.filter(o=>{
     const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
     const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
-    const alvo=[o.id, cli?.nome, o.clienteNome, o.clienteNomeSnapshot, o.contactNome, cli?.tel, cli?.telemovel, o.contactTel, o.telefone, srv?.nome, o.estado].filter(Boolean).join(' ').toLowerCase();
+    const alvo=window.hgNorm([o.id, cli?.nome, cli?.nif, o.clienteNome, o.clienteNomeSnapshot, o.contactNome, cli?.tel, cli?.telemovel, o.contactTel, o.telefone, srv?.nome, o.estado].filter(Boolean).join(' '));
     return alvo.includes(fSearch);
   });
   tbody.innerHTML=os.map(o=>{
@@ -13434,6 +13466,7 @@ function osAbrirDetalhe(id){
           ${o.assinaturaCliente?`<div style="text-align:center;"><div style="font-size:10px;color:#94a3b8;font-weight:700;margin-bottom:4px;text-transform:uppercase;">Cliente</div><img src="${o.assinaturaCliente}" style="max-width:100%;max-height:60px;object-fit:contain;border:1px solid #e2e8f0;border-radius:4px;"></div>`:''}
         </div>`:''}
         ${o.assinadoPorOutro && o.assinanteNome ? `<div style="padding:0 14px 12px;font-size:11px;color:#b45309;">✍️ Assinado no local por <strong>${o.assinanteNome}</strong>${o.assinanteNif?' · NIF '+o.assinanteNif:''} — cliente não presente</div>` : ''}
+        ${o.declReabilAceite ? `<div style="margin:0 14px 12px;padding:8px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:11px;color:#7c2d12;">📄 <strong>Declaração de reabilitação aceite pelo cliente</strong>${o.declReabilEm?' · '+new Date(o.declReabilEm).toLocaleDateString('pt-PT'):''} — peritagem feita por outra empresa; contratação limitada à reabilitação da área indicada no relatório.</div>` : ''}
       </div>`}
     </div><!-- fim passos -->
 
@@ -14058,14 +14091,14 @@ async function osEliminar(id){
 function osRenderClientes(){
   const tbody = document.getElementById('os-cli-tbody');
   if(!tbody) return;
-  const q    = (document.getElementById('cli-search')?.value||'').toLowerCase().trim();
+  const q    = window.hgNorm(document.getElementById('cli-search')?.value||'');
   const tipo = document.getElementById('cli-filter-tipo')?.value||'';
   let clientes = [...(window.DB.clientes||[])];
   if(q){
     const qNum = q.replace(/\D/g,''); // permite pesquisar só pelo número: "42" encontra CLI0042
     clientes = clientes.filter(cl=>{
       const numCli = String(parseInt(String(cl.id||'').replace(/\D/g,''),10)||'');
-      const alvo = (cl.nome+cl.nif+cl.email+cl.tel+cl.localidade+(cl.id||'')+numCli+'').toLowerCase();
+      const alvo = window.hgNorm((cl.nome||'')+' '+(cl.nif||'')+' '+(cl.email||'')+' '+(cl.tel||'')+' '+(cl.localidade||'')+' '+(cl.id||'')+' '+numCli);
       return alvo.includes(q) || (qNum && numCli===qNum);
     });
   }
@@ -17943,19 +17976,19 @@ function ncSearch(q){
     return;
   }
 
-  const ql = q.toLowerCase();
+  const ql = window.hgNorm(q);
   const qs = q.replace(/\s/g,'');
 
   const matches = (window.DB.clientes||[]).filter(c=>{
     return (
-      (c.nome||'').toLowerCase().includes(ql) ||
+      window.hgNorm(c.nome).includes(ql) ||
       (c.nif||'').replace(/\s/g,'').includes(qs) ||
       (c.tel||'').replace(/\s/g,'').includes(qs) ||
-      (c.email||'').toLowerCase().includes(ql) ||
-      (c.localidade||'').toLowerCase().includes(ql) ||
+      window.hgNorm(c.email).includes(ql) ||
+      window.hgNorm(c.localidade).includes(ql) ||
       (c.cp||'').includes(ql) ||
-      (c.condNome||'').toLowerCase().includes(ql) ||
-      (c.admNome||'').toLowerCase().includes(ql)
+      window.hgNorm(c.condNome).includes(ql) ||
+      window.hgNorm(c.admNome).includes(ql)
     );
   }).slice(0, 10);
 
@@ -18056,23 +18089,26 @@ function osCliSeleccionar(id){ ncSeleccionar(id); }
 function osGlobalSearch(q){
   const box=document.getElementById('search-results');
   if(!box) return;
-  q=q.trim().toLowerCase();
+  q=window.hgNorm(q);
   if(!q){ box.style.display='none'; return; }
+  const qDig=q.replace(/\D/g,'');
   const results=[];
-  // Pesquisar em clientes (NIF, email, nome)
+  // Pesquisar em clientes (nome, NIF, email, telefone, localidade — por qualquer parte)
   (window.DB.clientes||[]).forEach(cl=>{
-    if(cl.nif?.replace(/\s/g,'').includes(q.replace(/\s/g,''))||
-       cl.email?.toLowerCase().includes(q)||
-       cl.nome?.toLowerCase().includes(q)){
+    const alvo=window.hgNorm([cl.nome, cl.email, cl.localidade].filter(Boolean).join(' '));
+    const alvoDig=(String(cl.nif||'')+String(cl.tel||'')).replace(/\D/g,'');
+    if(alvo.includes(q) || (qDig && alvoDig.includes(qDig))){
       results.push({type:'cli',id:cl.id,title:cl.nome,sub:`NIF: ${cl.nif||'—'} · ${cl.email||'—'} · ${cl.tel||'—'}`});
     }
   });
-  // Pesquisar em OS (nº OS, NIF via cliente, email via cliente)
+  // Pesquisar em OS (nº OS, cliente, serviço)
   (window.DB.ordens||[]).forEach(o=>{
     const cli=(window.DB.clientes||[]).find(x=>x.id===o.clienteId);
     const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId);
-    const matchOS=o.id.toLowerCase().includes(q);
-    const matchCli=cli&&(cli.nif?.replace(/\s/g,'').includes(q.replace(/\s/g,''))||cli.email?.toLowerCase().includes(q)||cli.nome?.toLowerCase().includes(q));
+    const matchOS=window.hgNorm(o.id).includes(q);
+    const cliAlvo=window.hgNorm([cli?.nome, cli?.email, srv?.nome].filter(Boolean).join(' '));
+    const cliDig=(String(cli?.nif||'')+String(cli?.tel||'')).replace(/\D/g,'');
+    const matchCli=cli&&(cliAlvo.includes(q)||(qDig&&cliDig.includes(qDig)));
     if(matchOS||matchCli){
       results.push({type:'os',id:o.id,title:`${o.id} — ${cli?.nome||'—'}`,sub:`${o.data} ${o.horaIni} · ${srv?.nome||'—'} · €${osFmt(o.total)}`});
     }
@@ -22044,6 +22080,21 @@ async function agRecMarcarPago(id){
         <div style="font-size:11px;color:var(--text3);margin-top:4px;text-align:center;" id="os-tec-nome-label"></div>
       </div>
 
+      <!-- DECLARAÇÃO DE RESPONSABILIDADE — só para serviços de reabilitação de tubagem -->
+      <div id="os-decl-reabil" style="display:none;margin-bottom:16px;">
+        <div class="fsec">📄 Declaração de Responsabilidade — Reabilitação de Tubagem</div>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px 16px;font-size:12px;color:#7c2d12;line-height:1.55;">
+          <div style="font-weight:800;margin-bottom:8px;color:#9a3412;">O cliente declara ter conhecimento e aceitar que:</div>
+          <div style="margin-bottom:6px;">1. O serviço de <strong>peritagem / deteção</strong> (identificação da anomalia e da zona a intervencionar) foi realizado por <strong>outra empresa</strong>, cujo relatório serve de base a esta intervenção.</div>
+          <div style="margin-bottom:6px;">2. A nossa empresa foi contratada <strong>exclusivamente para reabilitar a área indicada nesse relatório</strong>, não tendo realizado nem sendo responsável pela peritagem ou pelo diagnóstico da origem do problema.</div>
+          <div style="margin-bottom:6px;">3. Caso o problema <strong>persista</strong> ou surja em local diferente do indicado, o cliente deve <strong>contactar a empresa que efetuou a peritagem</strong>, para verificação da existência de novo problema ou de anomalia não detetada na peritagem inicial.</div>
+          <div>4. Qualquer reclamação relativa à <strong>origem, localização ou diagnóstico</strong> do problema deve ser dirigida à <strong>empresa responsável pela peritagem</strong>.</div>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;color:#7c2d12;margin-top:10px;font-weight:700;">
+          <input type="checkbox" id="os-decl-reabil-chk" style="margin-top:2px;flex-shrink:0;"> Li e aceito a declaração acima. Confirmo que a peritagem foi feita por outra empresa e que a contratação se limita à reabilitação da área indicada no respetivo relatório.
+        </label>
+      </div>
+
       <!-- ASSINATURA CLIENTE -->
       <div class="fsec">✍️ Assinatura do Cliente</div>
       <div style="margin-bottom:16px;">
@@ -22744,7 +22795,7 @@ function rpRender(){
   const _btnRel=document.getElementById('rp-btn-relacao');
   if(_btnRel) _btnRel.style.display=['admin','gerente','supervisor','comercial'].includes(window.currentUser?.role)?'':'none';
   const filterEst = _rpFiltroEstado || document.getElementById('rp-filter-estado')?.value||'';
-  const q = (document.getElementById('rp-search')?.value||'').toLowerCase().trim();
+  const q = window.hgNorm(document.getElementById('rp-search')?.value||'');
 
   // Ordenar OS concluídas — agendas ainda não realizadas não entram nesta listagem
   let ordens = [...(window.DB.ordens||[])].filter((filterEst==='sem_rel_todos'||filterEst==='submetido_tecnico') ? rpTrabalhoFeitoEstado : rpEntraPipeline);
@@ -22790,7 +22841,11 @@ function rpRender(){
   if(q){
     ordens = ordens.filter(os=>{
       const cli=(window.DB.clientes||[]).find(x=>x.id===os.clienteId);
-      return (cli?.nome||os.id).toLowerCase().includes(q)||os.id.toLowerCase().includes(q);
+      const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId);
+      const tecs=(os.tecnicos||[]).map(id=>(window.DB.users||[]).find(u=>u.id===id)?.name||'').join(' ');
+      // Pesquisar por qualquer parte: nº OS, cliente, NIF, serviço, técnico, localidade
+      const alvo=window.hgNorm([os.id, cli?.nome, cli?.nif, cli?.localidade, srv?.nome, tecs].filter(Boolean).join(' '));
+      return alvo.includes(q);
     });
   }
 
@@ -27296,6 +27351,13 @@ function osAbrirConcluir(osId){
     if(typeof osToggleAssinante==='function') osToggleAssinante();
   }
 
+  // Declaração de responsabilidade: só para serviços de reabilitação de tubagem (CIPP, Spray Epóxi, etc.)
+  const _ehReabilDecl = (typeof osServicoValorFixo==='function' && osServicoValorFixo(os));
+  const _declBloco=document.getElementById('os-decl-reabil');
+  const _declChk=document.getElementById('os-decl-reabil-chk');
+  if(_declBloco) _declBloco.style.display = _ehReabilDecl ? '' : 'none';
+  if(_declChk) _declChk.checked = _ehReabilDecl ? !!os.declReabilAceite : false;
+
   osCalcHorasConc();
   openMo('mo-os-concluir');
 
@@ -27445,6 +27507,18 @@ async function osConcluirComAssinaturas(){
   const assTec=osCanvasToDataURL('canvas-tec') || os.assinaturaTecnico || '';
   if(!assTec){ toast('A assinatura do técnico é obrigatória!','⚠️'); return; }
 
+  // Declaração de responsabilidade (reabilitação de tubagem): obrigatória quando aplicável
+  const _ehReabilDecl = (typeof osServicoValorFixo==='function' && osServicoValorFixo(os));
+  if(_ehReabilDecl){
+    const _declChk=document.getElementById('os-decl-reabil-chk');
+    if(_declChk && !_declChk.checked){
+      toast('O cliente tem de aceitar a Declaração de Responsabilidade da reabilitação.','🚫');
+      const _db=document.getElementById('os-decl-reabil');
+      if(_db){ _db.scrollIntoView({behavior:'smooth',block:'center'}); _db.style.outline='3px solid #dc2626'; _db.style.borderRadius='10px'; setTimeout(()=>{_db.style.outline='';},3000); }
+      return;
+    }
+  }
+
   // Quem assina (cliente ou, se não presente, a pessoa no local)
   const _assOutro = document.getElementById('os-ass-outro')?.checked;
   const _assNome = (document.getElementById('os-ass-nome')?.value||'').trim();
@@ -27575,6 +27649,10 @@ async function osConcluirComAssinaturas(){
     assinadoPorOutro: !!_assOutro,
     assinanteNome: _assOutro ? _assNome : '',
     assinanteNif:  _assOutro ? _assNif  : '',
+    // Declaração de responsabilidade da reabilitação (peritagem feita por outra empresa)
+    declReabilAceite: _ehReabilDecl ? true : (os.declReabilAceite||false),
+    declReabilEm: _ehReabilDecl ? (os.declReabilEm||new Date().toISOString()) : (os.declReabilEm||''),
+    declReabilTexto: _ehReabilDecl ? 'Peritagem realizada por outra empresa; contratação limitada à reabilitação da área indicada no respetivo relatório; qualquer persistência ou reclamação sobre origem/diagnóstico deve ser dirigida à empresa que efetuou a peritagem.' : (os.declReabilTexto||''),
     pagamento,
     pausas:(os.pausas||[]).map(p=>(p&&!p.fim)?{...p,fim:new Date().toISOString()}:p),
     pausaAtiva:false,
@@ -33675,7 +33753,7 @@ window.cliHistorico = function(cliId){
 
   // ── Render da lista ─────────────────────────────────────────────
   function render(){
-    const q   = (document.getElementById('cli-hist-q')?.value||'').toLowerCase().trim();
+    const q   = window.hgNorm(document.getElementById('cli-hist-q')?.value||'');
     const ano = document.getElementById('cli-hist-ano')?.value||'';
     const est = document.getElementById('cli-hist-est')?.value||'';
     const fRel= document.getElementById('cli-hist-rel')?.value||'';
@@ -33695,9 +33773,9 @@ window.cliHistorico = function(cliId){
     if(q){
       lista = lista.filter(o=>{
         const rel = relDe(o.id); const c = rel?.campos||{};
-        const alvo = [o.id, o.data, srvNome(o), tecNomes(o), o.obs, o.notaInterna,
+        const alvo = window.hgNorm([o.id, o.data, srvNome(o), tecNomes(o), o.obs, o.notaInterna,
                       c.tipoProblema, c.localProblema, c.conclusao, c.descritivo, c.detalhamento, c.sugestao]
-                      .filter(Boolean).join(' ').toLowerCase();
+                      .filter(Boolean).join(' '));
         return alvo.includes(q);
       });
     }

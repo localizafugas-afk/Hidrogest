@@ -1659,6 +1659,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="gcal-tec-legend" id="gcal-legend" style="flex-shrink:0;"></div>
     <input type="date" id="os-agenda-goto" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:11px;cursor:pointer;color:var(--text);background:#fff;flex-shrink:0;" onchange="osAgendaGoto(this.value)" title="Ir para data">
     <button onclick="agendaAnalisarAbrirModal()" style="background:#f0fdf4;color:#15803d;border:1.5px solid #86efac;border-radius:16px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;">🧠 Horário</button>
+    <button id="btn-limpar-dup" onclick="osAbrirLimparDuplicados()" style="display:none;background:#fef2f2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:16px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;white-space:nowrap;" title="Encontrar e remover agendamentos duplicados">🧹 Duplicados</button>
     <button style="background:#1a73e8;color:#fff;border:none;border-radius:16px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap;" onclick="osOpenModal({data:osToday()})">+ Nova OS</button>
     <button title="Ecrã completo" onclick="osAgendaToggleFullscreen()" style="border:none;background:none;cursor:pointer;font-size:18px;padding:2px 4px;color:#5f6368;flex-shrink:0;" id="ag-fs-btn">⛶</button>
   </div>
@@ -1730,6 +1731,18 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
 
   </div>
+  </div>
+</div>
+
+<!-- MODAL LIMPAR DUPLICADOS -->
+<div class="mo" id="mo-limpar-dup">
+  <div class="md">
+    <div class="mh"><div class="mh-title">🧹 Limpar Agendamentos Duplicados</div><button class="mc" onclick="closeMo('mo-limpar-dup')">×</button></div>
+    <div class="mb" id="limpar-dup-body"></div>
+    <div class="mf">
+      <button class="btn btn-ghost" onclick="closeMo('mo-limpar-dup')">Fechar</button>
+      <button class="btn btn-primary" id="btn-exec-limpar-dup" style="background:#dc2626;display:none;" onclick="osExecutarLimparDuplicados()">🗑 Cancelar as cópias</button>
+    </div>
   </div>
 </div>
 
@@ -10967,6 +10980,15 @@ function _osPreencherResumoCliente(cli){
 }
 
 async function osSalvar(){
+  // ── Proteção contra duplo-envio ───────────────────────────────
+  // Impede criar vários agendamentos (cada um com número de OS diferente) quando o
+  // botão "Guardar OS" é tocado mais do que uma vez, ou enquanto a verificação de
+  // distância (que vai à rede) decorre. O finally no fim liberta sempre a proteção.
+  if(window._osSalvandoAgora){ try{ if(typeof toast==='function') toast('⏳ Já a guardar o agendamento — aguarde um instante.','⏳'); }catch(_){} return; }
+  window._osSalvandoAgora = true;
+  const _osSalvarBtns = Array.from(document.querySelectorAll('button[onclick="osSalvar()"]'));
+  _osSalvarBtns.forEach(b=>{ b.disabled=true; b.dataset._txt=b.textContent; b.textContent='⏳ A guardar...'; });
+  try{
   // Ler cliId do select OU da variável global (cliente recém criado)
   // Forçar sincronização do cliente pendente antes de ler o valor
   let cliId = document.getElementById('os-cli-sel').value || window._osCliIdPendente || '';
@@ -11367,6 +11389,11 @@ async function osSalvar(){
     console.error('osSalvar falhou:', e);
     toast('Erro ao guardar OS: '+(e.message||e),'❌');
   }
+  } finally {
+    // Libertar a proteção de duplo-envio e repor o botão em TODOS os caminhos
+    window._osSalvandoAgora = false;
+    _osSalvarBtns.forEach(b=>{ b.disabled=false; if(b.dataset._txt){ b.textContent=b.dataset._txt; delete b.dataset._txt; } });
+  }
 }
 
 // ── Notificações ───────────────────────────────────────────────
@@ -11733,6 +11760,94 @@ function agAbrirFichaCliente(clienteId){
 }
 
 function osAgendaChangeWeek(dir){ window.osAgendaWeekOffset+=dir; osRenderAgenda(); }
+
+// ── Limpeza de agendamentos duplicados ───────────────────────────
+// Identifica grupos de OS com o MESMO cliente + data + hora de início + serviço
+// (assinatura de um agendamento real único). Mantém o ORIGINAL (número mais baixo)
+// e marca as cópias como CANCELADAS — não apaga nada, é reversível, e saem da agenda.
+function _osDuplicadosGrupos(){
+  const ordens=(window.DB.ordens||[]).filter(o=>o && o.id && o.estado!=='cancelada' && o.estado!=='os_fechada' && !o.canceladoPeloCliente);
+  const grupos=new Map();
+  ordens.forEach(o=>{
+    // Assinatura do agendamento: cliente + data + hora início + serviço
+    const sig=[o.clienteId||o.clienteNomeSnapshot||'', o.data||'', o.horaIni||'', o.servicoId||''].join('|');
+    if(!o.clienteId && !o.data) return; // ignorar registos sem dados mínimos
+    if(!grupos.has(sig)) grupos.set(sig, []);
+    grupos.get(sig).push(o);
+  });
+  // Só grupos com mais de 1 OS = duplicados
+  const dups=[];
+  grupos.forEach((arr,sig)=>{
+    if(arr.length<2) return;
+    // Ordenar por nº de OS (numérico) — o mais baixo é o original a manter
+    arr.sort((a,b)=>(parseInt(String(a.id).replace(/\D/g,''),10)||0)-(parseInt(String(b.id).replace(/\D/g,''),10)||0));
+    dups.push({ sig, manter:arr[0], remover:arr.slice(1) });
+  });
+  return dups;
+}
+function osAbrirLimparDuplicados(){
+  if(!['admin','gerente','supervisor'].includes(window.currentUser?.role)){ toast('Sem permissão.','🚫'); return; }
+  const grupos=_osDuplicadosGrupos();
+  const totalRemover=grupos.reduce((s,g)=>s+g.remover.length,0);
+  const cliNome=id=>(window.DB.clientes||[]).find(c=>c.id===id)?.nome||'—';
+  const srvNome=id=>(window.DB.servicos||[]).find(s=>s.id===id)?.nome||'—';
+  let html;
+  if(!grupos.length){
+    html=`<div style="padding:30px;text-align:center;color:#16a34a;font-weight:700;">✅ Não foram encontrados agendamentos duplicados.</div>`;
+  } else {
+    html=`<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#7f1d1d;">
+      Encontrados <strong>${grupos.length}</strong> agendamento(s) com cópias — no total <strong>${totalRemover}</strong> cópia(s) a remover.
+      Mantém-se sempre o <strong>número de OS mais baixo</strong> (o original). As cópias são <strong>canceladas</strong> (não apagadas), por isso saem da agenda mas podem ser recuperadas se necessário.
+    </div>`;
+    html+=grupos.map(g=>{
+      const o=g.manter;
+      const dataFmt=o.data?String(o.data).split('-').reverse().join('/'):'—';
+      return `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px;">
+        <div style="font-weight:700;color:#1e3a5f;margin-bottom:4px;">${cliNome(o.clienteId)} · ${dataFmt} ${o.horaIni||''} · ${srvNome(o.servicoId)}</div>
+        <div style="color:#16a34a;">✅ Manter: <strong>${o.id}</strong></div>
+        <div style="color:#dc2626;">🗑 Cancelar cópias: ${g.remover.map(r=>r.id).join(', ')}</div>
+      </div>`;
+    }).join('');
+  }
+  const body=document.getElementById('limpar-dup-body');
+  if(body) body.innerHTML=html;
+  const btn=document.getElementById('btn-exec-limpar-dup');
+  if(btn) btn.style.display = grupos.length ? '' : 'none';
+  window._osDupGrupos=grupos;
+  openMo('mo-limpar-dup');
+}
+async function osExecutarLimparDuplicados(){
+  const grupos=window._osDupGrupos||[];
+  const totalRemover=grupos.reduce((s,g)=>s+g.remover.length,0);
+  if(!totalRemover){ toast('Nada a remover.','⚠️'); return; }
+  if(!confirm(`Cancelar ${totalRemover} cópia(s) duplicada(s)?\n\nOs originais são mantidos. As cópias ficam canceladas (reversível).`)) return;
+  const btn=document.getElementById('btn-exec-limpar-dup');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ A limpar...'; }
+  let feitos=0, falhas=0;
+  const now=new Date().toISOString();
+  for(const g of grupos){
+    for(const r of g.remover){
+      try{
+        await window.fsSet('ordens', r.id, {
+          ...r,
+          estado:'cancelada',
+          canceladoPeloCliente:false,
+          duplicadoDe:g.manter.id,
+          canceladoComoDuplicado:true,
+          obs:(r.obs?r.obs+'\n':'')+`[Cancelada como duplicado de ${g.manter.id} · ${new Date().toLocaleDateString('pt-PT')}]`,
+          alteradoEm:now, alteradoPor:window.currentUser?.id,
+        });
+        const idx=(window.DB.ordens||[]).findIndex(x=>x.id===r.id);
+        if(idx>=0) window.DB.ordens[idx]={...window.DB.ordens[idx], estado:'cancelada', duplicadoDe:g.manter.id, canceladoComoDuplicado:true};
+        feitos++;
+      }catch(e){ console.error('limpar dup', r.id, e); falhas++; }
+    }
+  }
+  if(typeof auditLog==='function') auditLog('os_duplicados_limpos', `${feitos} cópia(s) canceladas como duplicados`+(falhas?` · ${falhas} falha(s)`:''));
+  toast(`✅ ${feitos} cópia(s) cancelada(s).`+(falhas?` ⚠️ ${falhas} falharam.`:''),'🧹',6000);
+  if(typeof osRenderAgenda==='function') osRenderAgenda();
+  closeMo('mo-limpar-dup');
+}
 function osAgendaGoto(dateStr){
   if(!dateStr) return;
   // Calcular quantas semanas de offset desde hoje
@@ -11752,6 +11867,9 @@ function osAgendaGoto(dateStr){
 }
 
 function osRenderAgenda(){
+  // Botão "Limpar duplicados" visível só para a gestão
+  const _btnDup=document.getElementById('btn-limpar-dup');
+  if(_btnDup) _btnDup.style.display = ['admin','gerente','supervisor'].includes(window.currentUser?.role) ? '' : 'none';
   // Se DB.ferias vazio, iniciar carregamento em background
   if(!(window.DB.ferias||[]).length && typeof _feriasFallbackLoad==='function'){
     _feriasFallbackLoad();

@@ -2,6 +2,7 @@
 <html lang="pt">
 <head>
 <script>
+// v16.31 — Mapa de Deslocação: fins de semana (sáb/dom) saem sempre da sede (Rua do Taxa, Braga) com ida e volta a cada local; entram as viagens alojamento→casa (sexta) e casa→alojamento (segunda); troços com CPs iguais deixam de dar 0 km.
 // v16.09 — Relatório do técnico simplificado: 1 linha por teste (🔴🟢⚪), foto/nota só quando precisa, 'Tudo sem anomalia' por grupo, contador, 1 botão de enviar.
 // v16.16 — 'Onde aparece o problema' e locais inspecionados: o técnico escreve (sem botões pré-definidos).
 // v16.15 — 'Fração inspecionada' + lista alargada de locais inspecionáveis.
@@ -1393,7 +1394,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.30<br>
+      HidroGest v16.31<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1418,7 +1419,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.30<br>
+      HidroGest v16.31<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -34806,6 +34807,9 @@ window.cliHistoricoImprimir = function(cliId){
   const FATOR      = 1.3;     // linha reta -> estrada (aprox.); 1.0 = linha reta
   const ROUND_TRIP = true;    // incluir regresso a casa
   const EMPRESA    = 'Localiza Fugas · Valentim Fialho – Unipessoal, Lda.';
+  // v16.31 — fins de semana: base = sede (Rua do Taxa, Braga), ida e volta a cada local
+  const SEDE       = { cp: '4710-448', cidade: 'Braga', morada: 'Rua do Taxa 13, 4710-448 Braga' };
+  const SEDE_LABEL = '🏢 Sede — Rua do Taxa 13, Braga (4710-448)';
 
   const geoCP     = (typeof window.cpParaCoordenadas === 'function') ? window.cpParaCoordenadas
                     : (typeof cpParaCoordenadas === 'function' ? cpParaCoordenadas : null);
@@ -34837,6 +34841,7 @@ window.cliHistoricoImprimir = function(cliId){
     const prin = [cli.rua, cli.cp, cli.localidade].filter(Boolean).join(', ');
     return (cli.outraMorada && srv) ? srv : (prin || srv || cli.morada || '');
   };
+  const moradaCompletaDe = o => { const m = moradaDe(o); return m ? m.replace(/\s+/g, ' ') + ', Portugal' : ''; };
   const cpDaOS = o => { const cli = clienteById(o.clienteId); if (cli) { const cp = cli.srvCp || cli.cp; if (cp) return cp; } return o.srvCp || o.cp || o.codigoPostal || ''; };
 
   // ---- coordenadas ----
@@ -34857,12 +34862,26 @@ window.cliHistoricoImprimir = function(cliId){
       l.push({ cp: u.cpTemp, cidade: u.cidadeTemp || '', de: u.cpTempDesde || '', ate: u.cpTempAte || '' });
     return l;
   }
-  function baseDoDia(u, data) {
-    const est = estadiasDe(u)
+  function estadiaDoDia(u, data) {
+    return estadiasDe(u)
       .filter(e => e.cp && (!e.de || data >= e.de) && (!e.ate || data <= e.ate))
-      .sort((x, y) => String(y.de || '').localeCompare(String(x.de || '')))[0];
+      .sort((x, y) => String(y.de || '').localeCompare(String(x.de || '')))[0] || null;
+  }
+  function baseDoDia(u, data) {
+    const est = estadiaDoDia(u, data);
     if (est) return { cp: est.cp, cidade: est.cidade || '', temp: true };
     return { cp: u.casaCP || u.cp || '', cidade: u.cidade || '', temp: false };
+  }
+  // datas ISO (AAAA-MM-DD) sem problemas de fuso horário
+  const diaSemana = d => new Date(d + 'T12:00:00Z').getUTCDay();          // 0=dom … 5=sex, 6=sáb
+  const somaDias  = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  // O dia é de fim de semana "de deslocado" quando é sáb/dom e o funcionário está alojado
+  // na sexta anterior, no próprio dia ou na segunda seguinte → base = sede de Braga.
+  function fimDeSemanaDeslocado(u, data) {
+    const w = diaSemana(data);
+    if (w !== 6 && w !== 0) return false;
+    const sex = somaDias(data, w === 6 ? -1 : -2), seg = somaDias(data, w === 6 ? 2 : 1);
+    return !!(estadiaDoDia(u, sex) || estadiaDoDia(u, data) || estadiaDoDia(u, seg));
   }
   const baseLabel = b => (b.temp ? '🏨 Alojamento' : '🏠 Casa') + ' — ' + [b.cidade, b.cp ? '(' + b.cp + ')' : ''].filter(Boolean).join(' ');
   const _cacheCP = {};
@@ -34872,6 +34891,27 @@ window.cliHistoricoImprimir = function(cliId){
     let r = null;
     try { const c = await geoCP(cp); if (c && isFinite(c.lat)) r = { lat: +c.lat, lng: +c.lng }; } catch (e) {}
     return (_cacheCP[cp] = r);
+  }
+
+  // Distância de um troço. Se a tabela de CPs põe os dois pontos no mesmo sítio (ex.: tudo o que é
+  // Braga cai no mesmo ponto → 0 km), tenta a morada completa para não ficar a zeros.
+  const _espera = ms => new Promise(r => setTimeout(r, ms));
+  async function coordsMorada(m) {
+    if (!m || !geoMorada) return null;
+    const emCache = (typeof rotGeoCache !== 'undefined') && rotGeoCache[m];
+    if (!emCache) await _espera(1100);                       // Nominatim: máx. 1 pedido/segundo
+    try { const c = await geoMorada(m); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {}
+    const cp7 = (m.match(/\d{4}-\d{3}/) || [])[0];           // plano B: só o código postal completo
+    if (cp7 && cp7 !== m) { try { await _espera(1100); const c = await geoMorada(cp7 + ', Portugal'); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
+    return null;
+  }
+  async function kmTroco(a, b, moradaA, moradaB) {
+    let km = haversineKm(a, b) * FATOR;
+    if (km < 1 && moradaA && moradaB && moradaA !== moradaB) {
+      const ca = await coordsMorada(moradaA), cb = await coordsMorada(moradaB);
+      if (ca && cb) km = Math.max(km, haversineKm(ca, cb) * FATOR);
+    }
+    return round1(km);
   }
 
   // ---- OS de um funcionario no periodo ----
@@ -34896,23 +34936,44 @@ window.cliHistoricoImprimir = function(cliId){
     for (const data of Object.keys(porData).sort()) {
       const lista = porData[data].sort((a, b) =>
         String(a.horaIni || a.hora || '').localeCompare(String(b.horaIni || b.hora || '')));
+      // Fim de semana de funcionário deslocado: sempre da sede (Rua do Taxa) ao local, ida e volta
+      if (fimDeSemanaDeslocado(u, data)) {
+        const sedeC = await coordsCP(SEDE.cp);
+        if (!sedeC) semBase++;
+        for (const o of lista) {
+          const p = await coordsOS(o);
+          const destLabel = moradaDe(o) || clienteDe(o) || '—';
+          if (!p || !sedeC) {
+            if (!p) semCoord++;
+            linhas.push({ rank: 1, data, hora: o.horaIni || o.hora || '', de: SEDE_LABEL, para: destLabel, cliente: clienteDe(o), km: 0, eur: 0, semPonto: true });
+            continue;
+          }
+          const km = await kmTroco(sedeC, p, SEDE.morada, moradaCompletaDe(o));
+          const eur = round2(km * VALOR_KM);
+          linhas.push({ rank: 1, data, hora: o.horaIni || o.hora || '', de: SEDE_LABEL, para: destLabel, cliente: clienteDe(o), km, eur, semPonto: false });
+          linhas.push({ rank: 1, data, hora: '', de: destLabel, para: SEDE_LABEL, cliente: 'Regresso à sede (fim de semana)', km, eur, semPonto: false });
+          totKm += 2 * km; totEur += 2 * eur;
+        }
+        continue;
+      }
       const base = baseDoDia(u, data);
       const baseC = await coordsCP(base.cp);
       if (!baseC) semBase++;
-      let ant = baseC, antLabel = baseLabel(base);
+      const baseMorada = base.cp ? (base.cp + ' ' + (base.cidade || '') + ', Portugal') : '';
+      let ant = baseC, antLabel = baseLabel(base), antMorada = baseMorada;
       for (const o of lista) {
         const p = await coordsOS(o);
         const destLabel = moradaDe(o) || clienteDe(o) || '—';
         let km = 0;
-        if (p) { if (ant) km = haversineKm(ant, p) * FATOR; } else { semCoord++; }
+        if (p) { if (ant) km = await kmTroco(ant, p, antMorada, moradaCompletaDe(o)); } else { semCoord++; }
         km = round1(km);
         const eur = round2(km * VALOR_KM);
         linhas.push({ rank: 1, data, hora: o.horaIni || o.hora || '', de: antLabel, para: destLabel, cliente: clienteDe(o), km, eur, semPonto: !p });
         totKm += km; totEur += eur;
-        if (p) { ant = p; antLabel = destLabel; }
+        if (p) { ant = p; antLabel = destLabel; antMorada = moradaCompletaDe(o); }
       }
       if (ROUND_TRIP && baseC && ant) {
-        const km = round1(haversineKm(ant, baseC) * FATOR);
+        const km = await kmTroco(ant, baseC, antMorada, baseMorada);
         const eur = round2(km * VALOR_KM);
         linhas.push({ data, hora: '', de: antLabel, para: baseLabel(base), cliente: base.temp ? 'Regresso ao alojamento' : 'Regresso a casa', km, eur, semPonto: false, rank: 1 });
         totKm += km; totEur += eur;
@@ -34939,6 +35000,28 @@ window.cliHistoricoImprimir = function(cliId){
         viagem(e.de, homeLbl, stLbl, homeC, stC, 'Viagem de ida (início da deslocação)', 0);
       if (e.ate && e.ate >= ini && e.ate <= fim && e.ate <= hojeISO)
         viagem(e.ate, stLbl, homeLbl, stC, homeC, 'Viagem de volta (fim da deslocação)', 2);
+    }
+    // Fins de semana em casa: sexta (alojamento → casa) e segunda (casa → alojamento) entram sempre na conta
+    {
+      const homeDest = homeCP ? homeLbl : SEDE_LABEL;
+      const homeCoord = homeCP ? homeC : await coordsCP(SEDE.cp);
+      const dias = [];
+      for (let d = ini; d <= fim; d = somaDias(d, 1)) { const w = diaSemana(d); if (w === 5 || w === 1) dias.push(d); }
+      for (const d of dias) {
+        const sex = diaSemana(d) === 5 ? d : somaDias(d, -3), seg = diaSemana(d) === 1 ? d : somaDias(d, 3);
+        const eSex = estadiaDoDia(u, sex), eSeg = estadiaDoDia(u, seg);
+        if (!eSex || !eSeg) continue;      // fim da deslocação / início da deslocação já têm a sua viagem própria
+        const est = diaSemana(d) === 5 ? eSex : eSeg;
+        const stC = await coordsCP(est.cp);
+        const stLbl = baseLabel({ temp: true, cp: est.cp, cidade: est.cidade || '' });
+        const ok = !!(stC && homeCoord);
+        const km = ok ? round1(haversineKm(stC, homeCoord) * FATOR) : 0;
+        const eur = round2(km * VALOR_KM);
+        if (!ok) semBase++;
+        if (diaSemana(d) === 5) linhas.push({ rank: 2, data: d, hora: '', de: stLbl, para: homeDest, cliente: 'Viagem a casa (fim de semana)', km, eur, semPonto: !ok });
+        else                    linhas.push({ rank: 0, data: d, hora: '', de: homeDest, para: stLbl, cliente: 'Viagem de volta ao alojamento (fim de semana)', km, eur, semPonto: !ok });
+        totKm += km; totEur += eur;
+      }
     }
     linhas.forEach((l, i) => l._i = i);
     linhas.sort((x, y) => x.data.localeCompare(y.data) || x.rank - y.rank || x._i - y._i);
@@ -34968,7 +35051,7 @@ window.cliHistoricoImprimir = function(cliId){
         <tfoot><tr><td colspan="5">TOTAL</td><td class="num">${totKm.toFixed(1)}</td><td class="num">${totEur.toFixed(2)} €</td></tr></tfoot>
       </table>
       <div class="ass"><div class="lin"><span>Data</span></div><div class="lin"><span>Assinatura do funcionário</span></div><div class="lin"><span>Assinatura da empresa</span></div></div>
-      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: ponto de saída → visitas → regresso. A base do dia é a casa do funcionário ou, nos dias em que está deslocado, a morada do alojamento. Inclui a viagem de ida (casa → alojamento) no 1.º dia da deslocação e a de volta no último dia. Distância estimada por código postal (linha reta × ${FATOR}).</div>
+      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: ponto de saída → visitas → regresso. A base do dia é a casa do funcionário ou, nos dias em que está deslocado, a morada do alojamento. Inclui a viagem de ida (casa → alojamento) no 1.º dia da deslocação e a de volta no último dia. Ao fim de semana (sábado e domingo) a base é a sede, Rua do Taxa 13, Braga, com ida e volta a cada local, e entram as viagens alojamento → casa (sexta) e casa → alojamento (segunda). Distância estimada por código postal (linha reta × ${FATOR}).</div>
     </section>`;
   }
 
@@ -35008,6 +35091,7 @@ window.cliHistoricoImprimir = function(cliId){
     w.document.close();
     const ov = document.getElementById('desl-ov'); if (ov) ov.remove();
   }
+  window._deslLinhas = linhasFuncionario;   // usado para testar o cálculo sem abrir o PDF
   window._deslGerar = async function () {
     const btn = document.getElementById('desl-gerar-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'A gerar…'; }

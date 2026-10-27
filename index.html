@@ -502,6 +502,29 @@ window.fsSet    = async (col, id, data) => {
     console.error('[fsSet] ID inválido:', col, id, data);
     return;
   }
+  // v16.05 — PROTEÇÃO DE PAGAMENTO: uma gravação genérica (guardar/editar OS ou recibo a partir de uma
+  // cópia em memória desatualizada) NUNCA pode desfazer um recebimento já dado.
+  // • OS: só deixa passar pago/faturaEmitida quando forem true. Se vierem false/vazios são retirados da
+  //   gravação (a OS grava em modo JUNTAR, por isso o valor já guardado no servidor mantém-se).
+  // • Recibo: se o recibo no servidor já está "paid" e a gravação traz outro estado, mantém "paid".
+  // Para ANULAR um recebimento de propósito usa-se fsSetMerge (não passa por aqui) — ex.: recAnularBaixa.
+  try{
+    if(col==='ordens' && data && typeof data==='object'){
+      data = Object.assign({}, data);
+      if(data.pago!==true){ delete data.pago; delete data.pagoEm; delete data.pagoPor; }
+      if(data.faturaEmitida!==true){ delete data.faturaEmitida; delete data.faturaEmitidaEm; }
+      if(data.pago===true){ data.baixaTravada=true; if(data.pagoEm) data.baixaPagoEm=data.pagoEm; }   // v16.05 — baixa travada
+    } else if(col==='recibos' && data && typeof data==='object' && data.status==='paid'){
+      data = Object.assign({}, data, { baixaTravada:true, baixaPagoEm: data.pagoEm||null });           // v16.05 — baixa travada
+    } else if(col==='recibos' && data && typeof data==='object' && data.status!=='paid'){
+      const _at = await getDoc(doc(db, col, id));
+      if(_at.exists() && _at.data().status==='paid'){
+        const _d = _at.data();
+        console.warn('[proteção de pagamento] recibo', id, 'já estava pago — mantido como pago.');
+        data = Object.assign({}, data, { status:'paid', pagoEm:_d.pagoEm||data.pagoEm||null, pagoPor:_d.pagoPor||data.pagoPor||null, pagoPorNome:_d.pagoPorNome||data.pagoPorNome||null });
+      }
+    }
+  }catch(_pe){ console.warn('[proteção de pagamento] não foi possível verificar:', _pe); }
   // v16.04 — OS gravam sempre em modo JUNTAR: uma gravação nunca apaga o que outro ecrã/telemóvel já guardou
   // (relatório do técnico, assinaturas, emails enviados, aceitação do cliente, etc.)
   try{ await setDoc(doc(db, col, id), data, col==='ordens' ? {merge:true} : {}); }
@@ -518,6 +541,27 @@ window.fsDel    = async (col, id)       => {
 };
 window.fsMeta   = saveMeta;
 window.fsSetMerge = async (col, id, data) => {
+  // v16.05 — BAIXA TRAVADA: depois de dada a baixa, nada a desfaz por acidente.
+  // • Qualquer gravação que marque pago/paid trava a baixa (baixaTravada:true).
+  // • Só um estorno DELIBERADO (que envia baixaTravada:false — "Anular recebimento"/"Desfazer") a pode retirar.
+  // • Gravação genérica de OS (muitos campos, ex.: {...os, estado}) nunca leva pago/faturada falsos.
+  if(data && typeof data==='object'){
+    const _estorno = data.baixaTravada===false;
+    if(col==='ordens'){
+      const _pk=['pago','pagoEm','pagoPor','faturaEmitida','faturaEmitidaEm','baixaTravada','baixaPagoEm'];
+      const _generica = Object.keys(data).some(k=>!_pk.includes(k));
+      data = Object.assign({}, data);
+      if(!_estorno && (_generica || data.pago===false || data.pago==null && 'pago' in data)){
+        if(data.pago!==true){ delete data.pago; delete data.pagoEm; delete data.pagoPor; }
+      }
+      if(!_estorno && _generica && data.faturaEmitida!==true){ delete data.faturaEmitida; delete data.faturaEmitidaEm; }
+      if(data.pago===true){ data.baixaTravada=true; if(data.pagoEm) data.baixaPagoEm=data.pagoEm; }
+    } else if(col==='recibos'){
+      data = Object.assign({}, data);
+      if(data.status==='paid'){ data.baixaTravada=true; if(data.pagoEm) data.baixaPagoEm=data.pagoEm; }
+      else if(data.status && !_estorno){ delete data.status; delete data.pagoEm; delete data.pagoPor; delete data.pagoPorNome; }
+    }
+  }
   try{ await setDoc(doc(db, col, id), data, {merge:true}); }
   catch(e){ _fsErro('gravar', col, e); throw e; }
 };
@@ -4003,6 +4047,13 @@ Localiza Fugas
                 <input class="fi" id="u-cidade-temp" placeholder="ex: Lisboa" autocomplete="off">
               </div>
             </div>
+            <div class="fg" style="margin:0 0 8px;">
+              <label>Desde</label>
+              <input class="fi" id="u-temp-desde" type="date">
+              <div style="font-size:10px;color:var(--text3);margin-top:3px;">
+                Primeiro dia em que o técnico dorme/parte desta morada. O mapa de deslocação usa-a como ponto de saída e de regresso.
+              </div>
+            </div>
             <div class="fg" style="margin:0;">
               <label>Válida até</label>
               <input class="fi" id="u-temp-ate" type="date">
@@ -5198,32 +5249,100 @@ function renderDashboard(){
     </div>
   </div>`;
 
-  dashStats.innerHTML=`${pendBanner}<div class="stats">
+  dashStats.innerHTML=`${pendBanner}<div style="font-weight:800;font-size:13px;color:var(--text2);margin:2px 0 10px;">📈 Acumulado total · todos os recebimentos</div><div class="stats">
     <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(despTotal)}</div><div class="sc-sub">total de custos</div></div>
   </div>`;
-  // Gráfico mensal
-  const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const now=new Date();
-  const monthData=Array.from({length:6},(_,i)=>{
-    const d=new Date(now.getFullYear(),now.getMonth()-5+i,1);
-    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const mRecs=recs.filter(r=>r.status==='paid'&&(r.pagoEm||r.date||'').startsWith(key));
-    return{label:months[d.getMonth()],net:mRecs.reduce((a,r)=>a+(parseFloat(String(r.net||0).replace(',','.'))||0),0)};
-  });
-  const maxV=Math.max(...monthData.map(m=>m.net),1);
-  dashChart.innerHTML=`
-    <div class="mchart-title">📊 Receita Líquida — Últimos 6 Meses</div>
-    <div class="mchart-bars">${monthData.map(m=>`
-      <div class="mchart-col">
-        <div class="mchart-bar" style="height:${m.net/maxV*100}%;background:linear-gradient(180deg,var(--accent),var(--accent2));" data-tip="${m.label}: €${fmt(m.net)}"></div>
-        <div class="mchart-label">${m.label}</div>
-      </div>`).join('')}
-    </div>`;
+  // Gráfico: evolução mês a mês + acumulado
+  dashDesenharEvolucao();
   const recent=[...recs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   dashTable.innerHTML=recent.map(r=>recRow(r,true)).join('')||`<tr><td colspan="9" class="empty">Sem recebimentos</td></tr>`;
+}
+
+// ── Evolução mês a mês: receita líquida, despesas e acumulado ─────────────
+window._dashPeriodo = window._dashPeriodo || '12m';
+function dashSetPeriodo(p){ window._dashPeriodo = p; dashDesenharEvolucao(); }
+function dashDesenharEvolucao(){
+  const host = document.getElementById('dash-monthly-chart');
+  if(!host) return;
+  const _fN = v => parseFloat(String(v||0).replace(',','.')) || 0;
+  const MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const keyOf = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const recs = getVisibleRecs().filter(r=>r.status==='paid');
+  const desps = getVisibleDespesas();
+  const recKey = r => String(r.pagoEm||r.date||'').slice(0,7);
+  const now = new Date(), kNow = keyOf(now);
+  const per = window._dashPeriodo;
+
+  // lista de meses a mostrar (até ao mês em curso)
+  let ini;
+  if(per==='ano'){ ini = new Date(now.getFullYear(),0,1); }
+  else if(per==='tudo'){
+    const ks = recs.map(recKey).filter(k=>/^\d{4}-\d{2}$/.test(k)).sort();
+    ini = ks.length ? new Date(+ks[0].slice(0,4), +ks[0].slice(5,7)-1, 1) : new Date(now.getFullYear(), now.getMonth()-11, 1);
+    if((now.getFullYear()-ini.getFullYear())*12 + now.getMonth()-ini.getMonth() > 35) ini = new Date(now.getFullYear(), now.getMonth()-35, 1);
+  } else { ini = new Date(now.getFullYear(), now.getMonth()-11, 1); }
+  const meses = [];
+  for(let d=new Date(ini); keyOf(d) <= kNow; d.setMonth(d.getMonth()+1)){
+    const k = keyOf(d);
+    const rec = recs.filter(r=>recKey(r)===k).reduce((a,r)=>a+_fN(r.net),0);
+    const desp = desps.filter(x=>String(x.date||'').slice(0,7)===k).reduce((a,x)=>a+_fN(x.gross),0);
+    meses.push({k, label: MES[d.getMonth()] + (per!=='ano' && d.getMonth()===0 ? " '"+String(d.getFullYear()).slice(2) : ''), rec, desp, atual: k===kNow});
+  }
+  let acc = 0; meses.forEach(m=>{ acc += m.rec; m.acc = acc; });
+  const totPer = acc, atual = meses[meses.length-1] || {rec:0,desp:0};
+  const ant = meses.length>1 ? meses[meses.length-2] : null;
+  const delta = (ant && ant.rec>0) ? (atual.rec-ant.rec)/ant.rec*100 : null;
+
+  // geometria
+  const W=720, H=270, L=52, R=58, T=18, B=34, iw=W-L-R, ih=H-T-B;
+  const maxM = Math.max(...meses.map(m=>Math.max(m.rec,m.desp)),1);
+  const maxA = Math.max(totPer,1);
+  const nice = v => { const p=Math.pow(10,Math.floor(Math.log10(v))); const f=v/p; return (f<=1?1:f<=2?2:f<=5?5:10)*p; };
+  const yM = nice(maxM), yA = nice(maxA);
+  const kfmt = v => v>=1000 ? (v/1000).toLocaleString('pt-PT',{maximumFractionDigits:1})+'k' : String(Math.round(v));
+  const n = meses.length, slot = iw/n, bw = Math.min(slot*0.34, 22);
+  const X = i => L + slot*i + slot/2;
+  const Ym = v => T + ih - v/yM*ih;
+  const Ya = v => T + ih - v/yA*ih;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="Evolução mensal da receita líquida e acumulado">`;
+  for(let i=0;i<=4;i++){
+    const y = T + ih - ih*i/4;
+    svg += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--border)" stroke-width="1"/>`;
+    svg += `<text x="${L-6}" y="${y+3}" text-anchor="end" font-size="10" style="fill:var(--text3)">${kfmt(yM*i/4)}</text>`;
+    svg += `<text x="${W-R+6}" y="${y+3}" text-anchor="start" font-size="10" style="fill:var(--accent)">${kfmt(yA*i/4)}</text>`;
+  }
+  meses.forEach((m,i)=>{
+    const x = X(i);
+    if(m.atual) svg += `<rect x="${x-slot/2+2}" y="${T}" width="${slot-4}" height="${ih}" rx="6" style="fill:var(--accent)" opacity=".07"/>`;
+    svg += `<rect x="${x-bw-1}" y="${Ym(m.rec)}" width="${bw}" height="${Math.max(T+ih-Ym(m.rec),0)}" rx="3" style="fill:var(--green)"><title>${m.label}: receita líquida €${fmt(m.rec)}</title></rect>`;
+    svg += `<rect x="${x+1}" y="${Ym(m.desp)}" width="${bw}" height="${Math.max(T+ih-Ym(m.desp),0)}" rx="3" style="fill:var(--red)" opacity=".75"><title>${m.label}: despesas €${fmt(m.desp)}</title></rect>`;
+    svg += `<text x="${x}" y="${H-B+15}" text-anchor="middle" font-size="10" ${m.atual?'font-weight="700"':''} style="fill:${m.atual?'var(--accent)':'var(--text3)'}">${m.label}</text>`;
+    if(m.atual) svg += `<text x="${x}" y="${H-B+27}" text-anchor="middle" font-size="8.5" style="fill:var(--accent)">em curso</text>`;
+  });
+  const pts = meses.map((m,i)=>`${X(i)},${Ya(m.acc)}`).join(' ');
+  svg += `<polyline points="${pts}" fill="none" style="stroke:var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  meses.forEach((m,i)=>{ svg += `<circle cx="${X(i)}" cy="${Ya(m.acc)}" r="${m.atual?4.5:3}" style="fill:var(--accent);stroke:var(--s2)" stroke-width="1.5"><title>${m.label}: acumulado €${fmt(m.acc)}</title></circle>`; });
+  svg += `</svg>`;
+
+  const btn = (id,txt) => `<button onclick="dashSetPeriodo('${id}')" style="padding:4px 11px;border-radius:14px;border:1px solid var(--border);cursor:pointer;font-size:11.5px;font-weight:700;${per===id?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--s2);color:var(--text2);'}">${txt}</button>`;
+  const legenda = (c,t,line) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">${line?`<span style="width:16px;height:3px;border-radius:2px;background:${c};display:inline-block;"></span>`:`<span style="width:10px;height:10px;border-radius:3px;background:${c};display:inline-block;"></span>`}${t}</span>`;
+  const perLbl = per==='ano' ? `Janeiro a ${MES[now.getMonth()]} de ${now.getFullYear()}` : per==='tudo' ? 'Desde o primeiro recebimento' : 'Últimos 12 meses';
+  host.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+      <div class="mchart-title" style="margin:0;">📊 Evolução mês a mês — Receita líquida</div>
+      <div style="display:flex;gap:6px;">${btn('ano','Ano')}${btn('12m','12 meses')}${btn('tudo','Tudo')}</div>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;">
+      <div><span style="color:var(--text3)">Mês em curso</span> <b style="color:var(--green)">€${fmt(atual.rec)}</b>${delta!==null?` <span style="color:${delta>=0?'var(--green)':'var(--red)'};font-weight:700;">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(0)}% vs mês anterior completo</span>`:''}</div>
+      <div><span style="color:var(--text3)">Acumulado (${perLbl})</span> <b style="color:var(--accent)">€${fmt(totPer)}</b></div>
+    </div>
+    ${svg}
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;">
+      ${legenda('var(--green)','Receita líquida do mês (eixo esquerdo)')}${legenda('var(--red)','Despesas do mês')}${legenda('var(--accent)','Acumulado (eixo direito)',true)}
+    </div>`;
 }
 
 // ── Lista dos trabalhos de hoje: agendados + concluídos (filtrado por técnico quando aplicável) ──
@@ -5663,15 +5782,15 @@ async function recAnularBaixa(id){
   const r=(window.DB.recibos||[]).find(x=>x.id===id); if(!r) return;
   if(!confirm(`Anular o recebimento do recibo ${id} (${r.client||'—'})?\n\nVolta ao estado "Pendente".`)) return;
   try{
-    await window.fsSetMerge('recibos', id, {status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null});
+    await window.fsSetMerge('recibos', id, {status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null, baixaTravada:false});
     const idx=(window.DB.recibos||[]).findIndex(x=>x.id===id);
-    if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null};
+    if(idx>=0) window.DB.recibos[idx]={...window.DB.recibos[idx], status:'pending', pagoEm:null, pagoPor:null, pagoPorNome:null, baixaTravada:false};
     // Reverter também a OS (deixa de estar "pago"; mantém-se faturada).
     if(r.osId){
       const _o=(window.DB.ordens||[]).find(x=>x.id===r.osId);
       try{
-        await window.fsSetMerge('ordens', r.osId, {pago:false, pagoEm:null});
-        if(_o){ _o.pago=false; _o.pagoEm=null; }
+        await window.fsSetMerge('ordens', r.osId, {pago:false, pagoEm:null, baixaTravada:false});
+        if(_o){ _o.pago=false; _o.pagoEm=null; _o.baixaTravada=false; }
       }catch(_e){ console.warn('reverter OS na anulação falhou:', _e); }
     }
     if(typeof auditLog==='function') auditLog('recibo_pago_anulado',`Recibo ${id} (${r.client||'—'}) — recebimento anulado por ${window.currentUser?.name||''}`);
@@ -8410,6 +8529,7 @@ function openNewUser(uid=null){
   document.getElementById('u-cp-temp').value    = u?.cpTemp||'';
   document.getElementById('u-cidade-temp').value = u?.cidadeTemp||'';
   document.getElementById('u-temp-ate').value    = u?.cpTempAte||'';
+  { const _d=document.getElementById('u-temp-desde'); if(_d) _d.value = u?.cpTempDesde||''; }
   uToggleLocTemp();
   // Mostrar info se expirou
   const infoEl = document.getElementById('u-temp-info');
@@ -8457,6 +8577,25 @@ async function saveUser(){
     ? document.getElementById('u-forcar-pwd').checked   // admin definiu senha → respeitar checkbox
     : (isNovo ? true : (existing.mustChangePassword === true));  // novo sem senha → forçar sempre
 
+  // Histórico de estadias temporárias (usado pelo Mapa de Deslocação para dias passados)
+  let _estadias = Array.isArray(existing.estadias) ? existing.estadias.map(e=>({...e})) : [];
+  if(role==='tecnico'){
+    const _hoje = new Date().toISOString().slice(0,10);
+    const _ativo = document.getElementById('u-temp-activo')?.checked;
+    const _cpT = document.getElementById('u-cp-temp')?.value.trim()||'';
+    const _ciT = document.getElementById('u-cidade-temp')?.value.trim()||'';
+    const _de  = document.getElementById('u-temp-desde')?.value||_hoje;
+    const _ate = document.getElementById('u-temp-ate')?.value||'';
+    // se havia uma estadia aberta e foi desativada, fecha-a no dia de hoje
+    if(!_ativo && existing.cpTemp){
+      _estadias.forEach(e=>{ if(e.cp===existing.cpTemp && (!e.ate || e.ate>_hoje)) e.ate=_hoje; });
+    }
+    if(_ativo && _cpT){
+      const i=_estadias.findIndex(e=>e.cp===_cpT && e.de===_de);
+      const reg={cp:_cpT,cidade:_ciT,de:_de,ate:_ate};
+      if(i>=0) _estadias[i]=reg; else _estadias.push(reg);
+    }
+  }
   const u={
     ...existing,
     id:uid,
@@ -8473,6 +8612,8 @@ async function saveUser(){
       cpTemp:     document.getElementById('u-temp-activo')?.checked ? (document.getElementById('u-cp-temp')?.value.trim()||'')     : '',
       cidadeTemp: document.getElementById('u-temp-activo')?.checked ? (document.getElementById('u-cidade-temp')?.value.trim()||'') : '',
       cpTempAte:  document.getElementById('u-temp-activo')?.checked ? (document.getElementById('u-temp-ate')?.value||'')           : '',
+      cpTempDesde: document.getElementById('u-temp-activo')?.checked ? (document.getElementById('u-temp-desde')?.value||'')       : '',
+      estadias:   _estadias,
     }:{}),
   };
   if(role==='tecnico' && cp && cp!==(existing.cp||'')){
@@ -10914,6 +11055,8 @@ function uToggleLocTemp(){
   if(inactivo) inactivo.style.display = activo ? 'none'  : 'block';
   if(activo){
     // Sugerir data padrão: 30 dias a partir de hoje
+    const desde = document.getElementById('u-temp-desde');
+    if(desde && !desde.value) desde.value = new Date().toISOString().slice(0,10);
     const ate = document.getElementById('u-temp-ate');
     if(ate && !ate.value){
       const d = new Date(); d.setDate(d.getDate()+30);
@@ -12688,14 +12831,14 @@ async function adminAnularRecebimento(msgId){
     const idx=(window.DB.mensagens_internas||[]).findIndex(x=>x._firebaseId===msgId||(x.id||x.osId)===msgId);
     if(idx>=0) window.DB.mensagens_internas[idx]={...window.DB.mensagens_internas[idx], pagamentoRecebido:false, pagamentoRecebidoEm:null, pagamentoRecebidoPor:null};
     if(m.osId){
-      await window.fsSetMerge('ordens',m.osId,{ pago:false, pagoEm:null });
+      await window.fsSetMerge('ordens',m.osId,{ pago:false, pagoEm:null, baixaTravada:false });
       const oi=(window.DB.ordens||[]).findIndex(o=>o.id===m.osId);
-      if(oi>=0) window.DB.ordens[oi]={...window.DB.ordens[oi], pago:false, pagoEm:null};
+      if(oi>=0) window.DB.ordens[oi]={...window.DB.ordens[oi], pago:false, pagoEm:null, baixaTravada:false};
       const rec=(window.DB.recibos||[]).find(r=>r.osId===m.osId);
       if(rec){
-        await window.fsSetMerge('recibos',rec.id,{ status:'pending' });
+        await window.fsSetMerge('recibos',rec.id,{ status:'pending', baixaTravada:false });
         const ri=(window.DB.recibos||[]).findIndex(r=>r.id===rec.id);
-        if(ri>=0) window.DB.recibos[ri]={...window.DB.recibos[ri], status:'pending'};
+        if(ri>=0) window.DB.recibos[ri]={...window.DB.recibos[ri], status:'pending', baixaTravada:false};
       }
     }
     toast('Recebimento anulado','↩');
@@ -34705,18 +34848,30 @@ window.cliHistoricoImprimir = function(cliId){
     if (m && geoMorada) { try { const c = await geoMorada(m); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
     return null;
   }
-  function casaCpDe(u) {
-    if (u.casaCP) return u.casaCP;                       // override opcional
-    if (typeof tecGetCpActivo === 'function') { try { const l = tecGetCpActivo(u); if (l && l.cp) return l.cp; } catch (e) {} }
-    const hoje = new Date().toISOString().slice(0, 10);
-    if (u.cpTemp && u.cpTempAte && u.cpTempAte >= hoje) return u.cpTemp;
-    return u.cp || '';
+  // ---- base (ponto de saída/regresso) do funcionário NUM DIA ----
+  // Se nesse dia estava deslocado de Braga (estadia temporária), a base é a morada
+  // onde estava deslocado; caso contrário é a casa (CP da ficha).
+  function estadiasDe(u) {
+    const l = Array.isArray(u.estadias) ? u.estadias.map(e => ({ ...e })) : [];
+    if (u.cpTemp && !l.some(e => e.cp === u.cpTemp && (e.de || '') === (u.cpTempDesde || e.de || '')))
+      l.push({ cp: u.cpTemp, cidade: u.cidadeTemp || '', de: u.cpTempDesde || '', ate: u.cpTempAte || '' });
+    return l;
   }
-  async function coordsCasa(uid) {
-    const u = userById(uid); if (!u) return null;
-    const cp = casaCpDe(u);
-    if (cp && geoCP) { try { const c = await geoCP(cp); if (c && isFinite(c.lat)) return { lat: +c.lat, lng: +c.lng }; } catch (e) {} }
-    return null;
+  function baseDoDia(u, data) {
+    const est = estadiasDe(u)
+      .filter(e => e.cp && (!e.de || data >= e.de) && (!e.ate || data <= e.ate))
+      .sort((x, y) => String(y.de || '').localeCompare(String(x.de || '')))[0];
+    if (est) return { cp: est.cp, cidade: est.cidade || '', temp: true };
+    return { cp: u.casaCP || u.cp || '', cidade: u.cidade || '', temp: false };
+  }
+  const baseLabel = b => (b.temp ? '🏨 Alojamento' : '🏠 Casa') + ' — ' + [b.cidade, b.cp ? '(' + b.cp + ')' : ''].filter(Boolean).join(' ');
+  const _cacheCP = {};
+  async function coordsCP(cp) {
+    if (!cp || !geoCP) return null;
+    if (_cacheCP[cp] !== undefined) return _cacheCP[cp];
+    let r = null;
+    try { const c = await geoCP(cp); if (c && isFinite(c.lat)) r = { lat: +c.lat, lng: +c.lng }; } catch (e) {}
+    return (_cacheCP[cp] = r);
   }
 
   // ---- OS de um funcionario no periodo ----
@@ -34730,49 +34885,75 @@ window.cliHistoricoImprimir = function(cliId){
     });
   }
 
-  // ---- linhas por dia (casa -> OS... -> casa) ----
+  // ---- linhas por dia: saída → chegada (cada troço), com regresso à base do dia ----
   async function linhasFuncionario(uid, ini, fim) {
+    const u = userById(uid) || {};
     const os = osDoFuncionario(uid, ini, fim);
-    const casa = await coordsCasa(uid);
-    const semCasa = !casa;
-
     const porData = {};
     os.forEach(o => { (porData[(o.data || '').slice(0, 10)] ??= []).push(o); });
 
-    const linhas = []; let totKm = 0, totEur = 0, semCoord = 0;
+    const linhas = []; let totKm = 0, totEur = 0, semCoord = 0, semBase = 0;
     for (const data of Object.keys(porData).sort()) {
       const lista = porData[data].sort((a, b) =>
         String(a.horaIni || a.hora || '').localeCompare(String(b.horaIni || b.hora || '')));
-      let ant = casa;
-      for (let i = 0; i < lista.length; i++) {
-        const o = lista[i];
+      const base = baseDoDia(u, data);
+      const baseC = await coordsCP(base.cp);
+      if (!baseC) semBase++;
+      let ant = baseC, antLabel = baseLabel(base);
+      for (const o of lista) {
         const p = await coordsOS(o);
+        const destLabel = moradaDe(o) || clienteDe(o) || '—';
         let km = 0;
-        if (p) { if (ant) km = haversineKm(ant, p) * FATOR; ant = p; } else { semCoord++; }
+        if (p) { if (ant) km = haversineKm(ant, p) * FATOR; } else { semCoord++; }
         km = round1(km);
         const eur = round2(km * VALOR_KM);
-        linhas.push({ data, cliente: clienteDe(o), morada: moradaDe(o), km, eur });
+        linhas.push({ rank: 1, data, hora: o.horaIni || o.hora || '', de: antLabel, para: destLabel, cliente: clienteDe(o), km, eur, semPonto: !p });
         totKm += km; totEur += eur;
+        if (p) { ant = p; antLabel = destLabel; }
       }
-      if (casa && ant && ROUND_TRIP) {
-        const km = round1(haversineKm(ant, casa) * FATOR);
+      if (ROUND_TRIP && baseC && ant) {
+        const km = round1(haversineKm(ant, baseC) * FATOR);
         const eur = round2(km * VALOR_KM);
-        linhas.push({ data, cliente: '🏠 Casa (regresso)', morada: '', km, eur });
+        linhas.push({ data, hora: '', de: antLabel, para: baseLabel(base), cliente: base.temp ? 'Regresso ao alojamento' : 'Regresso a casa', km, eur, semPonto: false, rank: 1 });
         totKm += km; totEur += eur;
       }
     }
-    return { linhas, totKm: round1(totKm), totEur: round2(totEur), semCoord, semCasa };
+    // Viagens de ida e de volta entre casa e o local da deslocação (estadia temporária)
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const homeCP = u.casaCP || u.cp || '';
+    const homeC = await coordsCP(homeCP);
+    const homeLbl = baseLabel({ temp: false, cp: homeCP, cidade: u.cidade || '' });
+    for (const e of estadiasDe(u)) {
+      if (!e.cp) continue;
+      const stC = await coordsCP(e.cp);
+      const stLbl = baseLabel({ temp: true, cp: e.cp, cidade: e.cidade || '' });
+      const viagem = (data, de, para, a, b, cliente, rank) => {
+        const ok = !!(a && b);
+        const km = ok ? round1(haversineKm(a, b) * FATOR) : 0;
+        const eur = round2(km * VALOR_KM);
+        if (!ok) semBase++;
+        linhas.push({ rank, data, hora: '', de, para, cliente, km, eur, semPonto: !ok });
+        totKm += km; totEur += eur;
+      };
+      if (e.de && e.de >= ini && e.de <= fim)
+        viagem(e.de, homeLbl, stLbl, homeC, stC, 'Viagem de ida (início da deslocação)', 0);
+      if (e.ate && e.ate >= ini && e.ate <= fim && e.ate <= hojeISO)
+        viagem(e.ate, stLbl, homeLbl, stC, homeC, 'Viagem de volta (fim da deslocação)', 2);
+    }
+    linhas.forEach((l, i) => l._i = i);
+    linhas.sort((x, y) => x.data.localeCompare(y.data) || x.rank - y.rank || x._i - y._i);
+    return { linhas, totKm: round1(totKm), totEur: round2(totEur), semCoord, semBase };
   }
 
   // ---- HTML de uma folha ----
   async function folhaHTML(uid, ini, fim) {
-    const { linhas, totKm, totEur, semCoord, semCasa } = await linhasFuncionario(uid, ini, fim);
+    const { linhas, totKm, totEur, semCoord, semBase } = await linhasFuncionario(uid, ini, fim);
     const rows = linhas.length ? linhas.map(l => `
-      <tr><td>${esc(fmtData(l.data))}</td><td>${esc(l.cliente)}</td><td>${esc(l.morada)}</td>
+      <tr${l.semPonto ? ' class="sp"' : ''}><td>${esc(fmtData(l.data))}</td><td>${esc(l.hora)}</td><td>${esc(l.de)}</td><td>${esc(l.para)}</td><td>${esc(l.cliente)}</td>
       <td class="num">${l.km.toFixed(1)}</td><td class="num">${l.eur.toFixed(2)} €</td></tr>`).join('')
-      : `<tr><td colspan="5" style="text-align:center;color:#888;padding:18px;">Sem deslocações no período.</td></tr>`;
-    const avisoCasa  = semCasa  ? `<div class="aviso">⚠ Funcionário sem código postal na ficha — km contados a partir da 1.ª visita.</div>` : '';
-    const avisoCoord = semCoord ? `<div class="aviso">⚠ ${semCoord} visita(s) sem código postal do cliente — contam 0 km.</div>` : '';
+      : `<tr><td colspan="7" style="text-align:center;color:#888;padding:18px;">Sem deslocações no período.</td></tr>`;
+    const avisoCasa  = semBase  ? `<div class="aviso">⚠ Em ${semBase} dia(s) o funcionário não tem código postal de casa/alojamento válido — os km contam a partir da 1.ª visita desse dia.</div>` : '';
+    const avisoCoord = semCoord ? `<div class="aviso">⚠ ${semCoord} visita(s) sem código postal do cliente — contam 0 km (linhas a cinzento).</div>` : '';
     return `
     <section class="folha">
       <header class="cab">
@@ -34782,12 +34963,12 @@ window.cliHistoricoImprimir = function(cliId){
       <div class="meta"><div><b>Funcionário:</b> ${esc(nomeFunc(uid))}</div><div><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}</div></div>
       ${avisoCasa}${avisoCoord}
       <table class="tb">
-        <thead><tr><th>Data</th><th>Cliente</th><th>Morada</th><th>Km rodados</th><th>Deslocação (€)</th></tr></thead>
+        <thead><tr><th>Data</th><th>Hora</th><th>Ponto de saída</th><th>Ponto de chegada</th><th>Cliente</th><th>Km rodados</th><th>Deslocação (€)</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="3">TOTAL</td><td class="num">${totKm.toFixed(1)}</td><td class="num">${totEur.toFixed(2)} €</td></tr></tfoot>
+        <tfoot><tr><td colspan="5">TOTAL</td><td class="num">${totKm.toFixed(1)}</td><td class="num">${totEur.toFixed(2)} €</td></tr></tfoot>
       </table>
       <div class="ass"><div class="lin"><span>Data</span></div><div class="lin"><span>Assinatura do funcionário</span></div><div class="lin"><span>Assinatura da empresa</span></div></div>
-      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto: casa → visitas → casa. Distância estimada por código postal (linha reta × ${FATOR}).</div>
+      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: ponto de saída → visitas → regresso. A base do dia é a casa do funcionário ou, nos dias em que está deslocado, a morada do alojamento. Inclui a viagem de ida (casa → alojamento) no 1.º dia da deslocação e a de volta no último dia. Distância estimada por código postal (linha reta × ${FATOR}).</div>
     </section>`;
   }
 
@@ -34818,7 +34999,7 @@ window.cliHistoricoImprimir = function(cliId){
       table.tb{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;}
       table.tb th{background:#1e3a8a;color:#fff;padding:7px 8px;text-align:left;}
       table.tb td{border:1px solid #cbd5e1;padding:6px 8px;}table.tb tbody tr:nth-child(even){background:#f1f5f9;}
-      table.tb .num{text-align:right;white-space:nowrap;}table.tb tfoot td{background:#dbe4f3;font-weight:bold;}
+      table.tb .num{text-align:right;white-space:nowrap;}table.tb tfoot td{background:#dbe4f3;font-weight:bold;}table.tb tr.sp td{color:#94a3b8;}@page{size:A4 landscape;margin:10mm;}
       .ass{display:flex;gap:24px;margin-top:46px;}.ass .lin{flex:1;border-top:1px solid #475569;padding-top:5px;text-align:center;font-size:11px;color:#475569;}
       .nota{margin-top:16px;font-size:10px;color:#94a3b8;}@media print{.folha{padding:14mm;}}`;
     const w = window.open('', '_blank');
@@ -34839,12 +35020,12 @@ window.cliHistoricoImprimir = function(cliId){
     const uid = document.getElementById('desl-func').value;
     const box = document.getElementById('desl-casa-info');
     if (!box) return;
-    if (uid === '__todos__') { box.textContent = 'Partida/regresso: código postal da ficha de cada funcionário (cp ou estadia temporária).'; return; }
+    if (uid === '__todos__') { box.textContent = 'Saída e regresso: casa de cada funcionário (CP da ficha) ou, nos dias em que está deslocado, a morada do alojamento temporário.'; return; }
     const u = userById(uid);
-    const cp = u ? casaCpDe(u) : '';
-    box.innerHTML = cp
-      ? `Partida/regresso a partir do CP <b>${esc(cp)}</b> (da ficha do funcionário).`
-      : `⚠ Este funcionário não tem código postal na ficha — os km contam a partir da 1.ª visita. Define o CP na ficha do utilizador.`;
+    if (!u) { box.textContent = ''; return; }
+    const est = estadiasDe(u).filter(e => e.cp).map(e => `🏨 ${esc(e.cidade || '')} (${esc(e.cp)}) de ${esc(fmtData(e.de) || '—')} a ${esc(fmtData(e.ate) || '—')}`);
+    box.innerHTML = (u.cp ? `🏠 Casa: CP <b>${esc(u.cp)}</b> ${esc(u.cidade || '')}.` : `⚠ Sem código postal de casa na ficha.`)
+      + (est.length ? '<br>' + est.join('<br>') : '');
   };
 
   window.deslocAbrir = function () {
@@ -38517,6 +38698,80 @@ window.abrirApresentacaoGrupo = function(){
   }
   window.hgFlutuantesRepor=function(){ salvo={}; guardar(); lista.forEach(original); };
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',iniciar); else iniciar();
+})();
+</script>
+
+<!-- Guarda de baixas (v16.05) -->
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   HidroGest — GUARDA DE BAIXAS
+   Depois de dada a baixa (recebimento), ela fica TRAVADA (baixaTravada:true na OS e no recibo).
+   Esta rotina corre sozinha e, se alguma gravação (por exemplo, de outro telemóvel ou da app do técnico)
+   desfizer uma baixa travada, REPÕE-A de imediato e regista na auditoria.
+   Só se retira uma baixa com "Anular recebimento" (estorno deliberado).
+   • Só corre para admin / gerente / supervisor (não para técnicos).
+   • Repõe: OS com pago a falso mas baixa travada; recibo travado voltado a pendente; OS não paga com recibo pago e travado.
+   • Só protege as baixas dadas a partir desta versão (não mexe em nenhuma baixa antiga, não faz gravações em massa).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  const PAPEIS=['admin','gerente','supervisor'];
+  const tentativas={}; let ocupado=false;
+  const hoje=()=>new Date().toISOString().slice(0,10);
+  const lim90=()=>{ const d=new Date(); d.setDate(d.getDate()-90); return d.toISOString().slice(0,10); };
+  const concl=o=>o && (o.estado==='concluida'||o.estado==='os_fechada');
+  const tentar=(k)=>{ tentativas[k]=(tentativas[k]||0)+1; return tentativas[k]<=3; };   // no máx. 3 tentativas por sessão
+  function aviso(txt){ try{ if(typeof window.toast==='function') window.toast(txt,'🔒',6000); }catch(_){} }
+
+  async function guardar(){
+    if(ocupado) return;
+    const u=window.currentUser;
+    if(!u || !PAPEIS.includes(u.role)) return;
+    if(!window.DB || !window.DB._ordensCarregado || !Array.isArray(window.DB.recibos)) return;
+    if(typeof window.fsSetMerge!=='function' || navigator.onLine===false) return;
+    ocupado=true;
+    try{
+      const ordens=window.DB.ordens||[], recibos=window.DB.recibos||[];
+      const recPorOs={}; recibos.forEach(r=>{ if(r && r.osId) recPorOs[r.osId]=r; });
+      const naoFat=o=>(typeof window.osServicoNaoFaturavel==='function' && window.osServicoNaoFaturavel(o));
+      let restauradas=0;
+
+      for(const o of ordens){
+        if(!o || !o.id) continue;
+        const r=recPorOs[o.id];
+        const osTravada = o.baixaTravada===true;
+        const recTravado = !!(r && r.baixaTravada===true && r.status==='paid');
+
+        // 1) OS com a baixa travada que perdeu o "pago"
+        // 2) recibo travado e pago, mas a OS concluída deixou de estar paga
+        if(o.pago!==true && (osTravada || (recTravado && concl(o) && !naoFat(o))) && tentar('os'+o.id)){
+          const quando=o.baixaPagoEm||(r&&(r.baixaPagoEm||r.pagoEm))||hoje();
+          try{
+            await window.fsSetMerge('ordens',o.id,{pago:true,pagoEm:quando,pagoPor:o.pagoPor||(r&&r.pagoPor)||'auto-guarda'});
+            o.pago=true; o.pagoEm=quando; o.baixaTravada=true; restauradas++;
+            if(typeof window.auditLog==='function') window.auditLog('baixa_restaurada','Baixa da OS '+o.id+' foi desfeita por uma gravação — reposta automaticamente');
+          }catch(e){ console.warn('[guarda de baixas] OS',o.id,e); }
+        }
+
+        // 3) OS paga (baixa travada) mas o recibo voltou a pendente
+        if(r && o.pago===true && (osTravada || r.baixaTravada===true) && r.status!=='paid' && tentar('rec'+r.id)){
+          const quando=r.baixaPagoEm||o.baixaPagoEm||o.pagoEm||hoje();
+          try{
+            await window.fsSetMerge('recibos',r.id,{status:'paid',pagoEm:String(quando).slice(0,10)});
+            r.status='paid'; r.pagoEm=String(quando).slice(0,10); r.baixaTravada=true; restauradas++;
+            if(typeof window.auditLog==='function') window.auditLog('baixa_restaurada','Recibo '+r.id+' (OS '+o.id+') tinha voltado a pendente — reposto como pago');
+          }catch(e){ console.warn('[guarda de baixas] recibo',r.id,e); }
+        }
+      }
+      if(restauradas){
+        aviso('🔒 '+restauradas+' baixa'+(restauradas===1?'':'s')+' que tinha'+(restauradas===1?'':'m')+' sido desfeita'+(restauradas===1?'':'s')+' por uma gravação foi reposta'+(restauradas===1?'.':'s.'));
+        try{ if(typeof window.renderRecibos==='function') window.renderRecibos(); if(typeof window.osRenderAgenda==='function') window.osRenderAgenda(); }catch(_){}
+      }
+
+    } finally { ocupado=false; }
+  }
+  window.hgGuardarBaixas=guardar;
+  setTimeout(guardar,8000);
+  setInterval(guardar,25000);
 })();
 </script>
 

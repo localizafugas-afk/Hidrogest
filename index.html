@@ -2,7 +2,8 @@
 <html lang="pt">
 <head>
 <script>
-// v16.31 — Mapa de Deslocação: fins de semana (sáb/dom) saem sempre da sede (Rua do Taxa, Braga) com ida e volta a cada local; entram as viagens alojamento→casa (sexta) e casa→alojamento (segunda); troços com CPs iguais deixam de dar 0 km.
+// v16.32 — Mapa de Deslocação: bases fixas (Ricardo/Vinicius/Higor → Sobral de Monte Agraço; Hamza/Ronaldo/Aldo → Braga), percurso sede → trabalhos → sede com km por estrada entre cada morada; coordenadas de 2590/2655 corrigidas. Comissões: 2% recuperação de tubagem/impermeabilização, 5% restantes (editável), vista mês a mês, OS excluídas com motivo. Dashboard: cartões Ano e Mês em curso + gráfico mês a mês com comparação ao ano anterior.
+// v16.31 — Mapa de Deslocação: por defeito NÃO conta o regresso ao alojamento (caixa opcional no painel); fins de semana (sáb/dom) saem sempre da sede (Rua do Taxa, Braga) com ida e volta a cada local; entram as viagens alojamento→casa (sexta) e casa→alojamento (segunda); troços com CPs iguais deixam de dar 0 km.
 // v16.09 — Relatório do técnico simplificado: 1 linha por teste (🔴🟢⚪), foto/nota só quando precisa, 'Tudo sem anomalia' por grupo, contador, 1 botão de enviar.
 // v16.16 — 'Onde aparece o problema' e locais inspecionados: o técnico escreve (sem botões pré-definidos).
 // v16.15 — 'Fração inspecionada' + lista alargada de locais inspecionáveis.
@@ -1394,7 +1395,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.31<br>
+      HidroGest v16.32<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1419,7 +1420,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.31<br>
+      HidroGest v16.32<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -1606,7 +1607,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
 
     <!-- COMISSÕES -->
     <div class="page" id="page-comissoes">
-      <div class="sh"><div class="sh-title">Cálculo de Comissões</div><div style="font-size:12px;color:var(--text3);">5% do valor s/IVA de cada trabalho concluído</div></div>
+      <div class="sh"><div class="sh-title">Cálculo de Comissões</div><div style="font-size:12px;color:var(--text3);">2% recuperação de tubagem e impermeabilização · 5% restantes serviços (s/IVA)</div></div>
       <div id="comm-list"></div>
     </div>
 
@@ -5222,35 +5223,9 @@ function renderDashboard(){
       </span>
     </button>`;
 
-  // ── Card: Informações do mês em curso ──────────────────────
-  let _mesBtn = document.getElementById('dash-mes-atual');
-  if(!_mesBtn){
-    _mesBtn = document.createElement('div');
-    _mesBtn.id = 'dash-mes-atual';
-    _mesBtn.style.cssText = 'margin-bottom:14px;';
-    dashStats.parentNode.insertBefore(_mesBtn, dashStats);
-  }
-  const _now = new Date();
-  const _mesAtualKey = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}`;
-  const _nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-  const _nomeMesAtual = _nomesMes[_now.getMonth()];
-  const _recsMes = paid.filter(r=>String(r.pagoEm||r.date||'').startsWith(_mesAtualKey));
-  const _totNetMes = _recsMes.reduce((a,r)=>a+r.net,0);
-  const _totGrossMes = _recsMes.reduce((a,r)=>a+r.total,0);
-  const _totIVAMes = _recsMes.reduce((a,r)=>a+r.iva,0);
-  const _despMes = getVisibleDespesas().filter(d=>String(d.date||'').startsWith(_mesAtualKey)).reduce((a,d)=>a+_fN(d.gross),0);
-  const _ordensConcMes = getVisibleOrdens().filter(o=>o.estado==='concluida' && String(o.data||'').startsWith(_mesAtualKey)).length;
-  _mesBtn.innerHTML = `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;">
-    <div style="font-weight:800;font-size:13px;color:var(--text2);margin-bottom:10px;">📅 ${_nomeMesAtual} de ${_now.getFullYear()} · mês em curso</div>
-    <div class="stats">
-      <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(_totNetMes)}</div><div class="sc-sub">sem IVA · ${_recsMes.length} recebimento${_recsMes.length===1?'':'s'}</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(_totGrossMes)}</div><div class="sc-sub">com IVA incluído</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(_totIVAMes)}</div><div class="sc-sub">a entregar ao Estado</div></div>
-      <div class="sc"><div class="sc-glow" style="background:var(--red)"></div><div class="sc-label">Despesas</div><div class="sc-val" style="color:var(--red)">€${fmt(_despMes)}</div><div class="sc-sub">${_ordensConcMes} trabalho${_ordensConcMes===1?'':'s'} concluído${_ordensConcMes===1?'':'s'}</div></div>
-    </div>
-  </div>`;
+  { const _old=document.getElementById('dash-mes-atual'); if(_old) _old.remove(); }   // v16.32: substituído pelos cartões Ano/Mês do painel mês a mês
 
-  dashStats.innerHTML=`${pendBanner}<div style="font-weight:800;font-size:13px;color:var(--text2);margin:2px 0 10px;">📈 Acumulado total · todos os recebimentos</div><div class="stats">
+  dashStats.innerHTML=`${pendBanner}<div style="font-weight:800;font-size:13px;color:var(--text2);margin:2px 0 10px;">📈 Acumulado total · todos os recebimentos (desde o início)</div><div class="stats">
     <div class="sc"><div class="sc-glow" style="background:var(--green)"></div><div class="sc-label">Receita Líquida</div><div class="sc-val" style="color:var(--green)">€${fmt(totNet)}</div><div class="sc-sub">sem IVA · ${paid.length} recebimentos</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--accent)"></div><div class="sc-label">Receita Bruta</div><div class="sc-val" style="color:var(--accent)">€${fmt(totGross)}</div><div class="sc-sub">com IVA incluído</div></div>
     <div class="sc"><div class="sc-glow" style="background:var(--yellow)"></div><div class="sc-label">IVA Total</div><div class="sc-val" style="color:var(--yellow)">€${fmt(totIVA)}</div><div class="sc-sub">a entregar ao Estado</div></div>
@@ -5262,89 +5237,114 @@ function renderDashboard(){
   dashTable.innerHTML=recent.map(r=>recRow(r,true)).join('')||`<tr><td colspan="9" class="empty">Sem recebimentos</td></tr>`;
 }
 
-// ── Evolução mês a mês: receita líquida, despesas e acumulado ─────────────
-window._dashPeriodo = window._dashPeriodo || '12m';
-function dashSetPeriodo(p){ window._dashPeriodo = p; dashDesenharEvolucao(); }
+// ── Painel Ano + Mês em curso + gráfico mês a mês (v16.32) ─────────────
+// Base: as mesmas regras da "Receita por técnico" (hgReceitaPeriodo): OS concluídas + em curso, por data de agendamento, valores s/IVA.
+//  Faturado = trabalhos concluídos + em curso · Recebido = concluídos já pagos · Despesas = custos do mês (s/IVA)
+window._dashAno = window._dashAno || new Date().getFullYear();
+function dashMudarAno(d){ window._dashAno = (+window._dashAno) + d; dashDesenharEvolucao(); }
 function dashDesenharEvolucao(){
   const host = document.getElementById('dash-monthly-chart');
   if(!host) return;
   const _fN = v => parseFloat(String(v||0).replace(',','.')) || 0;
   const MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const keyOf = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-  const recs = getVisibleRecs().filter(r=>r.status==='paid');
-  const desps = getVisibleDespesas();
-  const recKey = r => String(r.pagoEm||r.date||'').slice(0,7);
-  const now = new Date(), kNow = keyOf(now);
-  const per = window._dashPeriodo;
+  const MESL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const now = new Date(), anoNow = now.getFullYear(), mesNow = now.getMonth();
+  const ano = +window._dashAno, ant = ano-1;
+  const desps = (typeof getVisibleDespesas==='function') ? getVisibleDespesas() : (window.DB.despesas||[]);
+  const despDe = k => desps.filter(x=>String(x.date||'').slice(0,7)===k).reduce((a,x)=>a+(_fN(x.net)||_fN(x.gross)),0);
+  const calc = (a,m) => {
+    const k = `${a}-${String(m+1).padStart(2,'0')}`;
+    let T = {n:0,fat:0,rec:0,ar:0,ec:0};
+    try{ T = window.hgReceitaPeriodo(d=>String(d||'').slice(0,7)===k).T; }catch(e){}
+    return {k, fat:T.fat, rec:T.rec, ar:T.ar+T.ec, n:T.n, desp:despDe(k)};
+  };
+  const meses = MES.map((l,m)=>({...calc(ano,m), label:l, m, atual: ano===anoNow && m===mesNow, futuro: ano>anoNow || (ano===anoNow && m>mesNow)}));
+  const mesesAnt = MES.map((l,m)=>calc(ant,m));
+  const soma = (arr,f)=>arr.reduce((a,x)=>a+(x[f]||0),0);
+  const Y = {fat:soma(meses,'fat'), rec:soma(meses,'rec'), ar:soma(meses,'ar'), desp:soma(meses,'desp'), n:soma(meses,'n')};
+  const Yant = {fat:soma(mesesAnt,'fat')};
+  const MC = ano===anoNow ? meses[mesNow] : null;
+  const MCant = ano===anoNow ? mesesAnt[mesNow] : null;
 
-  // lista de meses a mostrar (até ao mês em curso)
-  let ini;
-  if(per==='ano'){ ini = new Date(now.getFullYear(),0,1); }
-  else if(per==='tudo'){
-    const ks = recs.map(recKey).filter(k=>/^\d{4}-\d{2}$/.test(k)).sort();
-    ini = ks.length ? new Date(+ks[0].slice(0,4), +ks[0].slice(5,7)-1, 1) : new Date(now.getFullYear(), now.getMonth()-11, 1);
-    if((now.getFullYear()-ini.getFullYear())*12 + now.getMonth()-ini.getMonth() > 35) ini = new Date(now.getFullYear(), now.getMonth()-35, 1);
-  } else { ini = new Date(now.getFullYear(), now.getMonth()-11, 1); }
-  const meses = [];
-  for(let d=new Date(ini); keyOf(d) <= kNow; d.setMonth(d.getMonth()+1)){
-    const k = keyOf(d);
-    const rec = recs.filter(r=>recKey(r)===k).reduce((a,r)=>a+_fN(r.net),0);
-    const desp = desps.filter(x=>String(x.date||'').slice(0,7)===k).reduce((a,x)=>a+_fN(x.gross),0);
-    meses.push({k, label: MES[d.getMonth()] + (per!=='ano' && d.getMonth()===0 ? " '"+String(d.getFullYear()).slice(2) : ''), rec, desp, atual: k===kNow});
-  }
-  let acc = 0; meses.forEach(m=>{ acc += m.rec; m.acc = acc; });
-  const totPer = acc, atual = meses[meses.length-1] || {rec:0,desp:0};
-  const ant = meses.length>1 ? meses[meses.length-2] : null;
-  const delta = (ant && ant.rec>0) ? (atual.rec-ant.rec)/ant.rec*100 : null;
+  const cartao = (tit, sub, d, ref, refTxt) => {
+    const dl = (ref>0) ? (d.fat-ref)/ref*100 : null;
+    const col = (c,l,v,s)=>`<div class="sc"><div class="sc-glow" style="background:${c}"></div><div class="sc-label">${l}</div><div class="sc-val" style="color:${c}">€${fmt(v)}</div><div class="sc-sub">${s}</div></div>`;
+    return `<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+        <div style="font-weight:800;font-size:13px;color:var(--text2);">${tit}</div>
+        <div style="font-size:11.5px;color:var(--text3);">${sub}${dl!==null?` · <b style="color:${dl>=0?'var(--green)':'var(--red)'}">${dl>=0?'▲':'▼'} ${Math.abs(dl).toFixed(0)}%</b> ${refTxt}`:''}</div></div>
+      <div class="stats">
+        ${col('var(--accent)','Faturado',d.fat,`s/IVA · ${d.n} trabalho${d.n===1?'':'s'}`)}
+        ${col('var(--green)','Recebido',d.rec,'já pago pelos clientes')}
+        ${col('var(--yellow)','Por receber',d.ar,'concluído por pagar + em curso')}
+        ${col('var(--red)','Despesas',d.desp,'custos s/IVA')}
+        ${col(d.fat-d.desp>=0?'var(--green)':'var(--red)','Resultado',d.fat-d.desp,'faturado − despesas')}
+      </div></div>`;
+  };
+  const cardAno = cartao(`📆 Ano ${ano}${ano===anoNow?' (até hoje)':''}`, `ano completo anterior: €${fmt(Yant.fat)} faturado`, Y, Yant.fat, `vs ${ant}`);
+  const cardMes = MC ? cartao(`📅 ${MESL[mesNow]} de ${ano} · mês em curso`, `${MESL[mesNow]} ${ant}: €${fmt(MCant.fat)}`, MC, MCant.fat, `vs ${MES[mesNow]} ${ant}`) : '';
 
-  // geometria
-  const W=720, H=270, L=52, R=58, T=18, B=34, iw=W-L-R, ih=H-T-B;
-  const maxM = Math.max(...meses.map(m=>Math.max(m.rec,m.desp)),1);
-  const maxA = Math.max(totPer,1);
+  // ── gráfico agrupado: Faturado / Recebido / Despesas por mês + linha do faturado do ano anterior
+  const W=720, H=280, L=52, R=14, T0=16, B=34, iw=W-L-R, ih=H-T0-B;
+  const maxV = Math.max(...meses.map(m=>Math.max(m.fat,m.rec,m.desp)), ...mesesAnt.map(m=>m.fat), 1);
   const nice = v => { const p=Math.pow(10,Math.floor(Math.log10(v))); const f=v/p; return (f<=1?1:f<=2?2:f<=5?5:10)*p; };
-  const yM = nice(maxM), yA = nice(maxA);
+  const yMax = nice(maxV);
   const kfmt = v => v>=1000 ? (v/1000).toLocaleString('pt-PT',{maximumFractionDigits:1})+'k' : String(Math.round(v));
-  const n = meses.length, slot = iw/n, bw = Math.min(slot*0.34, 22);
-  const X = i => L + slot*i + slot/2;
-  const Ym = v => T + ih - v/yM*ih;
-  const Ya = v => T + ih - v/yA*ih;
-  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="Evolução mensal da receita líquida e acumulado">`;
-  for(let i=0;i<=4;i++){
-    const y = T + ih - ih*i/4;
-    svg += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--border)" stroke-width="1"/>`;
-    svg += `<text x="${L-6}" y="${y+3}" text-anchor="end" font-size="10" style="fill:var(--text3)">${kfmt(yM*i/4)}</text>`;
-    svg += `<text x="${W-R+6}" y="${y+3}" text-anchor="start" font-size="10" style="fill:var(--accent)">${kfmt(yA*i/4)}</text>`;
-  }
+  const slot = iw/12, bw = Math.min(slot*0.26, 16);
+  const X = i => L + slot*i + slot/2, Yp = v => T0 + ih - v/yMax*ih;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;font-family:inherit" role="img" aria-label="Faturado, recebido e despesas mês a mês em ${ano}">`;
+  for(let i=0;i<=4;i++){ const y=T0+ih-ih*i/4;
+    svg += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" style="stroke:var(--border)" stroke-width="1"/><text x="${L-6}" y="${y+3}" text-anchor="end" font-size="10" style="fill:var(--text3)">${kfmt(yMax*i/4)}</text>`; }
   meses.forEach((m,i)=>{
-    const x = X(i);
-    if(m.atual) svg += `<rect x="${x-slot/2+2}" y="${T}" width="${slot-4}" height="${ih}" rx="6" style="fill:var(--accent)" opacity=".07"/>`;
-    svg += `<rect x="${x-bw-1}" y="${Ym(m.rec)}" width="${bw}" height="${Math.max(T+ih-Ym(m.rec),0)}" rx="3" style="fill:var(--green)"><title>${m.label}: receita líquida €${fmt(m.rec)}</title></rect>`;
-    svg += `<rect x="${x+1}" y="${Ym(m.desp)}" width="${bw}" height="${Math.max(T+ih-Ym(m.desp),0)}" rx="3" style="fill:var(--red)" opacity=".75"><title>${m.label}: despesas €${fmt(m.desp)}</title></rect>`;
+    const x=X(i);
+    if(m.atual) svg += `<rect x="${x-slot/2+2}" y="${T0}" width="${slot-4}" height="${ih}" rx="6" style="fill:var(--accent)" opacity=".07"/>`;
+    if(!m.futuro){
+      [['fat','var(--accent)','Faturado',-bw*1.5-1],['rec','var(--green)','Recebido',-bw/2],['desp','var(--red)','Despesas',bw/2+1]].forEach(([f,c,n,dx])=>{
+        svg += `<rect x="${x+dx}" y="${Yp(m[f])}" width="${bw}" height="${Math.max(T0+ih-Yp(m[f]),0)}" rx="2.5" style="fill:${c}"${f==='desp'?' opacity=".8"':''}><title>${MESL[i]} ${ano} — ${n}: €${fmt(m[f])}</title></rect>`; });
+    }
     svg += `<text x="${x}" y="${H-B+15}" text-anchor="middle" font-size="10" ${m.atual?'font-weight="700"':''} style="fill:${m.atual?'var(--accent)':'var(--text3)'}">${m.label}</text>`;
     if(m.atual) svg += `<text x="${x}" y="${H-B+27}" text-anchor="middle" font-size="8.5" style="fill:var(--accent)">em curso</text>`;
   });
-  const pts = meses.map((m,i)=>`${X(i)},${Ya(m.acc)}`).join(' ');
-  svg += `<polyline points="${pts}" fill="none" style="stroke:var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-  meses.forEach((m,i)=>{ svg += `<circle cx="${X(i)}" cy="${Ya(m.acc)}" r="${m.atual?4.5:3}" style="fill:var(--accent);stroke:var(--s2)" stroke-width="1.5"><title>${m.label}: acumulado €${fmt(m.acc)}</title></circle>`; });
+  if(Yant.fat>0){
+    svg += `<polyline points="${mesesAnt.map((m,i)=>`${X(i)},${Yp(m.fat)}`).join(' ')}" fill="none" style="stroke:var(--text3)" stroke-width="1.8" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+    mesesAnt.forEach((m,i)=>{ svg += `<circle cx="${X(i)}" cy="${Yp(m.fat)}" r="2.6" style="fill:var(--text3)"><title>${MESL[i]} ${ant} — Faturado: €${fmt(m.fat)}</title></circle>`; });
+  }
   svg += `</svg>`;
+  const legenda = (c,t,tipo) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">${tipo==='line'?`<span style="width:16px;border-top:2px dashed ${c};display:inline-block;"></span>`:`<span style="width:10px;height:10px;border-radius:3px;background:${c};display:inline-block;"></span>`}${t}</span>`;
 
-  const btn = (id,txt) => `<button onclick="dashSetPeriodo('${id}')" style="padding:4px 11px;border-radius:14px;border:1px solid var(--border);cursor:pointer;font-size:11.5px;font-weight:700;${per===id?'background:var(--accent);color:#fff;border-color:var(--accent);':'background:var(--s2);color:var(--text2);'}">${txt}</button>`;
-  const legenda = (c,t,line) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);">${line?`<span style="width:16px;height:3px;border-radius:2px;background:${c};display:inline-block;"></span>`:`<span style="width:10px;height:10px;border-radius:3px;background:${c};display:inline-block;"></span>`}${t}</span>`;
-  const perLbl = per==='ano' ? `Janeiro a ${MES[now.getMonth()]} de ${now.getFullYear()}` : per==='tudo' ? 'Desde o primeiro recebimento' : 'Últimos 12 meses';
+  // ── tabela mês a mês
+  const th='padding:5px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;', td='padding:5px 8px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;';
+  const dv = (v,r)=> (r>0 && v!=null) ? (()=>{ const p=(v-r)/r*100; return `<span style="color:${p>=0?'var(--green)':'var(--red)'};font-size:10.5px;">${p>=0?'▲':'▼'}${Math.abs(p).toFixed(0)}%</span>`; })() : '<span style="color:var(--text3)">–</span>';
+  const linhas = meses.map((m,i)=>{
+    const res = m.fat-m.desp, a = mesesAnt[i];
+    if(m.futuro) return `<tr style="color:var(--text3);"><td style="${td}text-align:left;">${MESL[i]}</td><td style="${td}" colspan="6">–</td></tr>`;
+    return `<tr style="${m.atual?'background:#eff6ff;font-weight:700;':''}"><td style="${td}text-align:left;">${MESL[i]}${m.atual?' · em curso':''}</td>
+      <td style="${td}">€${fmt(m.fat)}</td><td style="${td}">€${fmt(m.rec)}</td><td style="${td}">€${fmt(m.desp)}</td>
+      <td style="${td}color:${res>=0?'var(--green)':'var(--red)'};">€${fmt(res)}</td><td style="${td}">€${fmt(a.fat)}</td><td style="${td}">${dv(m.fat,a.fat)}</td></tr>`;
+  }).join('');
+  const resY = Y.fat-Y.desp;
+  const tabela = `<div style="overflow-x:auto;margin-top:12px;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="color:var(--text3);"><th style="${th}text-align:left;">Mês</th><th style="${th}">Faturado</th><th style="${th}">Recebido</th><th style="${th}">Despesas</th><th style="${th}">Resultado</th><th style="${th}">Faturado ${ant}</th><th style="${th}">vs ${ant}</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr style="font-weight:800;"><td style="padding:6px 8px;">Ano ${ano}</td><td style="padding:6px 8px;text-align:right;">€${fmt(Y.fat)}</td><td style="padding:6px 8px;text-align:right;">€${fmt(Y.rec)}</td><td style="padding:6px 8px;text-align:right;">€${fmt(Y.desp)}</td><td style="padding:6px 8px;text-align:right;color:${resY>=0?'var(--green)':'var(--red)'};">€${fmt(resY)}</td><td style="padding:6px 8px;text-align:right;">€${fmt(Yant.fat)}</td><td style="padding:6px 8px;text-align:right;">${dv(Y.fat,Yant.fat)}</td></tr></tfoot></table></div>`;
+
   host.innerHTML = `
+    ${cardMes}${cardAno}
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-      <div class="mchart-title" style="margin:0;">📊 Evolução mês a mês — Receita líquida</div>
-      <div style="display:flex;gap:6px;">${btn('ano','Ano')}${btn('12m','12 meses')}${btn('tudo','Tudo')}</div>
-    </div>
-    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;">
-      <div><span style="color:var(--text3)">Mês em curso</span> <b style="color:var(--green)">€${fmt(atual.rec)}</b>${delta!==null?` <span style="color:${delta>=0?'var(--green)':'var(--red)'};font-weight:700;">${delta>=0?'▲':'▼'} ${Math.abs(delta).toFixed(0)}% vs mês anterior completo</span>`:''}</div>
-      <div><span style="color:var(--text3)">Acumulado (${perLbl})</span> <b style="color:var(--accent)">€${fmt(totPer)}</b></div>
+      <div class="mchart-title" style="margin:0;">📊 Mês a mês — ${ano}</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" onclick="dashMudarAno(-1)">‹ ${ano-1}</button>
+        <b style="font-size:13px;min-width:44px;text-align:center;">${ano}</b>
+        <button class="btn btn-ghost btn-sm" onclick="dashMudarAno(1)" ${ano>=anoNow?'disabled':''}>${ano+1} ›</button>
+      </div>
     </div>
     ${svg}
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;">
-      ${legenda('var(--green)','Receita líquida do mês (eixo esquerdo)')}${legenda('var(--red)','Despesas do mês')}${legenda('var(--accent)','Acumulado (eixo direito)',true)}
-    </div>`;
+      ${legenda('var(--accent)','Faturado')}${legenda('var(--green)','Recebido')}${legenda('var(--red)','Despesas')}${legenda('var(--text3)',`Faturado em ${ant}`,'line')}
+    </div>
+    ${tabela}`;
 }
+function dashSetPeriodo(){ dashDesenharEvolucao(); }
 
 // ── Lista dos trabalhos de hoje: agendados + concluídos (filtrado por técnico quando aplicável) ──
 function dashAbrirTrabalhosHoje(){
@@ -6976,14 +6976,41 @@ async function delFunc(id){
 // ──────────────────────────────────────────────────────────────
 // COMISSÕES
 // ──────────────────────────────────────────────────────────────
-// ── Comissões (v16.30) — LÓGICA SIMPLES ──────────────────────
-//  • Comissão = 5% × valor da OS SEM IVA, por cada trabalho CONCLUÍDO
+// ── Comissões (v16.32) ───────────────────────────────────────
+//  • Comissão = taxa × valor da OS SEM IVA, por cada trabalho CONCLUÍDO (concluída / OS fechada)
+//  • Taxa por serviço: Recuperação de tubagem (CIPP, epóxi…) e Impermeabilização = 2%; todos os outros = 5%
+//    (as duas percentagens podem ser alteradas no ecrã de Comissões e ficam guardadas)
 //  • A OS pertence a UM técnico (hgTecReceita)
-//  • Sem limiar de salário, sem escalões por relatório atrasado, sem descontos/reposições/garantias
 //  • Garantias sem cobrança e serviços não faturáveis não geram comissão
-//  • O técnico só vê os SEUS valores; o admin vê todos
-window.HG_COMISSAO_TAXA = 0.05;
-function hgComissaoTaxa(){ return window.HG_COMISSAO_TAXA; }
+//  • O técnico só vê os SEUS valores; o admin vê todos, mês a mês
+window.HG_COMISSAO_TAXA = 0.05;   // compatibilidade (taxa geral)
+function hgComissaoCfg(){
+  const c=(window.DB&&window.DB.empresaConfig&&window.DB.empresaConfig.comissao)||{};
+  const n=(v,d)=>{ const x=parseFloat(String(v).replace(',','.')); return (isNaN(x)||x<0||x>100)?d:x/100; };
+  return { padrao:n(c.padrao,0.05), especial:n(c.especial,0.02) };
+}
+window.hgComissaoCfg=hgComissaoCfg;
+function hgComissaoTaxa(){ return hgComissaoCfg().padrao; }
+const _commNorm=x=>String(x||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+// serviço com taxa reduzida (2%): recuperação de tubagem (qualquer método) e impermeabilização
+function hgServicoTaxaReduzida(o){
+  const srv=((window.DB&&window.DB.servicos)||[]).find(s=>s.id===(o&&o.servicoId))||{};
+  const n=_commNorm(srv.nome||(o&&o.servicoNome)||'');
+  return /impermeabiliz/.test(n) || /recupera\w*\s+(de\s+)?tubag/.test(n) || /\bcipp\b/.test(n);
+}
+function hgTaxaOS(o){ const c=hgComissaoCfg(); return hgServicoTaxaReduzida(o)?c.especial:c.padrao; }
+window.hgTaxaOS=hgTaxaOS;
+function hgComissaoGuardar(){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  const pad=parseFloat(String(g('comm-taxa-padrao')).replace(',','.')), esp=parseFloat(String(g('comm-taxa-esp')).replace(',','.'));
+  if(isNaN(pad)||isNaN(esp)||pad<0||esp<0||pad>100||esp>100){ if(typeof toast==='function') toast('Percentagens inválidas','⚠️'); return; }
+  const cfg={...(window.DB.empresaConfig||{}), comissao:{padrao:pad, especial:esp}};
+  try{ if(typeof window.fsMeta==='function') window.fsMeta('empresaConfig', cfg); }catch(e){ console.warn('comissao: não guardou na cloud', e); }
+  window.DB.empresaConfig=cfg;
+  if(typeof toast==='function') toast('Percentagens de comissão guardadas','✅');
+  renderComissoes();
+}
+window.hgComissaoGuardar=hgComissaoGuardar;
 let _commPeriodo = new Date().toISOString().slice(0,7); // 'YYYY-MM'
 window._commTec = window._commTec || '';
 window._commDe  = window._commDe  || '';
@@ -7009,10 +7036,45 @@ function _fechoTodasOS(){
     if(!net) return;
     out.push({id:o.id, data:String(o.data||'').slice(0,10), mes:String(o.data||'').slice(0,7),
       cliente:o.clienteNomeSnapshot||o.clienteNome||((window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{}).nome||'',
-      owner:window.hgTecReceita(o,(rc&&rc.techId)||'__sem__'), net});
+      owner:window.hgTecReceita(o,(rc&&rc.techId)||'__sem__'), net,
+      servico:(((window.DB.servicos||[]).find(s=>s.id===o.servicoId))||{}).nome||o.servicoNome||'', taxa:hgTaxaOS(o)});
   });
   return out;
 }
+// OS do mês que NÃO entram na comissão, com o motivo (para perceber porque falta alguma)
+function hgComissaoExcluidas(mes){
+  const num=v=>{const n=parseFloat(String(v==null?0:v).replace(',','.'));return isNaN(n)?0:n;};
+  const out=[];
+  (window.DB.ordens||[]).forEach(o=>{
+    if(String(o.data||'').slice(0,7)!==mes) return;
+    if(o.estado==='cancelada'||o.estado==='perdida'||o.estado==='rascunho') return;
+    let motivo='';
+    if(o.estado!=='concluida' && o.estado!=='os_fechada') motivo='Ainda não concluída (estado: '+(o.estado||'—').replace('_',' ')+')';
+    else if(o.naoFaturavel || (typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o))) motivo='Serviço não faturável (garantia/orçamento)';
+    else if(o.garantia===true && !o.garantiaComCobranca) motivo='Garantia sem cobrança';
+    else {
+      const rc=(window.DB.recibos||[]).find(r=>r.osId===o.id);
+      let net=num(o.net)||num(rc&&rc.net);
+      if(!net){ const t=num(o.total)||num(rc&&rc.total); net=t?t/(1+(num(o.iva)||23)/100):0; }
+      if(!net) net=window.hgNetReserva(o);
+      if(!net) motivo='Sem valor registado na OS';
+    }
+    if(!motivo) return;
+    const cli=o.clienteNomeSnapshot||o.clienteNome||((window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{}).nome||'';
+    out.push({id:o.id,data:String(o.data||'').slice(0,10),cliente:cli,motivo});
+  });
+  return out.sort((a,b)=>a.data<b.data?-1:1);
+}
+window.hgComissaoExcluidas=hgComissaoExcluidas;
+// Resumo do ano: mês × técnico
+function hgComissaoResumoAno(ano){
+  const todas=_fechoTodasOS().filter(e=>e.mes.slice(0,4)===String(ano));
+  const tecs=hgFechoTecnicos(todas), meses={};
+  for(let m=1;m<=12;m++) meses[ano+'-'+String(m).padStart(2,'0')]={};
+  todas.forEach(e=>{ const r=meses[e.mes]; if(!r) return; const k=e.owner; (r[k]=r[k]||{net:0,com:0,n:0}); r[k].net+=e.net; r[k].com+=e.net*e.taxa; r[k].n++; });
+  return {tecs, meses};
+}
+window.hgComissaoResumoAno=hgComissaoResumoAno;
 // Lista de quem pode ter comissão: utilizadores técnicos + quem for dono de OS (ex.: admin que também trabalha)
 function hgFechoTecnicos(todas){
   const users=window.DB.users||[]; const out={};
@@ -7024,21 +7086,23 @@ window.hgFechoTecnicos=hgFechoTecnicos;
 // Comissão de um técnico num mês (ou intervalo de datas)
 function hgComissaoTecnico(uid, periodo, opts){
   opts=opts||{};
-  const taxa=hgComissaoTaxa();
   const os=_fechoTodasOS().filter(e=>e.owner===uid && (opts.de||opts.ate ? ((!opts.de||e.data>=opts.de)&&(!opts.ate||e.data<=opts.ate)) : e.mes===periodo))
     .sort((a,b)=>a.data<b.data?-1:1)
-    .map(e=>({...e, com:e.net*taxa}));
+    .map(e=>({...e, com:e.net*e.taxa}));
   const base=os.reduce((a,e)=>a+e.net,0);
-  return {os, base, taxa, total:base*taxa};
+  const total=os.reduce((a,e)=>a+e.com,0);
+  return {os, base, taxa:(base?total/base:hgComissaoTaxa()), total};
 }
 window.hgComissaoTecnico=hgComissaoTecnico;
 
 function _commTabelaOS(c){
   if(!c.os.length) return '<div style="font-size:12px;color:var(--text3);padding:8px 0;">Sem trabalhos concluídos neste período.</div>';
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">
-    <thead><tr style="text-align:left;color:var(--text3);"><th style="padding:5px 6px;border-bottom:1px solid var(--border);">OS</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);">Data</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);">Cliente</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;">Valor s/IVA</th><th style="padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;">Comissão ${Math.round(c.taxa*100)}%</th></tr></thead>
-    <tbody>${c.os.map(e=>`<tr><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${e.id}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${e.data.split('-').reverse().join('/')}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;">${esc(e.cliente)}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:right;">€${fmt(e.net)}</td><td style="padding:5px 6px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;">€${fmt(e.com)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="3" style="padding:6px;font-weight:700;">Total</td><td style="padding:6px;text-align:right;font-weight:700;">€${fmt(c.base)}</td><td style="padding:6px;text-align:right;font-weight:800;color:var(--green);">€${fmt(c.total)}</td></tr></tfoot></table>`;
+  const th='padding:5px 6px;border-bottom:1px solid var(--border);', td='padding:5px 6px;border-bottom:1px solid #f1f5f9;';
+  const pc=t=>(Math.round(t*1000)/10).toString().replace('.',',')+'%';
+  return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;">
+    <thead><tr style="text-align:left;color:var(--text3);"><th style="${th}">OS</th><th style="${th}">Data</th><th style="${th}">Cliente</th><th style="${th}">Serviço</th><th style="${th}text-align:right;">Valor s/IVA</th><th style="${th}text-align:right;">%</th><th style="${th}text-align:right;">Comissão</th></tr></thead>
+    <tbody>${c.os.map(e=>`<tr><td style="${td}">${e.id}</td><td style="${td}">${e.data.split('-').reverse().join('/')}</td><td style="${td}">${esc(e.cliente)}</td><td style="${td}">${esc(e.servico||'—')}</td><td style="${td}text-align:right;">€${fmt(e.net)}</td><td style="${td}text-align:right;">${pc(e.taxa)}</td><td style="${td}text-align:right;font-weight:700;">€${fmt(e.com)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="4" style="padding:6px;font-weight:700;">Total</td><td style="padding:6px;text-align:right;font-weight:700;">€${fmt(c.base)}</td><td></td><td style="padding:6px;text-align:right;font-weight:800;color:var(--green);">€${fmt(c.total)}</td></tr></tfoot></table></div>`;
 }
 
 // ── Ecrã do técnico: só vê o seu ──
@@ -7060,7 +7124,7 @@ function renderMinhaComissao(){
   body.innerHTML = `<div class="comm-card">
     <div class="comm-header">
       <div><div style="font-weight:700;font-size:15px;">${esc(window.currentUser.name)}</div>
-        <div style="font-size:11px;color:var(--text3);">${Math.round(c.taxa*100)}% do valor de cada trabalho concluído, sem IVA</div></div>
+        <div style="font-size:11px;color:var(--text3);">${Math.round(hgComissaoCfg().padrao*1000)/10}% do valor s/IVA de cada trabalho concluído (${Math.round(hgComissaoCfg().especial*1000)/10}% em recuperação de tubagem e impermeabilização)</div></div>
       <div style="margin-left:auto;"><span class="badge badge-green">💎 €${fmt(c.total)}</span></div>
     </div>
     <div class="comm-body">
@@ -7095,6 +7159,40 @@ function hgFechoImprimir(periodo){
   const css='body{font-family:Arial,sans-serif;padding:18px;color:#1e293b}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #cbd5e1}.comm-card{border:none!important}@page{size:A4;margin:10mm}';
   hgImprimirHTML('<!doctype html><html><head><meta charset="utf-8"><title>Comissões</title><style>'+css+'</style></head><body>'+hgFechoHtml(periodo,true)+'</body></html>');
 }
+function _commMudarMes(delta){
+  const [y,m]=_commPeriodo.split('-').map(Number); const d=new Date(y,m-1+delta,1);
+  window._commDe=''; window._commAte='';
+  _commPeriodo=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); renderComissoes();
+}
+window._commMudarMes=_commMudarMes; window._commIrMes=m=>{ window._commDe=''; window._commAte=''; _commSetPeriodo(m); };
+function _commResumoHtml(){
+  const ano=_commPeriodo.slice(0,4), r=hgComissaoResumoAno(ano);
+  const nomes=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const fTec=window._commTec||''; const tecs=r.tecs.filter(t=>!fTec||t.id===fTec);
+  const th='padding:5px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;', td='padding:5px 8px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap;';
+  const totCol={}; let totAll=0;
+  const linhas=Object.keys(r.meses).map((mes,i)=>{
+    const row=r.meses[mes]; let tm=0;
+    const cels=tecs.map(t=>{ const v=(row[t.id]||{com:0}).com; tm+=v; totCol[t.id]=(totCol[t.id]||0)+v; return `<td style="${td}">${v?'€'+fmt(v):'<span style="color:var(--text3)">–</span>'}</td>`; }).join('');
+    totAll+=tm;
+    const atual=mes===_commPeriodo;
+    return `<tr onclick="_commIrMes('${mes}')" style="cursor:pointer;${atual?'background:#eff6ff;font-weight:700;':''}"><td style="${td}text-align:left;">${nomes[i]} ${ano}</td>${cels}<td style="${td}font-weight:700;">${tm?'€'+fmt(tm):'–'}</td></tr>`;
+  }).join('');
+  return `<div class="comm-card" style="margin-bottom:16px;padding:12px 14px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;">📊 Resumo ${ano} — mês a mês</div>
+      <div style="font-size:11px;color:var(--text3);">(clique num mês para ver o detalhe)</div></div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--text3);"><th style="${th}text-align:left;">Mês</th>${tecs.map(t=>`<th style="${th}">${esc(t.name)}</th>`).join('')}<th style="${th}">Total</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr><td style="padding:6px 8px;font-weight:800;">Ano</td>${tecs.map(t=>`<td style="padding:6px 8px;text-align:right;font-weight:800;">€${fmt(totCol[t.id]||0)}</td>`).join('')}<td style="padding:6px 8px;text-align:right;font-weight:800;color:var(--green);">€${fmt(totAll)}</td></tr></tfoot></table></div></div>`;
+}
+function _commExcluidasHtml(){
+  if(window._commDe||window._commAte) return '';
+  const ex=hgComissaoExcluidas(_commPeriodo); if(!ex.length) return '';
+  const td='padding:4px 6px;border-bottom:1px solid #f1f5f9;';
+  return `<details style="margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:8px 12px;font-size:12px;">
+    <summary style="cursor:pointer;font-weight:700;">⚠️ ${ex.length} OS deste mês não entram na comissão — ver motivo</summary>
+    <table style="width:100%;border-collapse:collapse;margin-top:6px;"><tbody>${ex.map(e=>`<tr><td style="${td}">${e.id}</td><td style="${td}">${e.data.split('-').reverse().join('/')}</td><td style="${td}">${esc(e.cliente)}</td><td style="${td}color:#92400e;">${esc(e.motivo)}</td></tr>`).join('')}</tbody></table></details>`;
+}
 function renderComissoes(){
   const container = document.getElementById('comm-list');
   if(!container) return;
@@ -7105,15 +7203,25 @@ function renderComissoes(){
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">👷 Técnico</div>
         <select onchange="_commSetFiltro('_commTec',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600;"><option value="">Todos os técnicos</option>${hgFechoTecnicos().map(t=>`<option value="${t.id}" ${window._commTec===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">📅 Mês</div>
-        <input type="month" value="${_commPeriodo}" onchange="window._commDe='';window._commAte='';_commSetPeriodo(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;"></div>
+        <div style="display:flex;align-items:center;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="_commMudarMes(-1)">‹</button>
+        <input type="month" value="${_commPeriodo}" onchange="_commIrMes(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600;">
+        <button class="btn btn-ghost btn-sm" onclick="_commMudarMes(1)">›</button></div></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">ou período: de</div>
         <input type="date" value="${window._commDe}" onchange="_commSetFiltro('_commDe',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;"></div>
       <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">até</div>
         <input type="date" value="${window._commAte}" onchange="_commSetFiltro('_commAte',this.value)" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;"></div>
       ${(window._commDe||window._commAte)?`<button class="btn btn-ghost btn-sm" onclick="window._commDe='';window._commAte='';renderComissoes()">✕ Limpar período</button>`:''}
-      <span style="font-size:11px;color:var(--text3);flex-basis:100%;">5% do valor s/IVA de cada trabalho concluído (data de agendamento). Cada trabalho conta para um único técnico.</span>
+      <div style="display:flex;align-items:flex-end;gap:8px;margin-left:auto;">
+        <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">% serviços em geral</div>
+          <input id="comm-taxa-padrao" type="number" step="0.1" min="0" max="100" value="${hgComissaoCfg().padrao*100}" style="width:70px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:13px;"></div>
+        <div><div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:3px;">% recup. tubagem / imperm.</div>
+          <input id="comm-taxa-esp" type="number" step="0.1" min="0" max="100" value="${hgComissaoCfg().especial*100}" style="width:70px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:13px;"></div>
+        <button class="btn btn-primary btn-sm" onclick="hgComissaoGuardar()">Guardar %</button></div>
+      <span style="font-size:11px;color:var(--text3);flex-basis:100%;">Comissão sobre o valor s/IVA de cada trabalho concluído (data de agendamento): ${hgComissaoCfg().especial*100}% em Recuperação de Tubagem e Impermeabilização, ${hgComissaoCfg().padrao*100}% nos restantes. Cada trabalho conta para um único técnico.</span>
     </div>
+    ${_commResumoHtml()}
     ${hgFechoHtml(_commPeriodo)}
+    ${_commExcluidasHtml()}
   `;
 }
 
@@ -9603,7 +9711,7 @@ window.osComissaoBase = function(o){
   if(!o) return 0;
   if(o.naoFaturavel) return 0;
   if(o.garantia && !o.garantiaComCobranca) return 0;
-  return (parseFloat(o.net)||0)*0.05;
+  return (parseFloat(o.net)||0)*(typeof hgTaxaOS==='function'?hgTaxaOS(o):0.05);
 };
 
 // ── Toggle Garantia — mostra a OS original e zera preços (salvo com cobrança) ──
@@ -10424,7 +10532,7 @@ async function cpParaCoordenadas(cp){
     2565:{ lat:39.054, lng:-9.218 }, // Sobral de Monte Agraço exacto
     2566:{ lat:39.018, lng:-9.148 },
     2580:{ lat:38.997, lng:-9.350 },
-    2590:{ lat:38.979, lng:-9.376 },
+    2590:{ lat:39.017, lng:-9.154 }, // Sobral de Monte Agraço (corrigido v16.32)
     2600:{ lat:38.970, lng:-9.218 }, // Vila Franca de Xira
     2605:{ lat:38.960, lng:-9.197 },
     2610:{ lat:38.928, lng:-9.244 }, // Sintra
@@ -10436,7 +10544,7 @@ async function cpParaCoordenadas(cp){
     2640:{ lat:38.812, lng:-9.170 }, // Mafra
     2645:{ lat:38.804, lng:-9.332 },
     2650:{ lat:38.794, lng:-9.369 },
-    2655:{ lat:38.779, lng:-9.394 },
+    2655:{ lat:38.963, lng:-9.417 }, // Ericeira (corrigido v16.32)
     2660:{ lat:38.800, lng:-9.139 },
     2665:{ lat:38.835, lng:-9.197 },
     2670:{ lat:38.837, lng:-9.236 },
@@ -34914,6 +35022,131 @@ window.cliHistoricoImprimir = function(cliId){
     return round1(km);
   }
 
+  // ===================== v16.32 — BASE FIXA POR FUNCIONÁRIO + KM POR ESTRADA =====================
+  // Percurso de cada dia: SEDE → trabalho 1 → trabalho 2 → … → SEDE, com os km entre cada morada.
+  //   Ricardo, Vinicius e Higor → sede em Sobral de Monte Agraço
+  //   Hamza, Ronaldo e Aldo     → sede em Braga (Rua do Taxa)
+  // Para mudar a morada da sede ou quem pertence a cada uma, edite só este bloco.
+  const BASE_SOBRAL = { rotulo: '🏢 Sede — Sobral de Monte Agraço (2590-004)', cp: '2590-004', morada: '2590-004 Sobral de Monte Agraço, Portugal' };
+  const BASE_BRAGA  = { rotulo: SEDE_LABEL, cp: SEDE.cp, morada: SEDE.morada + ', Portugal' };
+  const BASES_POR_NOME = { ricardo: BASE_SOBRAL, vinicius: BASE_SOBRAL, higor: BASE_SOBRAL, hamza: BASE_BRAGA, ronaldo: BASE_BRAGA, aldo: BASE_BRAGA };
+  const normNome = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function baseFixaDe(u) {
+    const toks = normNome(u && u.name).split(/[^a-z]+/).filter(Boolean);
+    for (const t of toks) if (BASES_POR_NOME[t]) return BASES_POR_NOME[t];
+    return null;
+  }
+
+  // Moradas → coordenadas (Nominatim/OpenStreetMap) e rota por estrada (OSRM). Se não houver rede,
+  // cai para a estimativa por código postal e a linha fica marcada com "≈".
+  const _geoRun = {};                       // cache desta geração
+  let _geoPers = null;                      // cache guardada no telemóvel/PC (moradas já resolvidas)
+  let _falhasRede = 0, _semRede = false, _ultimoNom = 0;
+  const _lerCache = () => { if (_geoPers) return _geoPers; try { _geoPers = JSON.parse(localStorage.getItem('hg_geo_v1') || '{}') || {}; } catch (e) { _geoPers = {}; } return _geoPers; };
+  const _gravarCache = () => { try { localStorage.setItem('hg_geo_v1', JSON.stringify(_geoPers || {})); } catch (e) {} };
+  function resetRede() { _falhasRede = 0; _semRede = false; }
+  const progresso = t => { try { if (typeof window._deslProgresso === 'function') window._deslProgresso(t); } catch (e) {} };
+  async function fetchJson(url, ms) {
+    const ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const tmo = setTimeout(() => { try { ctl && ctl.abort(); } catch (e) {} }, ms || 9000);
+    try {
+      const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } finally { clearTimeout(tmo); }
+  }
+  function falhouRede() { _falhasRede++; if (_falhasRede >= 2) _semRede = true; }
+  async function geocodeNom(q) {
+    const cache = _lerCache();
+    if (cache[q]) return cache[q] === 'x' ? null : cache[q];
+    if (_semRede) return null;
+    const gap = (window._deslNomMs != null) ? window._deslNomMs : 1100;     // Nominatim: máx. 1 pedido por segundo
+    const falta = _ultimoNom + gap - Date.now();
+    if (falta > 0) await _espera(falta);
+    _ultimoNom = Date.now();
+    try {
+      const j = await fetchJson('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pt&q=' + encodeURIComponent(q), 9000);
+      _falhasRede = 0;
+      const r = Array.isArray(j) && j[0];
+      const c = r ? { lat: +r.lat, lng: +r.lon } : null;
+      cache[q] = c || 'x'; _gravarCache();
+      return c;
+    } catch (e) { falhouRede(); return null; }
+  }
+  // Ponto de uma morada: 1) morada completa  2) só o código postal  3) centro do código postal (aproximado)
+  async function pontoMorada(morada, cp) {
+    const hint = await coordsCP(cp);
+    const chave = (morada || '') + '|' + (cp || '');
+    if (_geoRun[chave] !== undefined) return _geoRun[chave];
+    let pt = null;
+    for (const q of [morada, cp ? cp + ', Portugal' : '']) {
+      if (!q || pt) continue;
+      const c = await geocodeNom(q);
+      if (c && (!hint || haversineKm(c, hint) <= 60)) pt = { lat: c.lat, lng: c.lng, aprox: q !== morada };   // >60 km do CP = outra localidade com o mesmo nome
+    }
+    if (!pt && hint) pt = { lat: hint.lat, lng: hint.lng, aprox: true };
+    return (_geoRun[chave] = pt);
+  }
+  async function osrmLegs(pts) {
+    if (_semRede || pts.length < 2) return null;
+    const coords = pts.map(p => p.lng.toFixed(6) + ',' + p.lat.toFixed(6)).join(';');
+    try {
+      const j = await fetchJson('https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=false&steps=false', 14000);
+      if (j && j.code === 'Ok' && j.routes && j.routes[0] && Array.isArray(j.routes[0].legs) && j.routes[0].legs.length === pts.length - 1) {
+        _falhasRede = 0; return j.routes[0].legs.map(l => +l.distance / 1000);
+      }
+    } catch (e) { falhouRede(); }
+    return null;
+  }
+  // km de cada troço de um percurso (pts = base, visitas…, base)
+  async function distanciasRota(pts) {
+    const real = await osrmLegs(pts);
+    return pts.slice(1).map((p, i) => {
+      const a = pts[i];
+      if (real) return { km: real[i], est: !!(a.aprox || p.aprox) };
+      return { km: haversineKm(a, p) * FATOR, est: true };
+    });
+  }
+  async function linhasBaseFixa(u, uid, ini, fim, bf) {
+    const os = osDoFuncionario(uid, ini, fim);
+    const porData = {};
+    os.forEach(o => { (porData[(o.data || '').slice(0, 10)] ??= []).push(o); });
+    const linhas = []; let totKm = 0, totEur = 0, semCoord = 0, estimadas = 0;
+    const baseP = await pontoMorada(bf.morada, bf.cp);
+    const semBase = baseP ? 0 : 1;
+    for (const data of Object.keys(porData).sort()) {
+      const lista = porData[data].sort((a, b) =>
+        String(a.horaIni || a.hora || '').localeCompare(String(b.horaIni || b.hora || '')));
+      progresso('A calcular ' + fmtData(data) + '…');
+      const paradas = [];
+      for (const o of lista) {
+        const p = baseP ? await pontoMorada(moradaCompletaDe(o), cpDaOS(o)) : null;
+        paradas.push({ o, p, destLabel: moradaDe(o) || clienteDe(o) || '—' });
+      }
+      const validas = paradas.filter(x => x.p);
+      const trocos = (baseP && validas.length) ? await distanciasRota([baseP, ...validas.map(x => x.p), baseP]) : [];
+      let k = 0, antLabel = bf.rotulo;
+      const empurra = (hora, de, para, cliente, t, semPonto) => {
+        const km = semPonto ? 0 : round1(t.km), eur = round2(km * VALOR_KM);
+        if (!semPonto && t.est) estimadas++;
+        linhas.push({ rank: 1, data, hora, de, para, cliente, km, eur, est: !semPonto && !!t.est, semPonto: !!semPonto });
+        totKm += km; totEur += eur;
+      };
+      for (const x of paradas) {
+        const hora = x.o.horaIni || x.o.hora || '';
+        if (!x.p) { semCoord++; empurra(hora, antLabel, x.destLabel, clienteDe(x.o), { km: 0 }, true); continue; }
+        empurra(hora, antLabel, x.destLabel, clienteDe(x.o), trocos[k++] || { km: 0, est: true }, !baseP);
+        antLabel = x.destLabel;
+      }
+      if (baseP && validas.length) empurra('', antLabel, bf.rotulo, 'Regresso à sede', trocos[k] || { km: 0, est: true }, false);
+    }
+    linhas.forEach((l, i) => l._i = i);
+    linhas.sort((x, y) => x.data.localeCompare(y.data) || x.rank - y.rank || x._i - y._i);
+    return { linhas, totKm: round1(totKm), totEur: round2(totEur), semCoord, semBase, fixa: true, estimadas, base: bf };
+  }
+  window._deslResetRede = resetRede;
+  // ===================== fim v16.32 =====================
+
   // ---- OS de um funcionario no periodo ----
   function osDoFuncionario(uid, ini, fim) {
     return (window.DB.ordens || []).filter(o => {
@@ -34926,8 +35159,12 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   // ---- linhas por dia: saída → chegada (cada troço), com regresso à base do dia ----
-  async function linhasFuncionario(uid, ini, fim) {
+  async function linhasFuncionario(uid, ini, fim, opts) {
+    opts = opts || {};
+    const contarRegresso = !!opts.contarRegressoAlojamento;   // por defeito NÃO conta o regresso ao alojamento
     const u = userById(uid) || {};
+    const bf = baseFixaDe(u);
+    if (bf) return linhasBaseFixa(u, uid, ini, fim, bf);
     const os = osDoFuncionario(uid, ini, fim);
     const porData = {};
     os.forEach(o => { (porData[(o.data || '').slice(0, 10)] ??= []).push(o); });
@@ -34972,7 +35209,7 @@ window.cliHistoricoImprimir = function(cliId){
         totKm += km; totEur += eur;
         if (p) { ant = p; antLabel = destLabel; antMorada = moradaCompletaDe(o); }
       }
-      if (ROUND_TRIP && baseC && ant) {
+      if (ROUND_TRIP && baseC && ant && (!base.temp || contarRegresso)) {
         const km = await kmTroco(ant, baseC, antMorada, baseMorada);
         const eur = round2(km * VALOR_KM);
         linhas.push({ data, hora: '', de: antLabel, para: baseLabel(base), cliente: base.temp ? 'Regresso ao alojamento' : 'Regresso a casa', km, eur, semPonto: false, rank: 1 });
@@ -35029,14 +35266,19 @@ window.cliHistoricoImprimir = function(cliId){
   }
 
   // ---- HTML de uma folha ----
-  async function folhaHTML(uid, ini, fim) {
-    const { linhas, totKm, totEur, semCoord, semBase } = await linhasFuncionario(uid, ini, fim);
+  async function folhaHTML(uid, ini, fim, opts) {
+    opts = opts || {};
+    const { linhas, totKm, totEur, semCoord, semBase, fixa, estimadas } = await linhasFuncionario(uid, ini, fim, opts);
     const rows = linhas.length ? linhas.map(l => `
       <tr${l.semPonto ? ' class="sp"' : ''}><td>${esc(fmtData(l.data))}</td><td>${esc(l.hora)}</td><td>${esc(l.de)}</td><td>${esc(l.para)}</td><td>${esc(l.cliente)}</td>
-      <td class="num">${l.km.toFixed(1)}</td><td class="num">${l.eur.toFixed(2)} €</td></tr>`).join('')
+      <td class="num">${l.est ? '≈ ' : ''}${l.km.toFixed(1)}</td><td class="num">${l.eur.toFixed(2)} €</td></tr>`).join('')
       : `<tr><td colspan="7" style="text-align:center;color:#888;padding:18px;">Sem deslocações no período.</td></tr>`;
-    const avisoCasa  = semBase  ? `<div class="aviso">⚠ Em ${semBase} dia(s) o funcionário não tem código postal de casa/alojamento válido — os km contam a partir da 1.ª visita desse dia.</div>` : '';
+    const avisoCasa  = semBase  ? (fixa ? `<div class="aviso">⚠ Não foi possível localizar a morada da sede — os km ficam a 0.</div>` : `<div class="aviso">⚠ Em ${semBase} dia(s) o funcionário não tem código postal de casa/alojamento válido — os km contam a partir da 1.ª visita desse dia.</div>`) : '';
+    const avisoEst   = (fixa && estimadas) ? `<div class="aviso">ℹ ${estimadas} troço(s) marcados com ≈ foram estimados por código postal (linha reta × ${FATOR}) porque a rota por estrada não ficou disponível.</div>` : '';
     const avisoCoord = semCoord ? `<div class="aviso">⚠ ${semCoord} visita(s) sem código postal do cliente — contam 0 km (linhas a cinzento).</div>` : '';
+    const notaTxt = fixa
+      ? `Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: sede → trabalhos (por ordem de hora) → sede, com os km entre cada morada, por estrada (OpenStreetMap). Os troços marcados com ≈ são estimativas por código postal.`
+      : `Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: ponto de saída → visitas${opts.contarRegressoAlojamento ? ' → regresso' : ''}. A base do dia é a casa do funcionário ou, nos dias em que está deslocado, a morada do alojamento. Inclui a viagem de ida (casa → alojamento) no 1.º dia da deslocação e a de volta no último dia. Ao fim de semana (sábado e domingo) a base é a sede, Rua do Taxa 13, Braga, com ida e volta a cada local, e entram as viagens alojamento → casa (sexta) e casa → alojamento (segunda).${opts.contarRegressoAlojamento ? '' : ' Não inclui os regressos ao alojamento no fim do dia.'} Distância estimada por código postal (linha reta × ${FATOR}).`;
     return `
     <section class="folha">
       <header class="cab">
@@ -35044,18 +35286,19 @@ window.cliHistoricoImprimir = function(cliId){
         <div class="tit"><h1>Mapa de Deslocação</h1><div class="sub">${esc(EMPRESA)}</div></div>
       </header>
       <div class="meta"><div><b>Funcionário:</b> ${esc(nomeFunc(uid))}</div><div><b>Período:</b> ${esc(fmtData(ini))} a ${esc(fmtData(fim))}</div></div>
-      ${avisoCasa}${avisoCoord}
+      ${avisoCasa}${avisoCoord}${avisoEst}
       <table class="tb">
         <thead><tr><th>Data</th><th>Hora</th><th>Ponto de saída</th><th>Ponto de chegada</th><th>Cliente</th><th>Km rodados</th><th>Deslocação (€)</th></tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr><td colspan="5">TOTAL</td><td class="num">${totKm.toFixed(1)}</td><td class="num">${totEur.toFixed(2)} €</td></tr></tfoot>
       </table>
       <div class="ass"><div class="lin"><span>Data</span></div><div class="lin"><span>Assinatura do funcionário</span></div><div class="lin"><span>Assinatura da empresa</span></div></div>
-      <div class="nota">Valor por km: ${VALOR_KM.toFixed(2)} €. Trajeto de cada dia: ponto de saída → visitas → regresso. A base do dia é a casa do funcionário ou, nos dias em que está deslocado, a morada do alojamento. Inclui a viagem de ida (casa → alojamento) no 1.º dia da deslocação e a de volta no último dia. Ao fim de semana (sábado e domingo) a base é a sede, Rua do Taxa 13, Braga, com ida e volta a cada local, e entram as viagens alojamento → casa (sexta) e casa → alojamento (segunda). Distância estimada por código postal (linha reta × ${FATOR}).</div>
+      <div class="nota">${notaTxt}</div>
     </section>`;
   }
 
   async function gerar() {
+    resetRede();
     const uid = document.getElementById('desl-func').value;
     const ini = document.getElementById('desl-ini').value;
     const fim = document.getElementById('desl-fim').value;
@@ -35071,7 +35314,8 @@ window.cliHistoricoImprimir = function(cliId){
     if (!alvos.length) { alert('Não há funcionários para gerar.'); return; }
 
     const folhas = [];
-    for (const id of alvos) folhas.push(await folhaHTML(id, ini, fim));
+    const optsMapa = { contarRegressoAlojamento: !!(document.getElementById('desl-regresso') || {}).checked };
+    for (const id of alvos) folhas.push(await folhaHTML(id, ini, fim, optsMapa));
 
     const css = `*{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;}body{margin:0;color:#1e293b;}
       .folha{padding:26px 30px;page-break-after:always;}.folha:last-child{page-break-after:auto;}
@@ -35095,8 +35339,9 @@ window.cliHistoricoImprimir = function(cliId){
   window._deslGerar = async function () {
     const btn = document.getElementById('desl-gerar-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'A gerar…'; }
+    window._deslProgresso = t => { const b = document.getElementById('desl-gerar-btn'); if (b) b.textContent = t; };
     try { await gerar(); } catch (e) { alert('Erro ao gerar: ' + (e && e.message || e)); }
-    finally { if (btn) { btn.disabled = false; btn.textContent = 'Gerar mapa'; } }
+    finally { window._deslProgresso = null; if (btn) { btn.disabled = false; btn.textContent = 'Gerar mapa'; } }
   };
 
   // ---- Painel ----
@@ -35104,9 +35349,11 @@ window.cliHistoricoImprimir = function(cliId){
     const uid = document.getElementById('desl-func').value;
     const box = document.getElementById('desl-casa-info');
     if (!box) return;
-    if (uid === '__todos__') { box.textContent = 'Saída e regresso: casa de cada funcionário (CP da ficha) ou, nos dias em que está deslocado, a morada do alojamento temporário.'; return; }
+    if (uid === '__todos__') { box.textContent = 'Saída e regresso pela sede: Sobral de Monte Agraço (Ricardo, Vinicius, Higor) ou Braga (Hamza, Ronaldo, Aldo). Outros funcionários: casa (CP da ficha).'; return; }
     const u = userById(uid);
     if (!u) { box.textContent = ''; return; }
+    const bfx = baseFixaDe(u);
+    if (bfx) { box.innerHTML = `${esc(bfx.rotulo)}<br>Percurso: sede → trabalhos → sede, km por estrada entre cada morada.`; return; }
     const est = estadiasDe(u).filter(e => e.cp).map(e => `🏨 ${esc(e.cidade || '')} (${esc(e.cp)}) de ${esc(fmtData(e.de) || '—')} a ${esc(fmtData(e.ate) || '—')}`);
     box.innerHTML = (u.cp ? `🏠 Casa: CP <b>${esc(u.cp)}</b> ${esc(u.cidade || '')}.` : `⚠ Sem código postal de casa na ficha.`)
       + (est.length ? '<br>' + est.join('<br>') : '');
@@ -35137,6 +35384,9 @@ window.cliHistoricoImprimir = function(cliId){
           <div style="flex:1;"><label style="font-size:12px;font-weight:bold;">Data fim</label>
             <input type="date" id="desl-fim" value="${hoje}" style="width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:8px;"></div>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:#334155;cursor:pointer;">
+          <input type="checkbox" id="desl-regresso"> Contar o regresso ao alojamento no fim do dia
+        </label>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
           <button onclick="document.getElementById('desl-ov').remove()" style="padding:9px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer;">Cancelar</button>
           <button id="desl-gerar-btn" onclick="window._deslGerar()" style="padding:9px 18px;border:none;background:#1e3a8a;color:#fff;border-radius:8px;cursor:pointer;font-weight:bold;">Gerar mapa</button>

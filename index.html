@@ -1400,7 +1400,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.36<br>
+      HidroGest v16.37<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1425,7 +1425,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.36<br>
+      HidroGest v16.37<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -2654,33 +2654,13 @@ tr:hover td{background:rgba(37,99,235,.03);}
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;">
 
-        <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;" id="lbl-rel-agend">
-          <div>
-            <div style="font-size:13px;font-weight:700;">📅 Resumo diário de agendamentos</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;">Enviado todos os dias às <strong>19:00</strong> com os trabalhos do dia ainda por realizar</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <input type="time" id="hora-rel-agend" value="19:00" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:80px;">
-            <input type="checkbox" id="envio-rel-agendamentos" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;"
-              onchange="document.getElementById('lbl-rel-agend').style.borderColor=this.checked?'var(--accent)':'var(--border)'">
-          </div>
-        </label>
-
-        <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;" id="lbl-rel-fat">
-          <div>
-            <div style="font-size:13px;font-weight:700;">💰 Faturamento diário</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:2px;">Enviado todos os dias às <strong>22:00</strong> com as OS fechadas e valores reais</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <input type="time" id="hora-rel-fat" value="22:00" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;width:80px;">
-            <input type="checkbox" id="envio-rel-faturamento" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;"
-              onchange="document.getElementById('lbl-rel-fat').style.borderColor=this.checked?'var(--accent)':'var(--border)'">
-          </div>
-        </label>
+        <div style="padding:12px 14px;border:1.5px solid var(--accent);border-radius:8px;">
+          <div style="font-size:13px;font-weight:700;">📅 Agendamentos dos próximos 7 dias + faturação prevista</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">Enviado todos os dias a partir das <strong>20:00</strong> (quando o sistema estiver aberto).</div>
+        </div>
 
         <div style="margin-top:4px;">
-          <button class="btn btn-ghost btn-sm" onclick="relDiarioEnviarAgora('agendamentos')" style="font-size:12px;">▶ Testar agendamentos agora</button>
-          <button class="btn btn-ghost btn-sm" onclick="relDiarioEnviarAgora('faturamento')" style="font-size:12px;margin-left:6px;">▶ Testar faturamento agora</button>
+          <button class="btn btn-ghost btn-sm" onclick="relDiarioEnviarAgora('resumo')" style="font-size:12px;margin-left:6px;border-color:#0f2447;color:#0f2447;">▶ Testar email dos 7 dias agora</button>
           <button class="btn btn-ghost btn-sm" onclick="relDiarioEnviarAgora('gestao')" style="font-size:12px;margin-left:6px;border-color:#d97706;color:#d97706;">▶ Testar gestão agora (relatórios+faturas)</button>
         </div>
       </div>
@@ -12916,6 +12896,21 @@ async function adminConfirmarBaixa(msgId){
     const m=(window.DB.mensagens_internas||[]).find(x=>x._firebaseId===msgId||(x.id||x.osId)===msgId)||{};
     if(m.osId&&!isNaN(valorNum)&&valorNum>0)
       await window.fsSetMerge('ordens',m.osId,{valorTotal:valorNum.toFixed(2)});
+    // v16.37 — 1ª baixa feita UMA só vez: o aviso de fatura também marca a OS como FATURADA,
+    // para a agenda deixar de a mostrar "A FATURAR" (não é preciso dar baixa no cliente outra vez).
+    if(m.osId){
+      try{
+        const _os=(window.DB.ordens||[]).find(o=>o.id===m.osId);
+        if(!_os || _os.faturaEmitida!==true){
+          const _agora=new Date().toISOString();
+          await window.fsSetMerge('ordens',m.osId,{faturaEmitida:true,faturaEmitidaEm:_agora});
+          if(_os){ _os.faturaEmitida=true; _os.faturaEmitidaEm=_agora; }
+          const _ex=(window.DB.recibos||[]).find(r=>r.osId===m.osId);
+          if(_os && !_ex && _os.pago!==true && typeof osCriarReciboAutomatico==='function'){ try{ await osCriarReciboAutomatico(_os,'pending'); }catch(_r){ console.warn('recibo pendente',_r); } }
+        }
+        if(typeof osRenderAgenda==='function') osRenderAgenda();
+      }catch(_e){ console.warn('baixa do aviso → OS falhou:', _e); }
+    }
     toast('✅ Baixa registada'+(numTrim?' · Nº '+numTrim:''),'📄');
     if(typeof auditLog==='function') auditLog('baixa_documento','Baixa OS '+msgId+(numTrim?' — Nº '+numTrim:'')+(obsTrim?' — '+obsTrim:'')+(valorNum?' — €'+valorNum.toFixed(2):''));
     adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
@@ -12981,6 +12976,11 @@ async function adminAnularBaixaDocumento(msgId){
     await window.fsSetMerge('mensagens_internas', msgId, {
       documentoEmitido:false,documentoEmitidoEm:null,documentoEmitidoPor:null,documentoNumero:null,documentoObs:null,
     });
+    try{
+      const _m=(window.DB.mensagens_internas||[]).find(x=>x._firebaseId===msgId||(x.id||x.osId)===msgId)||{};
+      const _o=(window.DB.ordens||[]).find(o=>o.id===_m.osId);
+      if(_o && _o.pago!==true){ await window.fsSetMerge('ordens',_o.id,{faturaEmitida:false,faturaEmitidaEm:null}); _o.faturaEmitida=false; _o.faturaEmitidaEm=null; if(typeof osRenderAgenda==='function') osRenderAgenda(); }
+    }catch(_e){ console.warn('anular baixa → OS falhou:', _e); }
     toast('Baixa anulada','↩');
     adminAbrirPainelMensagens(window._faturacaoFiltro||'pendentes');
   }catch(e){ toast('Erro: '+e.message,'❌'); }
@@ -16383,25 +16383,7 @@ function relDiarioIniciarScheduler(){
       }
     }
 
-    // Relatório de agendamentos
-    if(cfg.envioRelAgendamentos){
-      const horaAlvo = cfg.horaRelAgendamentos||'19:00';
-      const chaveHoje = `agend_${hoje}`;
-      if(hhmm === horaAlvo && _relDiarioUltimoAgend !== chaveHoje){
-        _relDiarioUltimoAgend = chaveHoje;
-        relDiarioEnviarAgendamentos(hoje).catch(e=>console.error('[RelDiario] agend erro:',e));
-      }
-    }
-
-    // Relatório de faturamento
-    if(cfg.envioRelFaturamento){
-      const horaAlvo = cfg.horaRelFaturamento||'22:00';
-      const chaveHoje = `fat_${hoje}`;
-      if(hhmm === horaAlvo && _relDiarioUltimoFat !== chaveHoje){
-        _relDiarioUltimoFat = chaveHoje;
-        relDiarioEnviarFaturamento(hoje).catch(e=>console.error('[RelDiario] fat erro:',e));
-      }
-    }
+    // (v16.37) Relatórios de agendamentos 19h e faturamento 22h removidos — substituídos pelo Resumo (7 dias).
 
     // Relatório de gestão — relatórios em falta + faturas (08:45 fixo)
     {
@@ -16410,6 +16392,11 @@ function relDiarioIniciarScheduler(){
         _relDiarioUltimoGestao = chaveHoje;
         relDiarioEnviarGestao(hoje).catch(e=>console.error('[RelDiario] gestao erro:',e));
       }
+    }
+    // v16.37 — Resumo do dia (agendamentos, faturação, OS por fechar, previsão) — a partir das 20:00,
+    // com "recuperação": se ninguém tinha o sistema aberto às 20:00, envia assim que alguém (admin/comercial) o abre.
+    if(window.currentUser && window.currentUser.role!=='tecnico' && hhmm>='20:00' && (window.DB.ordens||[]).length){
+      relDiarioResumoTentar(hoje).catch(e=>console.error('[RelDiario] resumo erro:',e));
     }
   }, 30000); // verificar a cada 30 segundos
   console.log('[RelDiario] Scheduler iniciado');
@@ -16420,7 +16407,58 @@ function relDiarioEnviarAgora(tipo){
   const hoje = new Date().toISOString().slice(0,10);
   if(tipo==='agendamentos') relDiarioEnviarAgendamentos(hoje).then(()=>toast('✅ Email de agendamentos enviado!','📊')).catch(e=>toast('Erro: '+e.message,'❌'));
   if(tipo==='faturamento')  relDiarioEnviarFaturamento(hoje).then(()=>toast('✅ Email de faturamento enviado!','💰')).catch(e=>toast('Erro: '+e.message,'❌'));
+  if(tipo==='resumo')       relDiarioEnviarResumo(hoje).then(()=>toast('✅ Resumo do dia enviado!','📊')).catch(e=>toast('Erro: '+e.message,'❌'));
   if(tipo==='gestao')       relDiarioEnviarGestao(hoje).then(()=>toast('✅ Email de gestão enviado!','📋')).catch(e=>toast('Erro: '+e.message,'❌'));
+}
+
+// ── v16.37 — RESUMO DO DIA para o Ronaldo ──────────────────────────────
+// 1) nº de agendamentos feitos no dia  2) faturação dos trabalhos concluídos no dia
+// 3) OS não fechadas  4) previsão de faturação das OS abertas
+let _relResumoBusy=false;
+async function relDiarioResumoTentar(hoje){
+  if(_relResumoBusy) return;
+  try{ if(localStorage.getItem('hg_resumo_enviado')===hoje) return; }catch(_){}
+  _relResumoBusy=true;
+  try{
+    // já enviado por outro computador/telemóvel? (evita duplicados)
+    if(window.DB.resumoDiarioUltimo && window.DB.resumoDiarioUltimo.dia===hoje){ try{localStorage.setItem('hg_resumo_enviado',hoje);}catch(_){} return; }
+    try{ localStorage.setItem('hg_resumo_enviado',hoje); }catch(_){}   // marca já (se falhar, tenta no dia seguinte, não em loop)
+    if(window.fsMeta) { try{ await window.fsMeta('resumoDiarioUltimo',{dia:hoje,por:(window.currentUser&&window.currentUser.name)||'',em:new Date().toISOString()}); }catch(_){} }
+    await relDiarioEnviarResumo(hoje);
+  } finally { _relResumoBusy=false; }
+}
+
+async function relDiarioEnviarResumo(dataStr){
+  const ordens=window.DB.ordens||[], clientes=window.DB.clientes||[], servicos=window.DB.servicos||[], users=window.DB.users||[];
+  const emp=(typeof getEmpDados==='function')?getEmpDados():{};
+  const v=o=>parseFloat(o.total||o.valorTotal||0)||0;
+  const eur=n=>'€'+(parseFloat(n)||0).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const nf=o=>(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o));
+  const lim=new Date(dataStr+'T12:00:00'); lim.setDate(lim.getDate()+7);
+  const limStr=lim.getFullYear()+'-'+String(lim.getMonth()+1).padStart(2,'0')+'-'+String(lim.getDate()).padStart(2,'0');
+  const lista=ordens.filter(o=>['agendada','em_curso'].includes(o.estado)&&(o.data||'')>=dataStr&&(o.data||'')<=limStr)
+    .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaIni||'').localeCompare(b.horaIni||''));
+  const total=lista.filter(o=>!nf(o)).reduce((a,o)=>a+v(o),0);
+  const fdata=d=>new Date(d+'T12:00:00').toLocaleDateString('pt-PT',{weekday:'short',day:'2-digit',month:'2-digit'});
+  const cli=o=>((clientes.find(c=>c.id===o.clienteId)||{}).nome)||'—';
+  const srv=o=>((servicos.find(x=>x.id===o.servicoId)||{}).nome)||o.servicoNome||'—';
+  const tec=o=>(o.tecnicos||[]).map(id=>((users.find(u=>u.id===id)||{}).name||'').split(' ')[0]).filter(Boolean).join(', ')||'—';
+  const th='padding:7px 8px;text-align:left;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;';
+  const td='padding:7px 8px;font-size:13px;border-bottom:1px solid #f1f5f9;';
+  const linhas=lista.length?lista.map(o=>'<tr><td style="'+td+'">'+fdata(o.data)+' '+(o.horaIni||'')+'</td><td style="'+td+'font-weight:700;">'+o.id+'</td><td style="'+td+'">'+cli(o)+'</td><td style="'+td+'">'+srv(o)+'</td><td style="'+td+'">'+tec(o)+'</td><td style="'+td+'text-align:right;font-weight:700;">'+(nf(o)?'<span style="color:#94a3b8;font-weight:400;">s/ fatura</span>':eur(v(o)))+'</td></tr>').join(''):'<tr><td colspan="6" style="'+td+'color:#94a3b8;text-align:center;">Sem agendamentos nos próximos 7 dias.</td></tr>';
+  const html='<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"></head><body style="font-family:Segoe UI,Arial,sans-serif;color:#1e293b;max-width:760px;margin:0 auto;padding:16px;">'
+    +'<div style="background:#0f2447;color:#fff;padding:16px 20px;border-radius:10px 10px 0 0;"><div style="font-size:18px;font-weight:800;">📅 Agendamentos dos próximos 7 dias</div><div style="font-size:13px;opacity:.85;">'+(emp.nome||'HidroGest')+' · '+fdata(dataStr)+' a '+fdata(limStr)+'</div></div>'
+    +'<div style="display:flex;gap:10px;padding:14px 0;"><div style="flex:1;background:#eff6ff;border-radius:10px;padding:12px 14px;"><div style="font-size:11px;color:#475569;">Agendamentos</div><div style="font-size:22px;font-weight:800;">'+lista.length+'</div></div>'
+    +'<div style="flex:1;background:#f0fdf4;border-radius:10px;padding:12px 14px;"><div style="font-size:11px;color:#475569;">Faturação prevista (c/ IVA)</div><div style="font-size:22px;font-weight:800;">'+eur(total)+'</div></div></div>'
+    +'<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="'+th+'">Data</th><th style="'+th+'">OS</th><th style="'+th+'">Cliente</th><th style="'+th+'">Serviço</th><th style="'+th+'">Técnico</th><th style="'+th+'text-align:right;">Valor</th></tr></thead><tbody>'+linhas+'</tbody></table>'
+    +'<div style="margin-top:14px;font-size:11px;color:#94a3b8;text-align:center;">Orçamentos/garantias sem fatura não contam no total.</div></body></html>';
+  await ejsEnviar('nova',{
+    to_email:REL_DIARIO_EMAIL, to_name:'Ronaldo Fialho',
+    assunto:'📅 Próximos 7 dias — '+lista.length+' agendamentos · previsão '+eur(total),
+    html_body:html,
+    corpo:'Próximos 7 dias: '+lista.length+' agendamentos; faturação prevista '+eur(total)
+  });
+  if(typeof auditLog==='function') auditLog('rel_resumo_enviado','Resumo 7 dias '+dataStr+' enviado');
 }
 
 // ── Relatório diário de gestão — relatórios em falta + faturas ──
@@ -16454,7 +16492,8 @@ async function relDiarioEnviarGestao(dataStr){
     const dataFecho = o.concluidoEm||o.data;
     if(!dataFecho) return false;
     const dFecho = new Date(dataFecho.slice(0,10)+'T12:00:00');
-    return diasUteis(dFecho, hoje) >= 2;
+    // v16.37 — só os últimos 7 dias (≥ 2 dias úteis de atraso e fecho há no máximo 7 dias)
+    return diasUteis(dFecho, hoje) >= 2 && ((hoje-dFecho)/86400000) <= 7.5;
   }).sort((a,b)=>(a.concluidoEm||a.data||'').localeCompare(b.concluidoEm||b.data||''));
 
   // ── Calcular dia anterior (útil ou não) ──
@@ -39142,5 +39181,116 @@ window.abrirApresentacaoGrupo = function(){
 })();
 </script>
 
+
+<script>
+/* v16.37 — Faturas a emitir: lista diária SÓ para a utilizadora Fabiana */
+(function(){
+  function ehFabiana(){
+    const u=window.currentUser; if(!u) return false;
+    const n=String(u.name||u.nome||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+    return n.indexOf('fabiana')>=0;
+  }
+  function pendentes(){
+    return (window.DB&&window.DB.ordens||[])
+      .filter(o=>(o.estado==='concluida'||o.estado==='os_fechada'))
+      .filter(o=>o.faturaEmitida!==true)
+      .filter(o=>!(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)))
+      .sort((a,b)=>String(a.concluidoEm||a.data||'').localeCompare(String(b.concluidoEm||b.data||'')));
+  }
+  function eur(v){ return (parseFloat(v)||0).toLocaleString('pt-PT',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function esc(t){ return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  window.hgFabAbrir=function(){
+    const l=pendentes(); const old=document.getElementById('mo-fat-fabiana'); if(old) old.remove();
+    const mo=document.createElement('div'); mo.id='mo-fat-fabiana';
+    mo.style.cssText='position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    const tot=l.reduce((a,o)=>a+(parseFloat(o.valorTotal||o.total)||0),0);
+    let h='<div style="background:#fff;border-radius:16px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.3);font-family:Outfit,sans-serif;">'
+      +'<div style="padding:18px 22px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;gap:12px;">'
+      +'<div><div style="font-size:17px;font-weight:800;color:#0f2447;">🧾 Faturas a emitir</div>'
+      +'<div style="font-size:12.5px;color:#64748b;margin-top:2px;">'+l.length+' OS por faturar · Total c/ IVA €'+eur(tot)+'</div></div>'
+      +'<button onclick="document.getElementById(\'mo-fat-fabiana\').remove()" style="border:0;background:#f1f5f9;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:700;">Fechar</button></div>'
+      +'<div style="overflow:auto;padding:8px 22px 18px;">';
+    if(!l.length) h+='<div style="padding:30px;text-align:center;color:#16a34a;font-weight:700;">✅ Não há faturas por emitir.</div>';
+    l.forEach(o=>{
+      const cli=(window.DB.clientes||[]).find(c=>c.id===o.clienteId)||{};
+      const met=(o.pagamento&&o.pagamento.metodo)||o.metodoPagamento||'—';
+      const dt=String(o.concluidoEm||o.data||'').slice(0,10);
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f1f5f9;">'
+        +'<div style="min-width:0;"><div style="font-weight:700;color:#0f2447;">'+esc(o.id)+' · '+esc(cli.nome||'—')+'</div>'
+        +'<div style="font-size:12px;color:#64748b;">'+esc(dt)+' · '+esc(met)+(cli.nif?' · NIF '+esc(cli.nif):'')+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:10px;flex-shrink:0;"><b>€'+eur(o.valorTotal||o.total)+'</b>'
+        +'<button onclick="hgFabMarcar(\''+esc(o.id)+'\')" style="border:0;background:#0f2447;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:700;font-size:12px;">✅ Já emitida</button></div></div>';
+    });
+    h+='</div></div>'; mo.innerHTML=h; document.body.appendChild(mo);
+    mo.addEventListener('click',e=>{ if(e.target===mo) mo.remove(); });
+  };
+  window.hgFabMarcar=async function(osId){
+    try{
+      const o=(window.DB.ordens||[]).find(x=>x.id===osId); if(!o) return;
+      const agora=new Date().toISOString();
+      await window.fsSetMerge('ordens',osId,{faturaEmitida:true,faturaEmitidaEm:agora});
+      o.faturaEmitida=true; o.faturaEmitidaEm=agora;
+      const ex=(window.DB.recibos||[]).find(r=>r.osId===osId);
+      if(!ex && o.pago!==true && typeof osCriarReciboAutomatico==='function'){ try{ await osCriarReciboAutomatico(o,'pending'); }catch(_){} }
+      if(typeof auditLog==='function') auditLog('fatura_emitida','OS '+osId+' marcada como FATURADA (lista diária)');
+      if(typeof osRenderAgenda==='function') osRenderAgenda();
+      window.hgFabAbrir(); window.hgFabBadge();
+    }catch(e){ if(typeof toast==='function') toast('Erro: '+e.message,'❌'); }
+  };
+  window.hgFabBadge=function(){
+    let b=document.getElementById('hg-fab-badge');
+    if(!ehFabiana()){ if(b) b.remove(); return; }
+    const n=pendentes().length;
+    if(!b){ b=document.createElement('button'); b.id='hg-fab-badge'; b.onclick=window.hgFabAbrir;
+      b.style.cssText='position:fixed;right:18px;bottom:18px;z-index:9000;border:0;border-radius:999px;padding:12px 18px;font:700 14px Outfit,sans-serif;color:#fff;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.3);';
+      document.body.appendChild(b); }
+    b.style.background=n?'#d97706':'#16a34a';
+    b.textContent='🧾 Faturas a emitir: '+n;
+  };
+  function hoje(){ return new Date().toISOString().slice(0,10); }
+  // v16.37 — Aviso ao técnico no 1º login do dia: relatórios em atraso (últimos 7 dias)
+  function diasUteisT(de,ate){ let d=new Date(de),n=0; while(d<ate){ d.setDate(d.getDate()+1); if(d.getDay()!==0&&d.getDay()!==6) n++; } return n; }
+  function relAtrasadosTec(){
+    const u=window.currentUser; const agora=new Date(hoje()+'T12:00:00');
+    return (window.DB.ordens||[]).filter(o=>{
+      if(!(o.tecnicos||[]).includes(u.id)) return false;
+      if(o.estado!=='concluida'&&o.estado!=='os_fechada') return false;
+      if(typeof osServicoNaoFaturavel==='function'&&osServicoNaoFaturavel(o)) return false;
+      if(typeof window.osRelConcluido==='function'&&window.osRelConcluido(o)) return false;
+      const df=String(o.concluidoEm||o.data||'').slice(0,10); if(!df) return false;
+      const d=new Date(df+'T12:00:00');
+      return diasUteisT(d,agora)>=2 && (agora-d)/86400000<=7.5;
+    }).sort((a,b)=>String(a.concluidoEm||a.data||'').localeCompare(String(b.concluidoEm||b.data||'')));
+  }
+  function avisoTecnico(){
+    const u=window.currentUser; if(!u||u.role!=='tecnico'||!(window.DB.ordens||[]).length) return;
+    const chave='hg_aviso_rel_'+u.id; try{ if(localStorage.getItem(chave)===hoje()) return; }catch(_){}
+    try{ localStorage.setItem(chave,hoje()); }catch(_){}
+    const l=relAtrasadosTec(); if(!l.length) return;
+    const mo=document.createElement('div');
+    mo.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    let h='<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:90vh;overflow:auto;font-family:Outfit,sans-serif;box-shadow:0 16px 48px rgba(0,0,0,.35);">'
+      +'<div style="background:#b91c1c;color:#fff;padding:16px 20px;border-radius:16px 16px 0 0;font-size:17px;font-weight:800;">⚠️ Relatórios em atraso</div><div style="padding:18px 20px;">'
+      +'<p style="margin:0 0 10px;font-size:14px;">Tem <b>'+l.length+'</b> relatório(s) por enviar:</p>';
+    l.forEach(o=>{ const c=(window.DB.clientes||[]).find(x=>x.id===o.clienteId)||{}; const df=String(o.concluidoEm||o.data||'').slice(0,10);
+      h+='<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span><b>'+esc(o.id)+'</b> · '+esc(c.nome||'—')+'</span><span style="color:#dc2626;font-weight:700;white-space:nowrap;">'+diasUteisT(new Date(df+'T12:00:00'),new Date(hoje()+'T12:00:00'))+' dias úteis</span></div>'; });
+    h+='<p style="margin:16px 0;background:#fef2f2;border-left:4px solid #dc2626;padding:10px 12px;font-size:14px;line-height:1.5;"><b>Se os relatórios não forem enviados, a sua comissão será suspensa.</b></p>'
+      +'<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;border:0;background:#0f2447;color:#fff;border-radius:10px;padding:12px;font-weight:700;font-size:14px;cursor:pointer;">Entendido</button></div></div>';
+    mo.innerHTML=h; document.body.appendChild(mo);
+  }
+  setInterval(function(){ try{ avisoTecnico(); }catch(_){} },4000);
+  setInterval(function(){
+    if(!ehFabiana()) { window.hgFabBadge(); return; }
+    window.hgFabBadge();
+    // abre automaticamente 1x por dia (depois de os dados carregarem)
+    try{
+      if((window.DB.ordens||[]).length && localStorage.getItem('hg_fab_dia')!==hoje()){
+        localStorage.setItem('hg_fab_dia',hoje());
+        if(pendentes().length) window.hgFabAbrir();
+      }
+    }catch(_){}
+  },4000);
+})();
+</script>
 </body>
 </html>

@@ -793,8 +793,8 @@ body.cfg-open .main{overflow:hidden !important;}
 @keyframes cronoBlink{0%,100%{opacity:1;}50%{opacity:.25;}}
 @media(max-width:600px){#crono-flutuante{right:10px;bottom:10px;padding:10px 14px;min-width:150px;}#crono-flutuante-tempo{font-size:19px !important;}}
 .content{flex:1;overflow-y:scroll;overflow-x:auto;padding:24px 28px;-webkit-overflow-scrolling:touch;min-height:0;min-width:0;}
-.content::-webkit-scrollbar{width:6px;height:6px;}
-.content::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+.content::-webkit-scrollbar{width:10px;height:10px;}
+.content::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:5px;}
 .content::-webkit-scrollbar-track{background:transparent;}
 .content::-webkit-scrollbar-corner{background:transparent;}
 
@@ -892,6 +892,11 @@ body.cfg-open .main{overflow:hidden !important;}
   }
 }
 .ag-fullscreen{position:fixed !important;inset:0 !important;z-index:500 !important;background:#fff !important;overflow:auto !important;}
+/* Agenda: barra de rolagem sempre visível */
+#os-agenda-grid::-webkit-scrollbar{width:12px;height:12px;}
+#os-agenda-grid::-webkit-scrollbar-track{background:#eef2f7;}
+#os-agenda-grid::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:6px;border:2px solid #eef2f7;}
+#os-agenda-grid::-webkit-scrollbar-corner{background:#eef2f7;}
 #ag-legenda-items{scrollbar-width:none;}
 #ag-legenda-items::-webkit-scrollbar{display:none;}
 @media(max-width:1366px){
@@ -911,8 +916,8 @@ body.cfg-open .main{overflow:hidden !important;}
 
 /* TABLES */
 .tw{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:auto;box-shadow:var(--shadow-sm);-webkit-overflow-scrolling:touch;}
-.tw::-webkit-scrollbar{width:4px;height:4px;}
-.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+.tw::-webkit-scrollbar{width:8px;height:8px;}
+.tw::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
 table{width:100%;border-collapse:collapse;min-width:600px;}
 thead{background:var(--s2);}
 th{padding:11px 16px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;white-space:nowrap;}
@@ -944,8 +949,8 @@ tr:hover td{background:rgba(37,99,235,.03);}
 .md.wide{width:900px;max-width:96vw;max-height:92vh;}
 .md.sm{width:600px;max-width:96vw;max-height:92vh;}
 .mo-inner{background:var(--s1);border:1px solid var(--border);border-radius:14px;max-width:96vw;height:auto;max-height:92vh;overflow-y:auto;overflow-x:hidden;animation:su .22s ease;box-shadow:var(--shadow-md);-webkit-overflow-scrolling:touch;}
-.md::-webkit-scrollbar{width:4px;}
-.md::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.md::-webkit-scrollbar{width:8px;}
+.md::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px;}
 @keyframes su{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 .mh{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1;}
 .mh-title{font-weight:700;font-size:16px;}
@@ -1395,7 +1400,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     </div>
     <div class="sync-badge" style="margin:16px auto 0;width:fit-content;">🟢 Dados sincronizados em tempo real</div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f6;font-size:9px;color:#cbd5e1;text-align:center;line-height:1.7;">
-      HidroGest v16.35<br>
+      HidroGest v16.36<br>
       © 2025 Valentim Fialho Unip. Lda<br>
       NIF 517 551 543
     </div>
@@ -1420,7 +1425,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
     <div class="user-pill" id="user-pill"></div>
     <button class="logout-btn" onclick="logout()">🚪 Terminar Sessão</button>
     <div style="padding:6px 0 0;font-size:9px;color:#94a3b8;line-height:1.6;text-align:center;">
-      HidroGest v16.35<br>
+      HidroGest v16.36<br>
       © 2025 Valentim Fialho Unip. Lda · NIF 517 551 543
     </div>
   </div>
@@ -19712,6 +19717,19 @@ async function rotOptimizarTecnico(tecId, data){
 
 
 
+function agMaxGridHeight(){
+  const grid=document.getElementById('os-agenda-grid'), page=document.getElementById('page-agenda-os');
+  if(!grid||!page) return 100000;
+  let others=0; Array.from(page.children).forEach(c=>{ if(c!==grid) others+=c.offsetHeight; });
+  return Math.max(200, page.clientHeight-others);
+}
+function agClampGridHeight(){
+  const grid=document.getElementById('os-agenda-grid');
+  if(!grid||grid.style.flex!=='none') return;
+  const max=agMaxGridHeight();
+  if(grid.offsetHeight>max) grid.style.height=max+'px';
+}
+window.addEventListener('resize',agClampGridHeight);
 function osAgendaInitResize(){
   const handle=document.getElementById('ag-resize-handle');
   if(!handle||handle._initDone) return;
@@ -19727,7 +19745,7 @@ function osAgendaInitResize(){
   document.addEventListener('mousemove',e=>{
     if(!dragging) return;
     const grid=document.getElementById('os-agenda-grid'); if(!grid) return;
-    const newH=Math.max(200,startH+(e.clientY-startY));
+    const newH=Math.min(agMaxGridHeight(),Math.max(200,startH+(e.clientY-startY)));
     grid.style.height=newH+'px'; grid.style.flex='none';
   });
   document.addEventListener('mouseup',()=>{
@@ -19741,7 +19759,7 @@ function osAgendaInitResize(){
   document.addEventListener('touchmove',e=>{
     if(!dragging) return;
     const grid=document.getElementById('os-agenda-grid'); if(!grid) return;
-    const newH=Math.max(200,startH+(e.touches[0].clientY-startY));
+    const newH=Math.min(agMaxGridHeight(),Math.max(200,startH+(e.touches[0].clientY-startY)));
     grid.style.height=newH+'px'; grid.style.flex='none';
   },{passive:true});
   document.addEventListener('touchend',()=>{dragging=false;});

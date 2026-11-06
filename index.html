@@ -16152,7 +16152,9 @@ ${linhas.join('\n')}
 
 Instruções:
 - Escreve de forma clara e didática, como se estivesses a explicar o problema a alguém à mesa: português europeu, frases curtas, palavras do dia a dia. Nada de linguagem de engenheiro.
-- Não uses termos técnicos, a não ser que sejam mesmo necessários. Quando for necessário usar um, explica-o logo, em poucas palavras, entre parênteses (ex.: "termografia (câmara que mostra o calor e revela zonas húmidas)").
+- Escreve SEMPRE na 3.ª pessoa, como relato do que foi feito (ex.: "Foi realizada a inspeção…", "Verificou-se que…", "O técnico constatou…"). Nunca uses a 1.ª pessoa ("fizemos", "encontrei") nem a 2.ª ("o senhor").
+- NÃO expliques como funcionam os equipamentos nem os métodos (câmara térmica, rastreador, geofone, etc.): limita-te a dizer o que foi usado e o que foi encontrado.
+- Não uses termos técnicos, a não ser que sejam mesmo necessários, e sem os explicar.
 - Responde, por esta ordem e em texto corrido: (1) qual é o problema e onde está; (2) como se chegou a essa conclusão (o que se testou e o que se vê nas fotografias); (3) o que isto significa para o cliente e o que se recomenda fazer a seguir.
 - NÃO inventes factos, valores, causas ou localizações que não estejam nos dados ou claramente visíveis nas imagens. Se a evidência não chegar para afirmar a origem, diz isso com clareza e indica o que falta confirmar.
 - Devolve APENAS o texto da conclusão (3 a 6 frases curtas), sem título, listas, introdução ou comentários.`;
@@ -21772,7 +21774,7 @@ INFORMAÇÕES IMPORTANTES
 O horário indicado é uma estimativa. Devido à natureza do nosso trabalho — que pode envolver situações imprevistas nos serviços anteriores — admitimos uma margem de tolerância de até 60 minutos relativamente à hora marcada. Caso prevejamos um atraso superior, entraremos em contacto.
 
 🚗 Taxa de deslocação
-Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, é devida uma taxa de deslocação de 50€ + IVA.
+Caso o técnico se desloque ao local e, por razões alheias à nossa vontade (acesso impedido, cliente ausente, impossibilidade de realizar o serviço por condições do imóvel, etc.), não seja possível efectuar o trabalho, é devida uma taxa de deslocação de 80€ + IVA.
 
 ⚠️ Condições de realização do serviço
 Para a realização do serviço de peritagem poderá ser necessário abrir e fechar passadores, retirar sanitas, autoclismos e outros acessórios, bem como subir a telhados e coberturas. A ${empresaNome} não assume responsabilidade por danos que possam ocorrer durante o manuseamento destes equipamentos e estruturas, nomeadamente quebras de peças ou estruturas em estado de desgaste pré-existente.
@@ -21851,7 +21853,7 @@ Os dados pessoais do cliente são tratados apenas para efeitos da prestação e 
 
       <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
         <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:3px;">🚗 Taxa de deslocação</div>
-        <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, é devida uma <strong>taxa de deslocação de 50€ + IVA</strong>.</div>
+        <div style="font-size:12px;color:#64748b;line-height:1.6;">Caso o técnico se desloque ao local e, por razões alheias à nossa vontade, não seja possível efectuar o trabalho, é devida uma <strong>taxa de deslocação de 80€ + IVA</strong>.</div>
       </div>
 
       <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #e2e8f0;">
@@ -38300,13 +38302,15 @@ window.abrirApresentacaoGrupo = function(){
     // Últimos atendimentos deste cliente (sem dados de outros técnicos nem valores)
     const ult=ultimosAtendimentos(os);
     if(ult.length){
-      h+='<div class="ofc-sec"><details><summary style="cursor:pointer;font-weight:700;font-size:14px;color:#0e7490;padding:6px 0;list-style:none;">📋 Últimos atendimentos deste cliente ('+ult.length+') — tocar para ver</summary><div style="margin-top:8px;">'
+      const _abrirHist=/reabilit|rastreador|impermeab|cipp|ep[oó]xi|recupera/i.test((srv.nome||'')+' '+(os.tipoAnomalia||''));
+      h+='<div class="ofc-sec"><details'+(_abrirHist?' open':'')+'><summary style="cursor:pointer;font-weight:700;font-size:14px;color:#0e7490;padding:6px 0;list-style:none;">📋 Últimos atendimentos deste cliente ('+ult.length+') — tocar para ver</summary><div style="margin-top:8px;">'
         +ult.map(a=>'<div style="border-left:3px solid #0e7490;padding:6px 0 6px 12px;margin-bottom:10px;">'
           +'<div style="font-size:13px;font-weight:700;color:#0e7490;">'+esc(fmtDate(a.data))+(a.servico?' · '+esc(a.servico):'')+'</div>'
           +(a.problema?'<div style="font-size:13.5px;margin-top:3px;"><b style="color:#64748b;font-weight:600;">Problema:</b> '+esc(a.problema)+'</div>':'')
           +(a.onde?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Onde:</b> '+esc(a.onde)+'</div>':'')
           +(a.zonas?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Zonas:</b> '+esc(a.zonas)+'</div>':'')
           +(a.conclusao?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Conclusão:</b> '+esc(a.conclusao)+'</div>':'')
+          +(a.sugestao?'<div style="font-size:13.5px;margin-top:2px;"><b style="color:#64748b;font-weight:600;">Sugestão de reparo:</b> '+esc(a.sugestao)+'</div>':'')
           +'</div>').join('')
         +'</div></details></div>';
     }
@@ -38333,22 +38337,17 @@ window.abrirApresentacaoGrupo = function(){
       h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-rel"><div class="ofc-h"><span class="ofc-n" id="ofc-n2">2</span>Relatório de inspeção</div>'
         +_selForm+_plantaChips
         +'<div class="ofc-lbl">Local inspecionado *</div>'
-        +'<textarea class="ofc-ta" id="ofc-locinsp" oninput="ofcSet(\'locaisPesquisados\',this.value)" placeholder="Ex.: Cozinha e casa de banho do 5.º Esq.; terraço do 3.º andar.">'+esc(S.c.locaisPesquisados)+'</textarea>'
-        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-locinsp\')">🎙️ Ditar</button></div>'
-        +'<div class="ofc-lbl">Metodologia utilizada *</div>'
-        +'<textarea class="ofc-ta" id="ofc-metxt" oninput="ofcSet(\'metodologiaTxt\',this.value)" placeholder="Ex.: Termografia, teste de estanqueidade, rastreador químico.">'+esc(S.c.metodologiaTxt)+'</textarea>'
-        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-metxt\')">🎙️ Ditar</button></div>'
-        +'<div class="ofc-lbl">Equipamento utilizado *</div>'
-        +'<textarea class="ofc-ta" id="ofc-eqtxt" oninput="ofcSet(\'equipamentoTxt\',this.value)" placeholder="Ex.: Câmara térmica FLIR, geofone, câmara de vídeo-inspeção.">'+esc(S.c.equipamentoTxt)+'</textarea>'
-        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-eqtxt\')">🎙️ Ditar</button></div>'
+        +'<textarea class="ofc-ta" id="ofc-locinsp" oninput="ofcSet(\'locaisPesquisados\',this.value)" onblur="ofcTextoIA(\'loc\',true)" placeholder="Ex.: Cozinha e casa de banho do 5.º Esq.; terraço do 3.º andar.">'+esc(S.c.locaisPesquisados)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-locinsp\')">🎙️ Ditar</button><button type="button" id="ofc-loc-ia" onclick="ofcTextoIA(\'loc\',false)" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">✨ Melhorar com IA</button><button type="button" id="ofc-loc-undo" onclick="ofcTextoDesfazer(\'loc\')" style="display:none;">↩ Desfazer</button></div>'
+        +'<div id="ofc-meteq"></div>'
         +'<div class="ofc-lbl">Conclusão *</div>'
         +'<div class="ofc-hint">Podes gerar com a IA (em linguagem simples, sem termos técnicos) e depois corrigir.</div>'
-        +'<textarea class="ofc-ta" id="ofc-concl" oninput="ofcSet(\'conclusao\',this.value)" placeholder="Onde está a origem do problema e o que foi encontrado.">'+esc(S.c.conclusao)+'</textarea>'
+        +'<textarea class="ofc-ta" id="ofc-concl" oninput="ofcSet(\'conclusao\',this.value)" onblur="ofcTextoIA(\'concl\',true)" placeholder="Onde está a origem do problema e o que foi encontrado.">'+esc(S.c.conclusao)+'</textarea>'
         +'<div class="ofc-tools" style="flex-wrap:wrap;"><button type="button" id="ofc-ia-btn" onclick="ofcGerarConclusao()" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">🤖 Gerar conclusão</button><button type="button" onclick="rpDitar(\'ofc-concl\')">🎙️ Ditar</button>'
-        +(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-concl\')">✨ Melhorar texto</button>':'')+'</div>'
+        +'<button type="button" id="ofc-concl-ia" onclick="ofcTextoIA(\'concl\',false)" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">✨ Melhorar com IA</button><button type="button" id="ofc-concl-undo" onclick="ofcTextoDesfazer(\'concl\')" style="display:none;">↩ Desfazer</button></div>'
         +'<div class="ofc-lbl">Sugestão de reparo *</div>'
-        +'<textarea class="ofc-ta" id="ofc-sugestao" oninput="ofcSet(\'sugestao\',this.value)" placeholder="O que recomendas fazer (e medidas do local, se houver reparação destrutiva).">'+esc(S.c.sugestao)+'</textarea>'
-        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-sugestao\')">🎙️ Ditar</button>'+(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-sugestao\')">✨ Melhorar texto</button>':'')+'</div>'
+        +'<textarea class="ofc-ta" id="ofc-sugestao" oninput="ofcSet(\'sugestao\',this.value)" onblur="ofcTextoIA(\'sug\',true)" placeholder="O que recomendas fazer (e medidas do local, se houver reparação destrutiva).">'+esc(S.c.sugestao)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-sugestao\')">🎙️ Ditar</button><button type="button" id="ofc-sug-ia" onclick="ofcTextoIA(\'sug\',false)" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">✨ Melhorar com IA</button><button type="button" id="ofc-sug-undo" onclick="ofcTextoDesfazer(\'sug\')" style="display:none;">↩ Desfazer</button></div>'
         +'<div class="ofc-lbl" style="display:flex;align-items:center;">Fotos<span class="ofc-cnt" id="ofc-fcnt"></span></div>'
         +'<div class="ofc-hint">Mínimo <strong>4 fotos</strong>. Em cada foto escreve o <strong>local</strong> e a <strong>descrição</strong>: no relatório saem 4 fotos por página, com o local e a descrição por baixo de cada uma.</div>'
         +'<div class="ofc-fotos" id="ofc-fotos"></div>'
@@ -38418,7 +38417,7 @@ window.abrirApresentacaoGrupo = function(){
       +'</div>';
 
     $('ofc-scroll').innerHTML=h;
-    if(S.novo){ try{ renderFotos(); }catch(e){} } else { renderCaract(); renderManif(); renderZonas(); renderMetEq(); renderFotos(); }
+    if(S.novo){ try{ renderMetEq(); renderFotos(); }catch(e){} } else { renderCaract(); renderManif(); renderZonas(); renderMetEq(); renderFotos(); }
     renderBar(); atualizarFaltas();
     if(!sigLock){ iniciarSig('tec'); iniciarSig('cli'); }
     $('ofc-save').textContent=S.dirty?'A guardar…':'';
@@ -38507,17 +38506,16 @@ window.abrirApresentacaoGrupo = function(){
   }
 
   function ultimosAtendimentos(os, max){
-    if(!os.clienteId) return [];
-    return (window.DB.ordens||[])
-      .filter(o=>o.clienteId===os.clienteId && o.id!==os.id && o.estado!=='cancelada' && (o.estado==='concluida'||o.estado==='os_fechada'||o.concluidoEm))
-      .sort((a,b)=>(b.data||'').localeCompare(a.data||''))
-      .slice(0,max||3)
-      .map(o=>{
+    if(!os||!os.clienteId) return [];
+    let lista=[];
+    try{ lista=window.hgOSHistLocal(os, max||2); }catch(e){ lista=[]; }
+    return lista.map(o=>{
         const r=(window.DB.relatorios_pesquisa||[]).find(x=>x.id===o.id)||{}; const c=r.campos||{};
         const srv=(window.DB.servicos||[]).find(x=>x.id===o.servicoId)||{};
         let concl=(c.conclusao||'').trim(); if(concl.length>320) concl=concl.slice(0,317)+'…';
         return {data:o.data, servico:srv.nome||'', problema:c.tipoProblema||o.tipoAnomalia||'',
-          onde:c.localManifestacao||'', zonas:(c.divisoes||[]).join(', '), conclusao:concl};
+          onde:c.localManifestacao||c.locaisPesquisados||'', zonas:(c.divisoes||[]).join(', '), conclusao:concl,
+          sugestao:(c.sugestao||'').trim().slice(0,260), prelim:(r.relatorioEstado==='preliminar')};
       });
   }
 
@@ -38622,7 +38620,9 @@ window.abrirApresentacaoGrupo = function(){
         +'\nObservações do técnico: '+(S.c.reclamacao||'—');
       const prompt='És o responsável pelo laudo de uma empresa de deteção de fugas e infiltrações. Com base APENAS nas fotos e nos dados abaixo, recolhidos no local pelo técnico, escreve a conclusão preliminar do laudo. O leitor é uma pessoa comum (cliente, vizinho, condomínio, seguradora) que não percebe de engenharia.\n\n'
         +'Regras:\n- Português europeu, frases curtas, palavras do dia a dia, de forma clara e didática, como se explicasses o problema a alguém à mesa. Nada de linguagem de engenheiro.\n'
-        +'- Não uses termos técnicos, a não ser que sejam mesmo necessários; quando for necessário usar um, explica-o logo entre parênteses, em poucas palavras.\n'
+        +'- Escreve SEMPRE na 3.ª pessoa, como relato do que foi feito (ex.: "Foi realizada a inspeção…", "Verificou-se que…", "O técnico constatou…"). Nunca uses a 1.ª pessoa ("fizemos", "encontrei") nem a 2.ª ("o senhor").\n'
+        +'- NÃO expliques como funcionam os equipamentos nem os métodos (câmara térmica, rastreador, geofone, etc.): limita-te a dizer o que foi usado e o que foi encontrado.\n'
+        +'- Não uses termos técnicos, a não ser que sejam mesmo necessários, e sem os explicar.\n'
         +'- Diz, por esta ordem: (1) qual é o problema e onde está (origem provável); (2) como se chegou a isso (os testes feitos e o que se vê nas fotos); (3) o que isto significa para o cliente e o que se recomenda fazer.\n'
         +'- Se os dados não chegam para uma conclusão segura, diz isso claramente e indica o que falta confirmar.\n'
         +'- Não inventes locais, medidas, valores nem causas que não estejam nos dados ou visíveis nas fotos.\n'
@@ -38633,7 +38633,7 @@ window.abrirApresentacaoGrupo = function(){
       if(!r.ok) throw new Error('HTTP '+r.status);
       const d=await r.json(); const out=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
       if(!out) throw new Error('resposta vazia');
-      ta.value=out; S.c.conclusao=out; S.c.conclusaoIA=true; sujo();
+      ta.value=out; S.c.conclusao=out; S.c.conclusaoIA=true; (S._ult=S._ult||{}).concl=out; sujo();
       T('🤖 Conclusão gerada — revê e corrige se for preciso.','🤖');
     }catch(e){ T('Não foi possível gerar: '+e.message,'❌'); }
     btn.disabled=false; btn.textContent=txt;
@@ -38981,6 +38981,67 @@ window.abrirApresentacaoGrupo = function(){
   };
   window.ofcPagRef = function(v){ S.pagRef=v; S.pagMudou=true; };
   window.ofcTipoRel = function(v){ S.tipoRel=v; $('ofc-g-tiporel').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='definitivo'))); atualizarFaltas(); };
+  // IA: melhora o que o técnico escreveu (local inspecionado, conclusão, sugestão de reparo)
+  const _TXT_CFG={
+    loc:{id:'ofc-locinsp',campo:'locaisPesquisados',btn:'ofc-loc-ia',undo:'ofc-loc-undo',min:8,max:500},
+    concl:{id:'ofc-concl',campo:'conclusao',btn:'ofc-concl-ia',undo:'ofc-concl-undo',min:15,max:900},
+    sug:{id:'ofc-sugestao',campo:'sugestao',btn:'ofc-sug-ia',undo:'ofc-sug-undo',min:10,max:900}
+  };
+  function _ehReabilitacao(os,txt){
+    const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    return /reabilit|cipp|ep[oó]xi|recupera[cç]|relining|manga/i.test([srv.nome,os.tipoAnomalia,txt,(S.c.metodologias||[]).join(' ')].join(' '));
+  }
+  function _promptTxt(chave, txt, os){
+    const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
+    const ctx='Serviço: '+(srv.nome||'—')+'\nAnomalia: '+(S.c.tipoProblema||os.tipoAnomalia||'—')
+      +'\nLocal inspecionado: '+(S.c.locaisPesquisados||'—')
+      +'\nMetodologias usadas: '+((S.c.metodologias||[]).join(', ')||'—')
+      +'\nEquipamentos usados: '+((S.c.equipamentos||[]).join(', ')||'—');
+    const base='Português europeu. Corrige erros de português, ortografia e concordância. NÃO inventes factos, locais, medidas, valores nem causas que não estejam no texto do técnico ou no contexto. NÃO removas informação importante. Responde só com o texto final, sem título, sem aspas e sem comentários.\n\n';
+    if(chave==='loc') return 'Recebes o texto de um técnico de deteção de fugas com os locais inspecionados. Melhora-o: ordena a informação de forma lógica (por andar/fração/divisão, do geral para o específico), com frases curtas e claras. NÃO removas nenhum local mencionado.\n'+base+'TEXTO:\n'+txt;
+    if(chave==='concl') return 'Recebes a conclusão escrita por um técnico de deteção de fugas. Reescreve-a e melhora-a para constar num relatório para o cliente.\n'
+      +'- Escreve SEMPRE na 3.ª pessoa, como relato do que foi feito (ex.: "Foi realizada a inspeção…", "Verificou-se que…", "O técnico constatou…"). Nunca uses 1.ª pessoa nem 2.ª.\n'
+      +'- Linguagem simples e de fácil entendimento para uma pessoa comum, frases curtas.\n'
+      +'- NÃO expliques como funcionam os equipamentos nem os métodos: diz só o que foi usado e o que foi encontrado.\n'
+      +'- Ordem: (1) qual é o problema e onde está; (2) como se chegou a essa conclusão; (3) o que isso significa para o cliente.\n'
+      +'- Máximo 3 parágrafos curtos.\n'+base+'CONTEXTO:\n'+ctx+'\n\nCONCLUSÃO DO TÉCNICO:\n'+txt;
+    const reab=_ehReabilitacao(os,txt);
+    return 'Recebes a sugestão de reparo escrita por um técnico. Melhora-a para constar num relatório para o cliente, na forma impessoal ("Recomenda-se…", "Sugere-se…", "Deve ser…").\n'
+      +(reab?'- Trata-se de RECUPERAÇÃO/REABILITAÇÃO DE TUBAGEM (ex.: CIPP ou epóxi). Acrescenta uma explicação um pouco mais técnica, mas compreensível: em que consiste a solução (revestimento interno da tubagem existente, sem abrir paredes ou pisos, ou só com acessos pontuais), porque é indicada neste caso, e os passos principais (limpeza e inspeção em vídeo prévia, aplicação do revestimento, cura e verificação final). Só refere materiais ou métodos que estejam no texto/contexto; no máximo 2 parágrafos.\n'
+        :'- Mantém linguagem simples e direta: o que deve ser feito, onde, e se há medidas dos locais. Não acrescentes explicações técnicas longas.\n')
+      +base+'CONTEXTO:\n'+ctx+'\n\nSUGESTÃO DO TÉCNICO:\n'+txt;
+  }
+  window.ofcTextoIA = async function(chave, auto){
+    const cf=_TXT_CFG[chave]; if(!cf) return;
+    const ta=$(cf.id); if(!ta) return;
+    const os=getOS(); if(!os) return;
+    const txt=(ta.value||'').trim();
+    S._ult=S._ult||{}; S._antes=S._antes||{};
+    if(txt.length<cf.min){ if(!auto) T('Escreve primeiro o texto.','✍️'); return; }
+    if(auto && S._ult[chave]===txt) return;
+    const apiKey=((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
+    if(!apiKey){ if(!auto) T('A chave da IA não está configurada (Configurações → Email).','⚠️'); return; }
+    if(!navigator.onLine){ if(!auto) T('Sem ligação à internet.','📡'); return; }
+    const btn=$(cf.btn); const bt=btn?btn.textContent:''; if(btn){ btn.disabled=true; btn.textContent='⏳ A melhorar…'; }
+    try{
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-5',max_tokens:cf.max+300,messages:[{role:'user',content:[{type:'text',text:_promptTxt(chave,txt,os)}]}]})});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d=await r.json(); const out=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+      if(!out) throw new Error('resposta vazia');
+      S._antes[chave]=txt; S._ult[chave]=out;
+      ta.value=out; S.c[cf.campo]=out; if(chave==='concl') S.c.conclusaoIA=true; sujo();
+      const u=$(cf.undo); if(u) u.style.display='';
+      T('✨ Texto melhorado — revê. Podes desfazer.','✨');
+    }catch(e){ if(!auto) T('Não foi possível melhorar: '+e.message,'❌'); }
+    if(btn){ btn.disabled=false; btn.textContent=bt; }
+  };
+  window.ofcTextoDesfazer = function(chave){
+    const cf=_TXT_CFG[chave]; const ta=cf&&$(cf.id); if(!ta||!S._antes||S._antes[chave]==null) return;
+    ta.value=S._antes[chave]; S.c[cf.campo]=S._antes[chave]; S._ult[chave]=S._antes[chave]; sujo();
+    const u=$(cf.undo); if(u) u.style.display='none';
+  };
   window.ofcForm = function(n){ S.novo=!!n; try{ localStorage.setItem('hgOfcNovo',n?'1':'0'); }catch(e){} sujo(); render(); };
   window.ofcPlanta = function(v){ S.planta=v; S.sigMudou=true; $('ofc-g-planta').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='sim')));
     const o=$('ofc-planta-obs'); if(o) o.style.display=v==='sim'?'block':'none'; sujo(); };
@@ -39041,8 +39102,8 @@ window.abrirApresentacaoGrupo = function(){
     if(S.novo){
       if(!S.planta) f.push('planta (sim/não)');
       if(!(c.locaisPesquisados||'').trim()) f.push('local inspecionado');
-      if(!(c.metodologiaTxt||'').trim()) f.push('metodologia utilizada');
-      if(!(c.equipamentoTxt||'').trim()) f.push('equipamento utilizado');
+      if(!(c.metodologias||[]).length) f.push('metodologias utilizadas');
+      if(!(c.equipamentos||[]).length) f.push('equipamentos utilizados');
       if(!(c.conclusao||'').trim()) f.push('conclusão');
       if(!(c.sugestao||'').trim()) f.push('sugestão de reparo');
       if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
@@ -39108,7 +39169,7 @@ window.abrirApresentacaoGrupo = function(){
     const fotos=S.fotos.filter(f=>f.url).map(f=>({url:f.url, path:f.path||'',
       legenda:[(f.legenda||'').trim(),(f.descricao||'').trim()].filter(Boolean).join(' — '),
       local:f.legenda||'', descricao:f.descricao||'', itemKey:f.itemKey||'', fid:f.fid||''}));
-    const trab=S.novo?(S.c.metodologiaTxt||''):resumoTrabalho();
+    const trab=S.novo?'':resumoTrabalho();
     const campos={
       ...(ant||{}),
       tipologia:S.c.tipologia, localProblema:S.c.tipologia,
@@ -39124,13 +39185,10 @@ window.abrirApresentacaoGrupo = function(){
       fotos,
       cliNome:cli.nome||'', cliNif:cli.nif||'', cliMorada:[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', '),
       formularioNovo:!!S.novo,
-      locaisPesquisados:S.c.locaisPesquisados||'', metodologiaTxt:S.c.metodologiaTxt||'', equipamentoTxt:S.c.equipamentoTxt||'',
+      locaisPesquisados:S.c.locaisPesquisados||'',
       sugestao:S.c.sugestao||'',
     };
-    if(S.novo){
-      campos.metodologias=[]; campos.equipamentos=(S.c.equipamentoTxt||'').trim()?[(S.c.equipamentoTxt||'').trim()]:[];
-      campos.testes=[]; campos.divisoes=[];
-    }
+
     if(!(ant&&ant.dataManual)){
       campos.horaIniInterv=(os.horaIniReal||os.horaIni||'').slice(0,5);
       campos.horaFimInterv=(os.horaFimReal||'').slice(0,5)||(ant&&ant.horaFimInterv)||'';

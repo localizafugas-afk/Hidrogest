@@ -335,6 +335,7 @@ window.hgAplicarVisibilidadeOS = function(){
   const raw=window.DB._ordensRaw; if(!Array.isArray(raw)) return;
   window.DB.ordens = raw.filter(window.hgOSVisivel);
 };
+window.hgSemAvisosAtraso=function(){ try{ const u=window.currentUser||{}; return /rvfialho/i.test([u.email,u.name,u.login,u.id].join(' ')); }catch(e){ return false; } };
 window.hgFracaoOS=function(o){
   try{
     if(o&&o.fracao) return String(o.fracao).trim();
@@ -5120,6 +5121,7 @@ function tecRenderBriefingRelatorios(){
   const btnWrap    = document.getElementById('tec-btn-atraso-wrap');
   const btnCount   = document.getElementById('tec-btn-atraso-count');
   if(!briefingEl || !window.currentUser) return;
+  if(window.hgSemAvisosAtraso&&window.hgSemAvisosAtraso()){ briefingEl.style.display='none'; if(btnWrap) btnWrap.style.display='none'; return; }
 
   const hoje = osToday();
   const chaveVisto = `rp_briefing_${window.currentUser.id}_${hoje}`;
@@ -17893,13 +17895,15 @@ function osMenuContexto(evt, osId){
 
   document.body.appendChild(menu);
 
-  // Posicionar perto do clique, sem sair do ecrã
-  const menuW = 280, menuH = 500;
+  // Posicionar perto do clique, sem sair do ecrã (mede o tamanho real do menu)
+  menu.style.maxHeight = (window.innerHeight - 16) + 'px';
+  menu.style.overflowY = 'auto';
+  const menuW = menu.offsetWidth || 280, menuH = menu.offsetHeight || 500;
   let x = evt.clientX, y = evt.clientY;
-  if(x + menuW > window.innerWidth)  x = window.innerWidth  - menuW - 8;
-  if(y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8;
-  menu.style.left = Math.max(4,x) + 'px';
-  menu.style.top  = Math.max(4,y) + 'px';
+  if(x + menuW > window.innerWidth - 8)  x = window.innerWidth  - menuW - 8;
+  if(y + menuH > window.innerHeight - 8) y = window.innerHeight - menuH - 8;
+  menu.style.left = Math.max(8,x) + 'px';
+  menu.style.top  = Math.max(8,y) + 'px';
 
   // Delegação de cliques para data-action (evita problemas de aspas nos onclick inline)
   menu.addEventListener('click', function(e){
@@ -27492,6 +27496,7 @@ async function rpConfirmarPagamento(){
 // ── Verificação diária de prazos (ao arrancar) ──────────────
 function rpVerificarPrazosAtraso(){
   if(!window.currentUser) return;
+  if(window.hgSemAvisosAtraso&&window.hgSemAvisosAtraso()) return;
   const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
   const atrasados=concluidas.filter(os=>{
     const est=rpEstadoRelatorio(os); if(est==='enviado') return false;
@@ -39843,6 +39848,7 @@ window.abrirApresentacaoGrupo = function(){
   }
   function avisoTecnico(){
     const u=window.currentUser; if(!u||u.role!=='tecnico'||!(window.DB.ordens||[]).length) return;
+    if(window.hgSemAvisosAtraso&&window.hgSemAvisosAtraso()) return;
     const chave='hg_aviso_rel_'+u.id; try{ if(localStorage.getItem(chave)===hoje()) return; }catch(_){}
     try{ localStorage.setItem(chave,hoje()); }catch(_){}
     const l=relAtrasadosTec(); if(!l.length) return;

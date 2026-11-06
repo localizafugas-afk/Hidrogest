@@ -25880,8 +25880,8 @@ function rpGerarHTMLRelatorioNovo(os, cli, srv, rel, c, tecs){
     <div>${esc(srv.nome||'—')}</div>
     ${h2('Observações')}
     <div>Sem observações</div>${pagLabel?`<div>Pagamento: ${esc(pagLabel)}</div>`:''}
-    <div style="margin-top:12px;font-size:10.5px;line-height:1.45;text-align:justify;"><b>A) Termo de Responsabilidade e Limitação de Garantia</b> ${esc(TERMO_A)}<br><br><b>B) Condições Comerciais e de Faturação</b> ${esc(TERMO_B)}</div>
-    <div style="margin-top:36px;font-size:12px;">Assinado por:${sig.sigTec?` <img src="${sig.sigTec}" style="max-height:60px;vertical-align:middle;">`:''} ${esc(tecNome||'')}</div>
+    <div style="margin-top:8px;font-size:9.5px;line-height:1.35;text-align:justify;"><b>A) Termo de Responsabilidade e Limitação de Garantia</b> ${esc(TERMO_A)}<br><br><b>B) Condições Comerciais e de Faturação</b> ${esc(TERMO_B)}<br><br><b>Garantia de inspeção: ${esc(garantia)}</b></div>
+    <div style="margin-top:14px;font-size:12px;">Assinado por:${sig.sigTec?` <img src="${sig.sigTec}" style="max-height:60px;vertical-align:middle;">`:''} ${esc(tecNome||'')}</div>
 
     <div style="page-break-before:always;"></div>
     <div style="font-size:20px;font-weight:700;text-decoration:underline;margin-top:20px;">Relatório de Inspeção</div>
@@ -25893,14 +25893,14 @@ function rpGerarHTMLRelatorioNovo(os, cli, srv, rel, c, tecs){
     ${secTxt('Conclusão:',c.conclusao)}
     ${secTxt('Sugestão de reparo:',[c.sugestao,c.medidas?('Medidas dos locais: '+c.medidas):''].filter(Boolean).join('\n'))}
     ${box(`<div style="line-height:1.5;">${esc(garantia)}</div>`)}
-    ${fotos.length?(()=>{ const pgs=[]; for(let i=0;i<fotos.length;i+=4) pgs.push(fotos.slice(i,i+4)); return pgs.map((g,pi)=>`<div style="page-break-before:always;"></div>${h2('Imagens de serviço'+(pgs.length>1?' ('+(pi+1)+'/'+pgs.length+')':''))}<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">${g.map(f=>`<div style="page-break-inside:avoid;"><div style="border:1px solid #cbd5e1;height:300px;display:flex;align-items:center;justify-content:center;background:#f8fafc;"><img src="${f.dataUrl||f.url||''}" style="max-width:100%;max-height:100%;object-fit:contain;"></div><div style="margin-top:4px;font-size:11.5px;min-height:30px;"><b>Local:</b> ${esc(f.legenda||f.local||f.descricao||'')}</div></div>`).join('')}</div>`).join(''); })():''}
+    ${fotos.length?(()=>{ const pgs=[]; for(let i=0;i<fotos.length;i+=4) pgs.push(fotos.slice(i,i+4)); return pgs.map((g,pi)=>`<div style="page-break-before:always;"></div>${h2('Imagens de serviço'+(pgs.length>1?' ('+(pi+1)+'/'+pgs.length+')':''))}<div style="display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:127mm;gap:6mm 5mm;">${g.map(f=>`<div style="page-break-inside:avoid;overflow:hidden;"><div style="border:1px solid #cbd5e1;height:102mm;display:flex;align-items:center;justify-content:center;background:#f8fafc;"><img src="${f.dataUrl||f.url||''}" style="max-width:100%;max-height:100%;object-fit:contain;"></div><div style="margin-top:3px;font-size:11.5px;line-height:1.35;"><b>Local:</b> ${esc(f.local||f.legenda||'')}${f.descricao?`<br><b>Descrição:</b> ${esc(f.descricao)}`:''}</div></div>`).join('')}</div>`).join(''); })():''}
     <div style="margin-top:30px;page-break-inside:avoid;text-align:center;">${sig.sigTec?`<img src="${sig.sigTec}" style="max-height:60px;display:block;margin:0 auto 4px;">`:''}<div style="border-top:1px solid #111;display:inline-block;min-width:260px;padding-top:4px;font-size:12px;"><b>${esc(tecNome||'')}</b><br><span style="font-size:10.5px;color:#475569;">Técnico responsável · ${esc(empNome)}</span></div></div>
     <div style="margin-top:14px;font-size:10px;color:#64748b;text-align:right;">Emitido em ${new Date().toLocaleDateString('pt-PT')} · www.localizafugas.com</div>
   </div>`;
 }
 
 function rpGerarHTMLRelatorio(os, cli, srv, rel, c, tecs){
-  if(window.hgRelLayout()==='novo') return rpGerarHTMLRelatorioNovo(os, cli, srv, rel, c, tecs);
+  if(window.hgRelLayout()==='novo' || (c&&c.formularioNovo)) return rpGerarHTMLRelatorioNovo(os, cli, srv, rel, c, tecs);
   // ── Dados base ──────────────────────────────────────────────
   const dataConc    = os.concluidoEm ? new Date(os.concluidoEm).toLocaleDateString('pt-PT') : fmtDate(os.data);
   const dataEmiss   = new Date().toLocaleDateString('pt-PT');
@@ -38194,7 +38194,16 @@ window.abrirApresentacaoGrupo = function(){
       reclamacao: c.reclamacao||c.descritivo||'',
       conclusao: c.conclusao||'',
       obsAdmin: c.obsAdmin||'',
+      locaisPesquisados: c.locaisPesquisados||'',
+      metodologiaTxt: c.metodologiaTxt||'',
+      equipamentoTxt: c.equipamentoTxt||'',
+      sugestao: c.sugestao||'',
     };
+    {
+      const _temAntigo=!!((c.divisoes||[]).length||(c.testes||[]).length||(c.metodologias||[]).length||(c.equipamentos||[]).length);
+      let _pref='1'; try{ _pref=localStorage.getItem('hgOfcNovo')||'1'; }catch(e){}
+      S.novo = (c.formularioNovo!==undefined) ? !!c.formularioNovo : (_temAntigo ? false : _pref!=='0');
+    }
     S.obsAdmTocado=!!(c.obsAdmin||'').trim();
     S.manif=Array.isArray(c.locaisManifestacao)&&c.locaisManifestacao.length ? [...c.locaisManifestacao]
       : String(c.localManifestacao||'').split(/\s*;\s*|\n+/).map(x=>x.trim()).filter(Boolean);
@@ -38315,9 +38324,47 @@ window.abrirApresentacaoGrupo = function(){
     }
     h+='</div>';
 
-    // 2 · Relatório
+    // seletor de formulário (atual / novo)
+    const _selForm='<div class="ofc-chips" style="margin:0 0 12px;"><button type="button" class="ofc-chip'+(S.novo?'':' on')+'" onclick="ofcForm(0)">Formulário atual</button><button type="button" class="ofc-chip'+(S.novo?' on':'')+'" onclick="ofcForm(1)">Formulário novo</button></div>';
+    const _plantaChips='<div class="ofc-lbl">Teve acesso à planta da tubulação? *</div><div class="ofc-chips" id="ofc-g-planta">'
+      +[['sim','Sim'],['nao','Não']].map(([v,l])=>'<button type="button" class="ofc-chip'+(S.planta===v?' on':'')+'" onclick="ofcPlanta(\''+v+'\')">'+l+'</button>').join('')+'</div>'
+      +'<div id="ofc-planta-obs" class="ofc-hint" style="display:'+(S.planta==='sim'?'block':'none')+';margin-top:8px;background:#eff6ff;border-radius:10px;padding:10px 12px;color:#1e3a5f;">📐 '+esc(PLANTA_OBS)+'</div>';
+    if(S.novo){
+      h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-rel"><div class="ofc-h"><span class="ofc-n" id="ofc-n2">2</span>Relatório de inspeção</div>'
+        +_selForm+_plantaChips
+        +'<div class="ofc-lbl">Local inspecionado *</div>'
+        +'<textarea class="ofc-ta" id="ofc-locinsp" oninput="ofcSet(\'locaisPesquisados\',this.value)" placeholder="Ex.: Cozinha e casa de banho do 5.º Esq.; terraço do 3.º andar.">'+esc(S.c.locaisPesquisados)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-locinsp\')">🎙️ Ditar</button></div>'
+        +'<div class="ofc-lbl">Metodologia utilizada *</div>'
+        +'<textarea class="ofc-ta" id="ofc-metxt" oninput="ofcSet(\'metodologiaTxt\',this.value)" placeholder="Ex.: Termografia, teste de estanqueidade, rastreador químico.">'+esc(S.c.metodologiaTxt)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-metxt\')">🎙️ Ditar</button></div>'
+        +'<div class="ofc-lbl">Equipamento utilizado *</div>'
+        +'<textarea class="ofc-ta" id="ofc-eqtxt" oninput="ofcSet(\'equipamentoTxt\',this.value)" placeholder="Ex.: Câmara térmica FLIR, geofone, câmara de vídeo-inspeção.">'+esc(S.c.equipamentoTxt)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-eqtxt\')">🎙️ Ditar</button></div>'
+        +'<div class="ofc-lbl">Conclusão *</div>'
+        +'<div class="ofc-hint">Podes gerar com a IA (em linguagem simples, sem termos técnicos) e depois corrigir.</div>'
+        +'<textarea class="ofc-ta" id="ofc-concl" oninput="ofcSet(\'conclusao\',this.value)" placeholder="Onde está a origem do problema e o que foi encontrado.">'+esc(S.c.conclusao)+'</textarea>'
+        +'<div class="ofc-tools" style="flex-wrap:wrap;"><button type="button" id="ofc-ia-btn" onclick="ofcGerarConclusao()" style="border-color:#7c3aed;background:#f5f3ff;color:#6d28d9;">🤖 Gerar conclusão</button><button type="button" onclick="rpDitar(\'ofc-concl\')">🎙️ Ditar</button>'
+        +(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-concl\')">✨ Melhorar texto</button>':'')+'</div>'
+        +'<div class="ofc-lbl">Sugestão de reparo *</div>'
+        +'<textarea class="ofc-ta" id="ofc-sugestao" oninput="ofcSet(\'sugestao\',this.value)" placeholder="O que recomendas fazer (e medidas do local, se houver reparação destrutiva).">'+esc(S.c.sugestao)+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-sugestao\')">🎙️ Ditar</button>'+(typeof rpMelhorarTexto==='function'?'<button type="button" onclick="rpMelhorarTexto(\'ofc-sugestao\')">✨ Melhorar texto</button>':'')+'</div>'
+        +'<div class="ofc-lbl" style="display:flex;align-items:center;">Fotos<span class="ofc-cnt" id="ofc-fcnt"></span></div>'
+        +'<div class="ofc-hint">Mínimo <strong>4 fotos</strong>. Em cada foto escreve o <strong>local</strong> e a <strong>descrição</strong>: no relatório saem 4 fotos por página, com o local e a descrição por baixo de cada uma.</div>'
+        +'<div class="ofc-fotos" id="ofc-fotos"></div>'
+        +'<div class="ofc-fadd"><label id="ofc-fcam">📷 Tirar foto<input type="file" accept="image/*" capture="environment" style="display:none" onchange="ofcFotoAdd(this)"></label>'
+        +'<label id="ofc-fgal">🖼️ Galeria<input type="file" accept="image/*" style="display:none" onchange="ofcFotoAdd(this)"></label></div>'
+        +'<div style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:12px;padding:12px;margin-top:18px;">'
+        +'<div style="font-weight:800;font-size:15px;color:#92400e;">📌 Observação para a administração</div>'
+        +'<div class="ofc-hint" style="margin:4px 0 8px;color:#92400e;">Só a administração vê — <strong>não vai para o cliente</strong>.</div>'
+        +'<div class="ofc-chips" style="margin-bottom:8px;"><button type="button" class="ofc-chip" onclick="ofcObsAdd()">🔬 Marcar retorno p/ leitura do rastreador químico</button></div>'
+        +'<textarea class="ofc-ta" id="ofc-obsadmin" style="min-height:80px;background:#fff;" oninput="ofcObsAdm(this.value)" placeholder="Escreve aqui o que a administração deve saber…">'+esc(S.c.obsAdmin||'')+'</textarea>'
+        +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-obsadmin\')">🎙️ Ditar</button></div></div>'
+        +'</div>';
+    } else {
+    // 2 · Relatório (atual)
     h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-rel"><div class="ofc-h"><span class="ofc-n" id="ofc-n2">2</span>Relatório</div>'
-      +'<div id="ofc-caract"></div>'
+      +_selForm+'<div id="ofc-caract"></div>'
       +'<div class="ofc-lbl">Onde aparece o problema *</div>'
       +'<div class="ofc-hint">Escreve o <strong>local</strong> onde se vê o problema (ex.: teto da sala, parede do quarto) — <strong>não</strong> o tipo de problema.</div>'
       +'<div id="ofc-manif"></div>'
@@ -38346,13 +38393,15 @@ window.abrirApresentacaoGrupo = function(){
       +'<div class="ofc-tools"><button type="button" onclick="rpDitar(\'ofc-obsadmin\')">🎙️ Ditar</button></div></div>'
       +'</div>';
 
+    }
+
     // 3 · Fecho
     h+='<div class="ofc-sec'+(iniciado?'':' ofc-lock')+'" id="ofc-sec-fecho"><div class="ofc-h"><span class="ofc-n'+(fech?' ok':'')+'">3</span>'+(fech?'Fecho (podes corrigir)':'Fechar a OS')+'</div>'
       +blocoPagamento(os,cli)
       +'<div class="ofc-hint" style="margin:14px 0 0;background:#fff7ed;border-radius:10px;padding:10px 12px;color:#9a3412;">📋 O relatório fica <strong>preliminar</strong>. A administração revê e valida antes de o enviar ao cliente.</div>'
-      +'<div class="ofc-lbl">O cliente entregou a planta da tubagem?</div><div class="ofc-chips" id="ofc-g-planta">'
+      +(S.novo?'':('<div class="ofc-lbl">O cliente entregou a planta da tubagem?</div><div class="ofc-chips" id="ofc-g-planta">'
       +[['sim','Sim'],['nao','Não']].map(([v,l])=>'<button type="button" class="ofc-chip'+(S.planta===v?' on':'')+'" onclick="ofcPlanta(\''+v+'\')">'+l+'</button>').join('')+'</div>'
-      +'<div id="ofc-planta-obs" class="ofc-hint" style="display:'+(S.planta==='sim'?'block':'none')+';margin-top:8px;background:#eff6ff;border-radius:10px;padding:10px 12px;color:#1e3a5f;">📐 '+esc(PLANTA_OBS)+'</div>'
+      +'<div id="ofc-planta-obs" class="ofc-hint" style="display:'+(S.planta==='sim'?'block':'none')+';margin-top:8px;background:#eff6ff;border-radius:10px;padding:10px 12px;color:#1e3a5f;">📐 '+esc(PLANTA_OBS)+'</div>'))
       +'<div class="ofc-lbl">Termo de responsabilidade</div>'
       +'<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5;">'
       +TERMO.map((t,i)=>'<div style="margin-bottom:'+(i<TERMO.length-1?'10px':'0')+';"><strong>'+(i+1)+'. '+esc(t[0])+'.</strong> '+esc(t[1])+'</div>').join('')
@@ -38369,7 +38418,8 @@ window.abrirApresentacaoGrupo = function(){
       +'</div>';
 
     $('ofc-scroll').innerHTML=h;
-    renderCaract(); renderManif(); renderZonas(); renderMetEq(); renderFotos(); renderBar(); atualizarFaltas();
+    if(S.novo){ try{ renderFotos(); }catch(e){} } else { renderCaract(); renderManif(); renderZonas(); renderMetEq(); renderFotos(); }
+    renderBar(); atualizarFaltas();
     if(!sigLock){ iniciarSig('tec'); iniciarSig('cli'); }
     $('ofc-save').textContent=S.dirty?'A guardar…':'';
   }
@@ -38545,7 +38595,7 @@ window.abrirApresentacaoGrupo = function(){
   window.ofcGerarConclusao = async function(){
     const apiKey=((window._emailCfg&&window._emailCfg.claudeApiKey)||(window.DB&&window.DB.emailConfig&&window.DB.emailConfig.claudeApiKey)||'');
     if(!apiKey){ T('A chave da IA não está configurada (Configurações → Email).','⚠️'); return; }
-    if(!S.fotos.length && !S.testes.length){ T('Tira as fotos e marca os testes primeiro.','📷'); return; }
+    if(!S.fotos.length && !S.testes.length){ T('Tira as fotos primeiro.','📷'); return; }
     const ta=$('ofc-concl'), btn=$('ofc-ia-btn');
     if((ta.value||'').trim() && !confirm('Substituir a conclusão atual pela gerada?')) return;
     const txt=btn.textContent; btn.disabled=true; btn.textContent='⏳ A analisar fotos…';
@@ -38565,8 +38615,9 @@ window.abrirApresentacaoGrupo = function(){
         +'\nTipo de imóvel: '+(S.c.tipologia||'—')+(S.c.numeroFracao?' · fração '+S.c.numeroFracao:'')
         +'\nOnde se manifesta: '+(S.manif.filter(Boolean).join('; ')||'—')
         +'\nLocais dos testes: '+((S.c.divisoes||[]).join(', ')||'—')
-        +'\nMetodologias utilizadas: '+((S.c.metodologias||[]).join(', ')||'—')
-        +'\nEquipamentos: '+((S.c.equipamentos||[]).join(', ')||'—')
+        +'\nMetodologias utilizadas: '+((S.c.metodologias||[]).join(', ')||S.c.metodologiaTxt||'—')
+        +'\nEquipamentos: '+((S.c.equipamentos||[]).join(', ')||S.c.equipamentoTxt||'—')
+        +(S.c.locaisPesquisados?'\nLocal inspecionado: '+S.c.locaisPesquisados:'')
         +'\nItens testados (por zona):\n'+testes
         +'\nObservações do técnico: '+(S.c.reclamacao||'—');
       const prompt='És o responsável pelo laudo de uma empresa de deteção de fugas e infiltrações. Com base APENAS nas fotos e nos dados abaixo, recolhidos no local pelo técnico, escreve a conclusão preliminar do laudo. O leitor é uma pessoa comum (cliente, vizinho, condomínio, seguradora) que não percebe de engenharia.\n\n'
@@ -38861,7 +38912,7 @@ window.abrirApresentacaoGrupo = function(){
         +(!f.url?'<span class="ofc-up">a enviar</span>':'')
         +'<button type="button" class="ofc-fx" onclick="ofcFotoDel('+i+')" aria-label="Apagar foto">✕</button>'
         +'<input data-fid="'+esc(f.fid||'')+'" data-campo="legenda" class="'+(falta?'falta':'')+'" value="'+esc(f.legenda||'')+'" placeholder="Escreve o local da foto *" oninput="ofcFotoLeg('+i+',this)">'
-        +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="" rows="2" placeholder="Descrição (opcional)" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
+        +'<textarea data-fid="'+esc(f.fid||'')+'" data-campo="descricao" class="" rows="2" placeholder="'+(S.novo?'Descrição da foto *':'Descrição (opcional)')+'" oninput="ofcFotoDesc('+i+',this)" style="width:100%;border:0;border-top:1px solid #e2e8f0;padding:9px;font-size:14px;font-family:inherit;resize:vertical;">'+esc(f.descricao||'')+'</textarea></div>';
     }).join('');
     fotoGate();
   }
@@ -38930,6 +38981,7 @@ window.abrirApresentacaoGrupo = function(){
   };
   window.ofcPagRef = function(v){ S.pagRef=v; S.pagMudou=true; };
   window.ofcTipoRel = function(v){ S.tipoRel=v; $('ofc-g-tiporel').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='definitivo'))); atualizarFaltas(); };
+  window.ofcForm = function(n){ S.novo=!!n; try{ localStorage.setItem('hgOfcNovo',n?'1':'0'); }catch(e){} sujo(); render(); };
   window.ofcPlanta = function(v){ S.planta=v; S.sigMudou=true; $('ofc-g-planta').querySelectorAll('.ofc-chip').forEach((b,i)=>b.classList.toggle('on',(i===0)===(v==='sim')));
     const o=$('ofc-planta-obs'); if(o) o.style.display=v==='sim'?'block':'none'; sujo(); };
   window.ofcAssOutro = function(on){ S.assOutro=on; S.sigMudou=true; $('ofc-ass-outro').style.display=on?'grid':'none'; atualizarFaltas(); guardarAssinaturas(); };
@@ -38986,6 +39038,24 @@ window.abrirApresentacaoGrupo = function(){
   function faltas(os){
     const f=[];
     const c=S.c;
+    if(S.novo){
+      if(!S.planta) f.push('planta (sim/não)');
+      if(!(c.locaisPesquisados||'').trim()) f.push('local inspecionado');
+      if(!(c.metodologiaTxt||'').trim()) f.push('metodologia utilizada');
+      if(!(c.equipamentoTxt||'').trim()) f.push('equipamento utilizado');
+      if(!(c.conclusao||'').trim()) f.push('conclusão');
+      if(!(c.sugestao||'').trim()) f.push('sugestão de reparo');
+      if(S.fotos.length<4) f.push('fotos ('+S.fotos.length+' de 4)');
+      absorverCamposFoto();
+      if(S.fotos.some(x=>!(x.legenda||'').trim())) f.push('local em todas as fotos');
+      if(S.fotos.some(x=>!(x.descricao||'').trim())) f.push('descrição em todas as fotos');
+      const naoFat2=(typeof osServicoNaoFaturavel==='function')&&osServicoNaoFaturavel(os);
+      if(!naoFat2 && !S.pag) f.push('forma de pagamento');
+      if(!S.sigTec) f.push('assinatura do técnico');
+      if(S.assOutro){ if(!(S.assNome||'').trim()) f.push('nome de quem assina'); }
+      else if(!S.sigCli) f.push('assinatura do cliente');
+      return f;
+    }
     if(multiUnidade(c.tipologia) && !(c.numeroFracao||'').trim()) f.push('identificação da fração');
     if(!c.tipoProblema) f.push('anomalia');
     if(!S.manif.some(x=>(x||'').replace(/—\s*$/,'').trim())) f.push('onde aparece o problema');
@@ -39038,7 +39108,7 @@ window.abrirApresentacaoGrupo = function(){
     const fotos=S.fotos.filter(f=>f.url).map(f=>({url:f.url, path:f.path||'',
       legenda:[(f.legenda||'').trim(),(f.descricao||'').trim()].filter(Boolean).join(' — '),
       local:f.legenda||'', descricao:f.descricao||'', itemKey:f.itemKey||'', fid:f.fid||''}));
-    const trab=resumoTrabalho();
+    const trab=S.novo?(S.c.metodologiaTxt||''):resumoTrabalho();
     const campos={
       ...(ant||{}),
       tipologia:S.c.tipologia, localProblema:S.c.tipologia,
@@ -39053,7 +39123,14 @@ window.abrirApresentacaoGrupo = function(){
       obsAdmin:(S.c.obsAdmin||'').trim(), pedeRetorno:/retorno/i.test(S.c.obsAdmin||''),
       fotos,
       cliNome:cli.nome||'', cliNif:cli.nif||'', cliMorada:[cli.rua,cli.cp,cli.localidade].filter(Boolean).join(', '),
+      formularioNovo:!!S.novo,
+      locaisPesquisados:S.c.locaisPesquisados||'', metodologiaTxt:S.c.metodologiaTxt||'', equipamentoTxt:S.c.equipamentoTxt||'',
+      sugestao:S.c.sugestao||'',
     };
+    if(S.novo){
+      campos.metodologias=[]; campos.equipamentos=(S.c.equipamentoTxt||'').trim()?[(S.c.equipamentoTxt||'').trim()]:[];
+      campos.testes=[]; campos.divisoes=[];
+    }
     if(!(ant&&ant.dataManual)){
       campos.horaIniInterv=(os.horaIniReal||os.horaIni||'').slice(0,5);
       campos.horaFimInterv=(os.horaFimReal||'').slice(0,5)||(ant&&ant.horaFimInterv)||'';

@@ -335,7 +335,7 @@ window.hgAplicarVisibilidadeOS = function(){
   const raw=window.DB._ordensRaw; if(!Array.isArray(raw)) return;
   window.DB.ordens = raw.filter(window.hgOSVisivel);
 };
-window.hgSemAvisosAtraso=function(){ try{ const u=window.currentUser||{}; return /rvfialho/i.test([u.email,u.name,u.login,u.id].join(' ')); }catch(e){ return false; } };
+window.hgSemAvisosAtraso=function(){ try{ const u=window.currentUser||{}; return u.role==='tecnico' || /rvfialho/i.test([u.email,u.name,u.nome,u.login,u.user,u.username,u.id,u.userName].join(' ')) || (typeof _ehTecnicoEmergencia==='function' && _ehTecnicoEmergencia(u)); }catch(e){ return false; } };
 window.hgFracaoOS=function(o){
   try{
     if(o&&o.fracao) return String(o.fracao).trim();
@@ -27497,7 +27497,8 @@ async function rpConfirmarPagamento(){
 function rpVerificarPrazosAtraso(){
   if(!window.currentUser) return;
   if(window.hgSemAvisosAtraso&&window.hgSemAvisosAtraso()) return;
-  const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)));
+  const _souTec=window.currentUser.role==='tecnico';
+  const concluidas=(window.DB.ordens||[]).filter(o=>o.estado==='concluida' && !(typeof osServicoNaoFaturavel==='function' && osServicoNaoFaturavel(o)) && (!_souTec || (o.tecnicos||[]).includes(window.currentUser.id)));
   const atrasados=concluidas.filter(os=>{
     const est=rpEstadoRelatorio(os); if(est==='enviado') return false;
     const dias=rpDiasParaEnvio(os); return dias!==null && dias<0;
@@ -28548,6 +28549,7 @@ async function osConcluirComAssinaturas(){
 // ── Modal de boas-vindas com relatórios em falta ─────────────
 function rpMostrarAlertaBV(){
   if(!window.currentUser) return;
+  if(window.hgSemAvisosAtraso&&window.hgSemAvisosAtraso()){ const _m=document.getElementById('mo-bv-relatorios'); if(_m) _m.style.display='none'; return; }
   const role = window.currentUser.role;
   // ── Não mostrar este pop-up a admin/gerente/supervisor ──
   // (os relatórios pendentes ficam sempre visíveis no painel do dashboard)
@@ -38279,7 +38281,7 @@ window.abrirApresentacaoGrupo = function(){
     const srv=(window.DB.servicos||[]).find(x=>x.id===os.servicoId)||{};
     const iniciado=!!os.horaIniReal, fech=fechada(os);
     const sigLock=fech || !!os.concluidoEm;   // já foi fechada uma vez → assinaturas nunca mais se alteram
-    $('ofc-id').textContent=os.id+' · '+(fech?'Fechada':iniciado?'Em curso':'Agendada')+' · '+fmtDate(os.data)+' '+(os.horaIni||'');
+    $('ofc-id').textContent=os.id+' · '+(fech?'Fechada':iniciado?'Em curso':'Agendada')+' · '+fmtDate(os.data)+' '+(os.horaIni||'')+' · v22';
     $('ofc-cli').textContent=cli.nome||os.clienteNomeSnapshot||'Cliente';
     const mp=(typeof _tecBuildMaps==='function')?_tecBuildMaps(cli):{morada:'',cpOk:false};
     const tecs=(os.tecnicos||[]).map(t=>(window.DB.users||[]).find(u=>u.id===t)?.name).filter(Boolean);

@@ -1971,6 +1971,7 @@ tr:hover td{background:rgba(37,99,235,.03);}
         <option value="utilizador_criado">Utilizador criado</option>
         <option value="password_alterada">Password alterada</option>
         <option value="localizacao">Localização</option>
+        <option value="relatorio_corrigido_validado">Relatório corrigido após validação</option>
       </select>
       <input class="fi" type="date" id="aud-filter-data" onchange="auditRender()" style="width:150px;">
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('aud-filter-user').value='';document.getElementById('aud-filter-acao').value='';document.getElementById('aud-filter-data').value='';auditRender();">Limpar filtros</button>
@@ -18880,6 +18881,7 @@ function auditRender(){
     recibo_criado:'💰 Recibo criado',despesa_criada:'🧾 Despesa criada',
     utilizador_criado:'👤 Utilizador criado',password_alterada:'🔒 Password alterada',
     localizacao:'📍 Localização',
+    relatorio_corrigido_validado:'✏️ Relatório corrigido (validado)',
   };
 
   tbody.innerHTML=logs.slice(0,200).map(a=>{
@@ -39944,5 +39946,160 @@ window.abrirApresentacaoGrupo = function(){
   },4000);
 })();
 </script>
+<!-- ═══ v16.40 — CORREÇÃO DE RELATÓRIOS JÁ VALIDADOS (admin/gestão) ═══
+     Depois de validado (definitivo) ou enviado, o relatório pode ser corrigido pela gestão.
+     • Pede um MOTIVO obrigatório antes de abrir a edição
+     • O estado (validado/enviado) NÃO é alterado e o auto-guardar deixa de o transformar em "rascunho"
+     • Fica na Auditoria (antes → depois) e no histórico do próprio relatório -->
+<script id="hg-correcao-validado-v1640">
+(function(){
+  'use strict';
+  const GEST=['admin','gerente','supervisor'];
+  const ehGestao=()=>GEST.includes(window.currentUser&&window.currentUser.role);
+  const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const relDe=id=>(window.DB.relatorios_pesquisa||[]).find(x=>x.id===id);
+  const validado=r=>!!(r && (r.relatorioEstado==='definitivo' || r.estado==='enviado' || r.validadoEm));
+  const LAB={reclamacao:'Reclamação',trabalho:'Trabalho realizado',metodologias:'Metodologias',equipamentos:'Equipamentos',conclusao:'Conclusão',testes:'Testes',sugestao:'Sugestão',planta:'Planta',obsAdmin:'Obs. administração',pedeRetorno:'Pede retorno'};
+  const curto=(v,n)=>{ let s=(typeof v==='string')?v:JSON.stringify(v==null?'':v); s=String(s).replace(/\s+/g,' ').trim(); return s.length>n?s.slice(0,n)+'…':(s||'(vazio)'); };
+  const clone=o=>{ try{ return JSON.parse(JSON.stringify(o||{})); }catch(e){ return {}; } };
+
+  // ── Diferenças entre o relatório antes e depois ──
+  function diff(antes, depois){
+    const out=[], a=(antes&&antes.campos)||{}, d=(depois&&depois.campos)||{};
+    new Set([...Object.keys(a),...Object.keys(d)]).forEach(k=>{
+      if(k==='fotos'||k==='anexos') return;
+      const va=a[k], vd=d[k];
+      if(JSON.stringify(va==null?'':va)===JSON.stringify(vd==null?'':vd)) return;
+      out.push({campo:LAB[k]||k, antes:curto(va,300), depois:curto(vd,300)});
+    });
+    const fa=(antes.fotos||[]).length, fd=(depois.fotos||[]).length;
+    if(fa!==fd) out.push({campo:'Fotos', antes:fa+' foto(s)', depois:fd+' foto(s)'});
+    const na=(antes.anexos||[]).length, nd=(depois.anexos||[]).length;
+    if(na!==nd) out.push({campo:'Anexos', antes:na+' anexo(s)', depois:nd+' anexo(s)'});
+    return out.slice(0,40);
+  }
+
+  // ── Janela do motivo (obrigatório) ──
+  function pedirMotivo(osId, estadoTxt){
+    return new Promise(resolve=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;font-family:\'Outfit\',sans-serif;';
+      ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+        +'<div style="font-size:16px;font-weight:800;color:#0f2447;margin-bottom:6px;">✏️ Corrigir relatório '+esc(estadoTxt)+'</div>'
+        +'<div style="font-size:13px;color:#475569;line-height:1.5;margin-bottom:10px;">OS <strong>'+esc(osId)+'</strong>. O relatório mantém-se '+esc(estadoTxt)+'. A correção fica registada na <strong>Auditoria</strong> (quem, quando, motivo e o que mudou).</div>'
+        +'<textarea id="hgcv-motivo" rows="3" placeholder="Motivo da correção (obrigatório)" style="width:100%;box-sizing:border-box;border:1.5px solid #cbd5e1;border-radius:9px;padding:10px;font-size:14px;font-family:inherit;"></textarea>'
+        +'<div id="hgcv-err" style="color:#dc2626;font-size:12px;min-height:16px;margin-top:4px;"></div>'
+        +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">'
+        +'<button id="hgcv-no" style="padding:10px 16px;border:1px solid #cbd5e1;background:#fff;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;">Cancelar</button>'
+        +'<button id="hgcv-yes" style="padding:10px 16px;border:none;background:#c2410c;color:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Abrir para corrigir</button></div></div>';
+      document.body.appendChild(ov);
+      const ta=ov.querySelector('#hgcv-motivo'); setTimeout(()=>ta.focus(),50);
+      const done=v=>{ try{ov.remove();}catch(e){} resolve(v); };
+      ov.querySelector('#hgcv-no').onclick=()=>done(null);
+      ov.querySelector('#hgcv-yes').onclick=()=>{
+        const m=ta.value.trim();
+        if(m.length<5){ ov.querySelector('#hgcv-err').textContent='Indique o motivo (mínimo 5 caracteres).'; return; }
+        done(m);
+      };
+    });
+  }
+
+  // ── Abrir o formulário: pede motivo se o relatório já estiver validado ──
+  const _abrir=window.rpAbrirFormulario;
+  if(typeof _abrir==='function'){
+    window.rpAbrirFormulario=async function(osId, preserve){
+      const rel=relDe(osId);
+      if(preserve || !ehGestao() || !validado(rel)) return _abrir.apply(this, arguments);
+      // re-abertura da mesma correção já iniciada (ex.: adicionar foto) — não pedir de novo
+      if(window._rpCorrecao && window._rpCorrecao.osId===osId && window._rpEditOsId===osId && document.getElementById('rp-reclamacao')) return _abrir.apply(this, arguments);
+      const estadoTxt = rel.estado==='enviado' ? 'já enviado ao cliente' : 'validado';
+      const motivo=await pedirMotivo(osId, estadoTxt);
+      if(!motivo) return;
+      window._rpCorrecao={ osId, motivo, antes:clone(rel) };
+      const r=_abrir.apply(this, arguments);
+      setTimeout(()=>{
+        try{
+          const body=document.querySelector('#mo-relat-pesquisa .md')||document.getElementById('rp-modal-body'); if(!body) return;
+          body.querySelectorAll('.hgcv-banner').forEach(e=>e.remove());
+          const b=document.createElement('div'); b.className='hgcv-banner';
+          b.style.cssText='background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#9a3412;';
+          b.innerHTML='✏️ <strong>Correção de relatório '+esc(estadoTxt)+'</strong> — fica registada na Auditoria. Motivo: '+esc(motivo);
+          body.prepend(b);
+        }catch(e){}
+      }, 80);
+      return r;
+    };
+  }
+
+  // ── Auto-guardar / rascunho nunca mexem num relatório validado ──
+  const _auto=window.rpAutoSaveInterno;
+  if(typeof _auto==='function'){
+    window.rpAutoSaveInterno=async function(){
+      const rel=relDe(window._rpEditOsId);
+      if(validado(rel) || (rel && rel.estado==='pronto')) return;   // só grava quando o relatório é um rascunho
+      return _auto.apply(this, arguments);
+    };
+  }
+  const _rasc=window.rpSalvarRascunho;
+  if(typeof _rasc==='function'){
+    window.rpSalvarRascunho=async function(){
+      const rel=relDe(window._rpEditOsId);
+      if(validado(rel)){ try{ toast('Relatório validado: use "Guardar" (a correção fica registada na Auditoria).','ℹ️',5000); }catch(e){} return; }
+      return _rasc.apply(this, arguments);
+    };
+  }
+
+  // ── Gravação: preserva o estado, junta ao histórico e escreve na Auditoria ──
+  const _save=window.rpSaveDoc;
+  if(typeof _save==='function'){
+    window.rpSaveDoc=async function(id, data){
+      const cor=window._rpCorrecao;
+      const fresco=data && data.editadoEm && (Date.now()-new Date(data.editadoEm).getTime())<20000;
+      if(cor && cor.osId===id && data && fresco && data.campos){
+        const alt=diff(cor.antes, data);
+        if(cor.antes.estado==='pronto'||cor.antes.estado==='enviado') data.estado=cor.antes.estado;
+        if(cor.antes.relatorioEstado) data.relatorioEstado=cor.antes.relatorioEstado;
+        if(alt.length){
+          const u=window.currentUser||{};
+          const entrada={ em:new Date().toISOString(), porId:u.id||'', porNome:u.name||'', porPerfil:u.role||'', motivo:cor.motivo, alteracoes:alt };
+          data.correcoesAdmin=[...(cor.antes.correcoesAdmin||[]), entrada].slice(-30);
+          data.corrigidoAposValidacao=true; data.corrigidoAposValidacaoEm=entrada.em; data.corrigidoAposValidacaoPor=entrada.porNome;
+          await _save.apply(this, arguments);
+          window._rpCorrecao=null;
+          try{
+            await auditLog('relatorio_corrigido_validado',
+              'OS '+id+' — relatório '+(cor.antes.estado==='enviado'?'ENVIADO':'validado')+' corrigido por '+entrada.porNome+' ('+entrada.porPerfil+') — Motivo: '+cor.motivo+' — '+alt.map(a=>a.campo+': "'+curto(a.antes,60)+'" → "'+curto(a.depois,60)+'"').join(' | '),
+              {osId:id, motivo:cor.motivo, alteracoes:alt});
+          }catch(e){ console.warn('auditoria da correção falhou', e); }
+          try{ toast('✅ Correção guardada e registada na Auditoria.'+(cor.antes.estado==='enviado'?' O cliente já recebeu a versão anterior — reenvie se necessário.':''),'✏️',6000); }catch(e){}
+          return;
+        }
+        window._rpCorrecao=null;   // nada mudou — não regista
+      }
+      return _save.apply(this, arguments);
+    };
+  }
+
+  // ── Visualização: histórico de correções (só gestão) ──
+  const _ver=window.rpVerRelatorio;
+  if(typeof _ver==='function'){
+    window.rpVerRelatorio=function(osId){
+      const r=_ver.apply(this, arguments);
+      try{
+        const rel=relDe(osId), body=document.getElementById('rp-ver-body');
+        if(!ehGestao() || !rel || !body || !(rel.correcoesAdmin||[]).length) return r;
+        const bx=document.createElement('details');
+        bx.style.cssText='background:#fff7ed;border:1.5px solid #fdba74;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12.5px;color:#7c2d12;';
+        bx.innerHTML='<summary style="cursor:pointer;font-weight:800;">✏️ Corrigido após validação — '+rel.correcoesAdmin.length+' correção(ões) (só a gestão vê)</summary>'
+          +rel.correcoesAdmin.slice().reverse().map(c=>'<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #fdba74;"><strong>'+esc(c.porNome)+'</strong> · '+new Date(c.em).toLocaleString('pt-PT')+'<br><em>Motivo:</em> '+esc(c.motivo)
+            +'<ul style="margin:4px 0 0 16px;padding:0;">'+(c.alteracoes||[]).map(a=>'<li><strong>'+esc(a.campo)+':</strong> '+esc(a.antes)+' → '+esc(a.depois)+'</li>').join('')+'</ul></div>').join('');
+        body.prepend(bx);
+      }catch(e){}
+      return r;
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
